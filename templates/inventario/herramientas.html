@@ -1,0 +1,66 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Herramientas{% endblock %}
+{% block contenido %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div>
+    <h1 class="h3 page-title mb-1">Herramientas de trabajo</h1>
+    <p class="text-muted-jn mb-0">Cada técnico tiene asignadas sus herramientas: salen y vuelven sin firmas y cada cambio queda en el historial. Se revisan en físico con la auditoría.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    {% if user.gestiona_inventario %}<a class="btn btn-accent" href="{% url 'inventario:herramienta_nueva' %}"><i class="bi bi-plus-lg"></i> Nueva herramienta</a>{% endif %}
+    <a class="btn btn-outline-primary" href="{% url 'inventario:auditorias' %}"><i class="bi bi-clipboard2-check"></i> Auditorías</a>
+    <a class="btn btn-light border" href="{% url 'inventario:panel' %}"><i class="bi bi-boxes"></i> Inventario</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  {% for r in resumen %}
+    <div class="col-md-6 col-xl-4">
+      <div class="card h-100"><div class="card-body">
+        <div class="d-flex justify-content-between gap-2">
+          <div class="fw-bold"><i class="bi {% if r.usuario %}bi-person-badge{% else %}bi-box-seam{% endif %}"></i> {{ r.nombre }}</div>
+          {% if r.auditoria %}<a class="badge {% if r.auditoria.resultado == 'conforme' %}text-bg-success{% else %}text-bg-warning{% endif %} text-decoration-none" href="{{ r.auditoria.get_absolute_url }}" title="Última auditoría">{{ r.auditoria.get_resultado_display }} · {{ r.auditoria.fecha|date:"d/m/Y" }}</a>
+          {% elif r.usuario %}<span class="badge text-bg-light border">Sin auditar</span>{% endif %}
+        </div>
+        <div class="small text-muted-jn mb-2">{{ r.herramientas }} herramienta{{ r.herramientas|pluralize }} · {{ r.unidades }} unidad{{ r.unidades|pluralize:"es" }}{% if user.gestiona_inventario %} · {{ r.valor|pesos }}{% endif %}</div>
+        <div class="d-flex flex-wrap gap-2">
+          {% if r.usuario %}<a class="btn btn-sm btn-outline-primary" href="?tecnico={{ r.usuario.pk }}">Ver</a>
+            {% if user.gestiona_inventario %}<a class="btn btn-sm btn-accent" href="{% url 'inventario:auditar' r.usuario.pk %}"><i class="bi bi-clipboard2-check"></i> Auditar</a>{% endif %}
+          {% elif r.nombre == "Bodega (sin responsable)" %}<a class="btn btn-sm btn-outline-primary" href="?tecnico=bodega">Ver</a>
+          {% else %}<span class="small text-muted-jn">Del inventario anterior: se asocia al crear su usuario.</span>{% endif %}
+        </div>
+      </div></div>
+    </div>
+  {% empty %}
+    <div class="col"><div class="card card-body text-center text-muted-jn">Aún no hay herramientas registradas.</div></div>
+  {% endfor %}
+</div>
+
+<form class="row g-2 mb-3" method="get">
+  <div class="col-md-4"><input class="form-control" name="q" value="{{ q }}" placeholder="Nombre, serial, marca o responsable…"></div>
+  {% if user.gestiona_inventario %}<div class="col-6 col-md-3"><select name="tecnico" class="form-select" onchange="this.form.submit()"><option value="">Todos los responsables</option><option value="bodega" {% if tecnico == 'bodega' %}selected{% endif %}>En bodega</option>{% for t in tecnicos %}<option value="{{ t.pk }}" {% if tecnico == t.pk|stringformat:'s' %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></div>{% endif %}
+  <div class="col-6 col-md-3"><select name="estado" class="form-select" onchange="this.form.submit()"><option value="">Activas (sin las de baja)</option>{% for v, n in estados %}<option value="{{ v }}" {% if v == estado %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></div>
+  <div class="col-md-2"><button class="btn btn-primary w-100"><i class="bi bi-search"></i> Buscar</button></div>
+</form>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle small">
+      <thead><tr><th>Herramienta</th><th>Serial</th><th class="text-end">Cant.</th><th>Estado</th><th>Responsable</th>{% if user.gestiona_inventario %}<th class="text-end">Valor</th>{% endif %}</tr></thead>
+      <tbody>
+      {% for h in lista %}
+        <tr class="fila-click" data-href="{{ h.get_absolute_url }}">
+          <td><a href="{{ h.get_absolute_url }}" class="fw-semibold">{{ h.nombre }}</a>{% if h.marca %}<div class="text-muted-jn">{{ h.marca }}</div>{% endif %}</td>
+          <td class="radicado">{{ h.serial|default:"—" }}</td>
+          <td class="text-end">{{ h.cantidad }}</td>
+          <td><span class="badge text-bg-{{ h.color_estado }}">{{ h.get_estado_display }}</span></td>
+          <td>{{ h.responsable|default:"Bodega" }}</td>
+          {% if user.gestiona_inventario %}<td class="text-end text-nowrap">{{ h.valor|pesos }}</td>{% endif %}
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="text-center py-4 text-muted-jn">No hay herramientas con esos filtros.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

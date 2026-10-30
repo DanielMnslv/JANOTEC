@@ -1,0 +1,37 @@
+{# Lo que el área técnica necesita saber de una solicitud que viene de comercial (sin precios ni presupuesto) #}
+{% if ficha %}
+<div class="card mb-4 border-info">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-briefcase"></i> {% if es_levantamiento %}Levantamiento solicitado por el área comercial{% else %}Viene del área comercial{% endif %}</span>
+    {% if user.ve_comercial %}<a class="small" href="{% url 'comercial:detalle' ticket.radicado %}">Ver gestión comercial</a>{% endif %}
+  </div>
+  <div class="card-body">
+    {% if ficha.servicios %}<div class="d-flex flex-wrap gap-1 mb-2">{% for s in ficha.servicios_display %}<span class="badge badge-tipo">{{ s }}</span>{% endfor %}</div>{% endif %}
+    <dl class="dl-ficha row mb-0">
+      {% if ficha.sistema_actual %}<div class="col-sm-6"><dt>Sistema actual</dt><dd>{{ ficha.sistema_actual }}</dd></div>{% endif %}
+      {% if ficha.tamano %}<div class="col-sm-6"><dt>Tamaño / puntos</dt><dd>{{ ficha.tamano }}</dd></div>{% endif %}
+      {% if ficha.energia %}<div class="col-sm-3"><dt>Energía</dt><dd>{{ ficha.get_energia_display }}</dd></div>{% endif %}
+      {% if ficha.internet %}<div class="col-sm-3"><dt>Internet</dt><dd>{{ ficha.get_internet_display }}</dd></div>{% endif %}
+      {% if ficha.municipio or ficha.direccion %}<div class="col-sm-6"><dt>Ubicación</dt><dd>{{ ficha.direccion }} {{ ficha.municipio }}</dd></div>{% endif %}
+      {% if ficha.comercial %}<div class="col-sm-6"><dt>Asesor comercial</dt><dd>{{ ficha.comercial }}</dd></div>{% endif %}
+    </dl>
+    {% if ficha.informe and not es_levantamiento %}{% include "comercial/_informe.html" with informe=ficha.informe %}
+    {% elif ficha.levantamiento and not es_levantamiento %}<div class="small mt-2"><strong>Levantamiento:</strong><div style="white-space:pre-line">{{ ficha.levantamiento }}</div></div>{% endif %}
+
+    {% if es_levantamiento and ticket.asignado_a_id == user.pk or es_levantamiento and user.es_supervisor %}
+    <div class="mt-3">{% include "tickets/_borrador_informe.html" %}</div>
+    <form method="post" action="{% url 'comercial:devolver' ticket.radicado %}" enctype="multipart/form-data" class="mt-3 pt-3 border-top" id="informe-requerimiento">{% csrf_token %}
+      <h3 class="h6 mb-1"><i class="bi bi-clipboard2-data"></i> Informe del requerimiento <span class="text-danger">*</span></h3>
+      <p class="small text-muted-jn">Es obligatorio: con él el área comercial cotiza los servicios, los materiales y equipos. Diligéncielo después de la visita (y del acta).</p>
+      {% include "tickets/_campo.html" with campo=form_informe.necesidad %}
+      {% include "tickets/_campo.html" with campo=form_informe.solucion %}
+      {% include "tickets/_campo.html" with campo=form_informe.servicios %}
+  {% include "tickets/_campo.html" with campo=form_informe.materiales %}
+      {% include "tickets/_campo.html" with campo=form_informe.observaciones %}
+      {% include "tickets/_campo.html" with campo=form_informe.archivos %}
+      <div class="text-end"><button class="btn btn-accent"><i class="bi bi-arrow-return-left"></i> Enviar informe y devolver al área comercial</button></div>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

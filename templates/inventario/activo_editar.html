@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Editar {{ activo.placa }}{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Editar "|add:activo.placa subtitulo=activo.descripcion %}
+<a href="{{ activo.get_absolute_url }}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ activo.placa }}</a>
+<div class="row g-4 mt-1">
+  <div class="col-lg-8">
+    <form method="post" class="card"><div class="card-body">{% csrf_token %}
+      <div class="row g-3">
+        {% for campo in form %}<div class="{% if campo.name == 'descripcion' or campo.name == 'observaciones' %}col-12{% else %}col-md-6{% endif %}">{% include "tickets/_campo.html" %}</div>{% endfor %}
+      </div>
+      <p class="small text-muted-jn">El estado y dónde está el equipo no se cambian aquí: los cambian las entregas, devoluciones, actas y garantías, para que quede su historia.</p>
+      <div class="d-flex gap-2"><button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button>
+        <a class="btn btn-light border" href="{{ activo.get_absolute_url }}">Cancelar</a></div>
+    </div></form>
+  </div>
+  <div class="col-lg-4">
+    <div class="card border-danger"><div class="card-header text-danger"><i class="bi bi-trash"></i> Eliminar</div><div class="card-body small">
+      {% if puede_eliminar %}
+        <p>Solo para un equipo registrado por error: se borra del inventario junto con su ingreso.</p>
+        <form method="post" action="{% url 'inventario:activo_eliminar' activo.placa %}">{% csrf_token %}
+          <button class="btn btn-outline-danger w-100" onclick="return confirm('¿Eliminar {{ activo.placa|escapejs }} del inventario? No se puede deshacer.')"><i class="bi bi-trash"></i> Eliminar {{ activo.placa }}</button></form>
+      {% else %}
+        <p class="mb-2">{{ motivo_no_eliminar }}</p>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ activo.get_absolute_url }}#cambio-estado">Ir a «Dar de baja»</a>
+      {% endif %}
+    </div></div>
+  </div>
+</div>
+{% endblock %}

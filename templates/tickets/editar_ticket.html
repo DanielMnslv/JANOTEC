@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block titulo %}Editar {{ ticket.radicado }}{% endblock %}
+{% block contenido %}
+<a href="{{ ticket.get_absolute_url }}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ ticket.radicado }}</a>
+<h1 class="h3 page-title mt-2 mb-1">Editar la solicitud {{ ticket.radicado }}</h1>
+<p class="text-muted-jn mb-4">Corrija lo que el cliente indicó por error, según lo conversado con él. En el historial queda qué decía antes y qué dice ahora.</p>
+<div class="row g-4">
+  <div class="col-lg-9">
+    <div class="card"><div class="card-body p-4">
+      <form method="post" enctype="multipart/form-data" novalidate>{% csrf_token %}
+        {% for e in form.non_field_errors %}<div class="alert alert-danger">{{ e }}</div>{% endfor %}
+        {% if form.errors %}<div class="alert alert-warning small"><i class="bi bi-exclamation-circle"></i> Revise los campos marcados en rojo.</div>{% endif %}
+        {% if ticket.por_confirmar %}<div class="alert alert-warning"><i class="bi bi-question-circle"></i> <strong>El cliente respondió «No sé» en:</strong> {{ ticket.por_confirmar_display|join:", " }}. Confírmelo (por ejemplo, llamando al cliente) y guarde: quedará como confirmado por usted.</div>{% endif %}
+        {% include "tickets/_radicacion.html" %}
+        <section class="paso-form">
+          <h2 class="h6 paso-titulo"><span class="paso-num"><i class="bi bi-chat-left-text"></i></span> Motivo del ajuste</h2>
+          <textarea name="motivo_ajuste" class="form-control mb-2" rows="2" maxlength="500" placeholder="Ej.: Hablé con la administradora: no es la cámara de la portería sino la del parqueadero, y el sistema es CCTV, no alarma.">{{ motivo }}</textarea>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="informar_cliente" id="informar_cliente" {% if informar or not form.is_bound %}checked{% endif %}>
+            <label class="form-check-label" for="informar_cliente">Informar al cliente los cambios (los verá en su solicitud y le llegará un correo)</label>
+          </div>
+          {% if ticket.actividades.exists %}<div class="small text-muted-jn mt-2"><i class="bi bi-calendar-week"></i> Este ticket está en el cronograma: si la autorización aún no se ha enviado, la actividad se actualiza con los datos corregidos.</div>{% endif %}
+        </section>
+        <div class="d-flex justify-content-end gap-2 mt-2">
+          <a href="{{ ticket.get_absolute_url }}" class="btn btn-light">Cancelar</a>
+          <button class="btn {% if ticket.estado == 'generado' %}btn-outline-primary{% else %}btn-primary{% endif %}"><i class="bi bi-check2"></i> Guardar cambios</button>
+          {% if ticket.estado == 'generado' %}<button class="btn btn-accent" name="recepcionar" value="1" data-confirmar-recepcion="{{ ticket.radicado }}" data-correos="{{ ticket.correos_respuesta|join:', ' }}"><i class="bi bi-inbox"></i> Guardar y recepcionar</button>{% endif %}
+        </div>
+      </form>
+    </div></div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}{{ p.razon_social }}{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo=p.razon_social subtitulo="Quién nos atiende, qué marcas maneja y qué nos ha vendido." %}
+<a href="{% url 'inventario:contactos' %}?tipo=proveedores" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Proveedores</a>
+<div class="row g-4 mt-1">
+  <div class="col-lg-4">
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center"><span><i class="bi bi-person-badge"></i> Quién nos atiende</span>
+        {% if user.gestiona_inventario %}<a class="btn btn-sm btn-accent py-0" href="{% url 'inventario:asesor_nuevo' p.pk %}"><i class="bi bi-plus-lg"></i> Agregar</a>{% endif %}</div>
+      <ul class="list-group list-group-flush small">
+        {% for a in p.asesores.all %}
+          <li class="list-group-item {% if not a.activo %}text-muted-jn{% endif %}">
+            <div class="d-flex justify-content-between gap-2">
+              <div><strong>{{ a.nombre }}</strong>{% if not a.activo %} <span class="badge text-bg-secondary fw-normal">Ya no nos atiende</span>{% endif %}{% if a.cargo %}<div>{{ a.cargo }}</div>{% endif %}</div>
+              {% if user.gestiona_inventario %}<a class="btn btn-sm btn-light border py-0 align-self-start" href="{% url 'inventario:asesor_editar' p.pk a.pk %}" aria-label="Editar a {{ a.nombre }}"><i class="bi bi-pencil"></i></a>{% endif %}
+            </div>
+            {% if a.celular %}<div><i class="bi bi-phone"></i> <a href="tel:{{ a.celular }}">{{ a.celular }}</a></div>{% endif %}
+            {% if a.correo %}<div><i class="bi bi-envelope"></i> <a href="mailto:{{ a.correo }}">{{ a.correo }}</a></div>{% endif %}
+            {% if a.atiende %}<div class="text-muted-jn">Atiende: {{ a.atiende }}</div>{% endif %}
+          </li>
+        {% empty %}
+          <li class="list-group-item text-muted-jn">Aún no se ha registrado quién nos atiende.</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center"><span><i class="bi bi-building"></i> Datos del proveedor</span>
+        {% if user.gestiona_inventario %}<a class="btn btn-sm btn-light border py-0" href="{% url 'inventario:contacto_editar' 'proveedores' p.pk %}"><i class="bi bi-pencil"></i> Editar</a>{% endif %}</div>
+      <div class="card-body small">
+        <dl class="dl-ficha mb-0">
+          <dt>NIT</dt><dd class="radicado">{{ p.nit|default:"—" }}</dd>
+          <dt>Correo</dt><dd>{{ p.correo|default:"—" }}</dd>
+          <dt>Teléfono</dt><dd>{{ p.telefono|default:"—" }}</dd>
+          <dt>Dirección</dt><dd>{{ p.direccion|default:"—" }}</dd>
+          {% if p.notas %}<dt>Notas</dt><dd style="white-space:pre-line">{{ p.notas }}</dd>{% endif %}
+        </dl>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-tags"></i> Marcas que maneja</div>
+      <div class="card-body">
+        {% for m in marcas %}<span class="badge {% if m.vendida %}text-bg-primary{% else %}text-bg-light border{% endif %} me-1 mb-1">{{ m.nombre }}</span>{% empty %}<span class="small text-muted-jn">Sin marcas todavía.{% if user.gestiona_inventario %} Indíquelas en «Editar» de los datos del proveedor.{% endif %}</span>{% endfor %}
+        {% if marcas %}<div class="small text-muted-jn mt-2">Las azules ya nos las ha vendido; las claras las indicó el encargado.</div>{% endif %}
+      </div>
+    </div>
+    <h2 class="h6">Equipos que nos ha vendido ({{ equipos|length }} modelo{{ equipos|length|pluralize }})</h2>
+    <div class="card mb-4"><div class="table-responsive"><table class="table table-hover mb-0 align-middle small">
+      <thead><tr><th>Modelo</th><th>Marca</th><th>Descripción</th><th class="text-end">Unidades</th><th>Última compra</th><th class="text-end">Valor sin IVA</th></tr></thead>
+      <tbody>
+      {% for e in equipos %}
+        <tr>
+          <td class="text-nowrap fw-semibold">{% if e.referencia %}<a href="{% url 'inventario:modelo' %}?ref={{ e.referencia|urlencode }}">{{ e.referencia }}</a>{% else %}(sin modelo){% endif %}</td>
+          <td>{{ e.marca|default:"—" }}</td>
+          <td>{{ e.descripcion|truncatechars:60|default:"—" }}</td>
+          <td class="text-end">{{ e.unidades }}</td>
+          <td class="text-nowrap">{{ e.ultima|date:"d/m/Y"|default:"—" }}</td>
+          <td class="text-end text-nowrap">{% if e.valor %}{{ e.valor|pesos }}{% else %}—{% endif %}</td>
+        </tr>
+      {% empty %}<tr><td colspan="6" class="text-center py-3 text-muted-jn">No hay compras de equipos a este proveedor.</td></tr>{% endfor %}
+      </tbody>
+    </table></div></div>
+    <h2 class="h6">Materiales que nos ha vendido ({{ materiales|length }})</h2>
+    <div class="card mb-4"><div class="table-responsive"><table class="table table-hover mb-0 align-middle small">
+      <thead><tr><th>Código</th><th>Material</th><th class="text-end">Cantidad comprada</th><th>Última compra</th><th class="text-end">Valor sin IVA</th></tr></thead>
+      <tbody>
+      {% for f in materiales %}
+        <tr>
+          <td class="text-nowrap fw-semibold"><a href="{{ f.insumo.get_absolute_url }}">{{ f.insumo.codigo }}</a></td>
+          <td>{{ f.insumo.descripcion|truncatechars:60 }}</td>
+          <td class="text-end text-nowrap">{{ f.cantidad|cant }}</td>
+          <td class="text-nowrap">{{ f.ultima|date:"d/m/Y"|default:"—" }}</td>
+          <td class="text-end text-nowrap">{% if f.valor %}{{ f.valor|pesos }}{% else %}—{% endif %}</td>
+        </tr>
+      {% empty %}<tr><td colspan="5" class="text-center py-3 text-muted-jn">No hay compras de materiales a este proveedor.</td></tr>{% endfor %}
+      </tbody>
+    </table></div></div>
+    {% if ordenes %}
+    <h2 class="h6">Órdenes de compra recientes</h2>
+    <ul class="list-group small">{% for o in ordenes %}<a class="list-group-item list-group-item-action d-flex justify-content-between" href="{{ o.get_absolute_url }}"><span class="radicado">{{ o.numero }}</span><span class="text-muted-jn">{{ o.creado|date:"d/m/Y" }} · {{ o.get_estado_display }}</span></a>{% endfor %}</ul>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

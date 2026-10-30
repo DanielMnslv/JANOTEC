@@ -1,0 +1,97 @@
+{# Alistamiento en inventario: la lista de chequeo de cada solicitud de material del ticket (la ven técnica, coordinación y comercial).
+   Coordinación ve el avance, agrega adicionales, autoriza la salida y decide cuándo el ticket pasa a «Recepcionado». #}
+{% load inventario_extras %}{% alistamiento ticket as listas %}
+{% cuadre_ticket ticket as cq0 %}{% if listas or ticket.estado == 'en_inventario' or cq0.filas %}
+<div class="card mb-4 {% if ticket.estado == 'en_inventario' %}border-warning{% endif %}" id="alistamiento">
+  <div class="card-header d-flex justify-content-between align-items-center gap-2">
+    <span><i class="bi bi-clipboard-check"></i> Alistamiento de materiales y equipos</span>
+    {% if ticket.estado == 'en_inventario' %}<span class="badge text-bg-warning">En inventario</span>{% endif %}
+  </div>
+  {% for l in listas %}{% with s=l.solicitud %}
+  <div class="card-body border-bottom">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+      <span class="small"><a class="radicado" href="{{ s.get_absolute_url }}">{{ s.numero }}</a> · {{ s.get_origen_display }}{% if s.tecnico %} · recibe {{ s.tecnico }}{% endif %}</span>
+      <span class="badge text-bg-{{ s.color_estado }}">{{ s.get_estado_display }}</span>
+    </div>
+    {% if l.total %}
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <div class="progress flex-grow-1" role="progressbar" aria-label="Avance del alistamiento" aria-valuenow="{{ l.avance }}" aria-valuemin="0" aria-valuemax="100" style="height:10px">
+        <div class="progress-bar {% if l.avance == 100 %}bg-success{% else %}bg-warning{% endif %}" style="width:{{ l.avance }}%"></div></div>
+      <span class="small text-nowrap fw-semibold">{{ l.listos }} de {{ l.total }} listos</span>
+    </div>
+    {% endif %}
+    {% for o in l.compras %}<div class="small mb-2 {% if o.atrasada %}text-danger{% else %}text-muted-jn{% endif %}"><i class="bi bi-truck"></i> Compra {{ o.numero }}{% if o.proveedor %} a {{ o.proveedor }}{% endif %} · {{ o.get_estado_display|lower }}{% if o.fecha_estimada and o.estado != 'recibida' %} · llega el {{ o.fecha_estimada|date:"d/m/Y" }}{% if o.atrasada %} (atrasada){% endif %}{% endif %}</div>{% endfor %}
+    <div class="small fw-semibold mb-1">1. Aprobado por el cliente</div>
+    {% if l.aprobado %}<ul class="list-group list-group-flush small mb-3">{% for f in l.aprobado %}
+      <li class="list-group-item px-0 d-flex justify-content-between gap-2"><span>{{ f.item.cantidad|cant }} {{ f.item.descripcion }}</span>
+        <span class="text-{{ f.color }} text-nowrap"><i class="bi {{ f.icono }}"></i> {{ f.estado_nombre }}{% if f.estado == 'comprar' %} ({{ f.falta|cant }}){% endif %}</span></li>{% endfor %}</ul>
+    {% else %}<p class="small text-muted-jn mb-3">{% if s.estado == 'borrador' %}Por completar: la propuesta no trajo el material; se escribe en la solicitud.{% else %}Sin ítems.{% endif %}</p>{% endif %}
+    <div class="small fw-semibold mb-1">2. Adicionales para instalar</div>
+    {% if l.adicional %}<ul class="list-group list-group-flush small mb-3">{% for f in l.adicional %}
+      <li class="list-group-item px-0 d-flex justify-content-between gap-2"><span>{{ f.item.cantidad|cant }} {{ f.item.descripcion }}</span>
+        <span class="text-{{ f.color }} text-nowrap"><i class="bi {{ f.icono }}"></i> {{ f.estado_nombre }}{% if f.estado == 'comprar' %} ({{ f.falta|cant }}){% endif %}</span></li>{% endfor %}</ul>
+    {% else %}<p class="small text-muted-jn mb-3">Sin adicionales.</p>{% endif %}
+
+    {% if s.estado in s.ESTADOS_ABIERTOS and user.es_coordinador or s.estado in s.ESTADOS_ABIERTOS and user.gestiona_inventario %}
+    <details class="mb-3"><summary class="small">Agregar adicionales para la instalación</summary>
+      <form method="post" action="{% url 'inventario:solicitud_accion' s.pk 'adicionales' %}" class="mt-2">{% csrf_token %}
+        <input type="hidden" name="volver" value="{{ request.path }}#alistamiento">
+        <textarea name="adicionales" class="form-control form-control-sm mb-2" rows="3" required placeholder="20 Conector RJ45&#10;10 m Canaleta 20x12&#10;1 Caja de paso"></textarea>
+        <button class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg"></i> Agregar a la lista</button>
+        <span class="form-text ms-1">Uno por línea, con cantidad. Si ya estaba aprobada, vuelve a validación de bodega.</span>
+      </form></details>
+    {% endif %}
+
+    {% if l.pendientes_firma %}{% puede_firmar s user as roles_firma %}
+    <div class="small mb-2"><i class="bi bi-pen"></i> Falta: {% for r in l.pendientes_firma %}{% if r == 'bodega' %}firma de bodega{% else %}autorización del coordinador TIC o dirección{% endif %}{% if not forloop.last %} y {% endif %}{% endfor %}.</div>
+    {% if roles_firma %}<form method="post" action="{% url 'inventario:solicitud_accion' s.pk 'firmar' %}" class="mb-3" style="max-width:420px">{% csrf_token %}
+      <input type="hidden" name="volver" value="{{ request.path }}#alistamiento"><input type="hidden" name="rol" value="{{ roles_firma.0 }}">
+      <div class="mb-2">{% include "tickets/_firma_libre.html" with sufijo=s.numero titulo="Su firma para autorizar la salida" obligatoria=True %}</div>
+      <input name="comentario" class="form-control form-control-sm mb-2" placeholder="Comentario (obligatorio si no autoriza)">
+      <div class="d-flex flex-wrap gap-2"><button class="btn btn-sm btn-success" name="decision" value="aprobar"><i class="bi bi-pen"></i> Firmar y autorizar salida</button>
+      <button class="btn btn-sm btn-outline-danger" name="decision" value="rechazar">No autorizar</button></div></form>{% endif %}
+    {% endif %}
+
+    {% if l.actas %}
+    <div class="small fw-semibold mb-1">Actas de entrega</div>
+    <ul class="list-group list-group-flush small">{% for a in l.actas %}
+      <li class="list-group-item px-0 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span>{% if a.adjunto %}<a href="{% url 'descargar_adjunto' a.adjunto.pk %}"><i class="bi bi-file-earmark-pdf"></i> {{ a.numero }}</a>{% else %}{{ a.numero }}{% endif %} · {{ a.creado|date:"d/m/Y h:i a" }} · {{ a.detalle|length }} ítem(s) a {{ a.tecnico|default:"—" }}</span>
+        {% if a.recibido_en %}<span class="text-success"><i class="bi bi-check2-circle"></i> Firmado: recibido {{ a.recibido_en|date:"d/m h:i a" }}</span>
+        {% elif a.tecnico_id == user.pk %}<form method="post" action="{% url 'inventario:solicitud_accion' s.pk 'recibido' %}" class="w-100" style="max-width:420px">{% csrf_token %}
+          <input type="hidden" name="acta" value="{{ a.pk }}"><input type="hidden" name="volver" value="{{ request.path }}#alistamiento">
+          <div class="mb-2">{% include "tickets/_firma_libre.html" with sufijo=a.numero titulo="Su firma: recibí este material" obligatoria=True %}</div>
+          <button class="btn btn-sm btn-accent"><i class="bi bi-pen"></i> Firmar que lo recibí</button></form>
+        {% else %}<span class="text-warning"><i class="bi bi-hourglass-split"></i> Falta la firma del técnico que recibe</span>{% endif %}
+      </li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% endwith %}{% empty %}
+  <div class="card-body small text-muted-jn">Bodega todavía no tiene la lista de este ticket.</div>
+  {% endfor %}
+  {% cuadre_ticket ticket as cq %}{% if cq.filas %}
+  <div class="card-body border-top" id="cuadre">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <span class="small fw-semibold"><i class="bi bi-calculator"></i> Cuadre del material: entregado = instalado + devuelto</span>
+      {% if cq.cuadrado %}<span class="badge text-bg-success">Cuadrado</span>{% else %}<span class="badge text-bg-warning">{{ cq.pendientes|length }} por cuadrar</span>{% endif %}
+    </div>
+    <div class="table-responsive"><table class="table table-sm small mb-1">
+      <thead><tr><th>Material</th><th>Técnico</th><th class="text-end">Entregado</th><th class="text-end">Instalado</th><th class="text-end">Devuelto</th><th class="text-end">Pendiente</th></tr></thead>
+      <tbody>{% for f in cq.filas %}<tr class="{% if f.pendiente %}table-warning{% endif %}"><td>{{ f.descripcion }} <span class="text-muted-jn">({{ f.codigo }})</span></td><td>{{ f.tecnico|default:"—" }}</td>
+        <td class="text-end">{{ f.entregado|cant }}</td><td class="text-end">{{ f.instalado|cant }}</td><td class="text-end">{{ f.devuelto|cant }}</td><td class="text-end fw-semibold">{{ f.pendiente|cant }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% if cq.pendientes %}<div class="small text-muted-jn">El técnico descuenta en el acta de servicio lo que instaló; lo que sobró lo devuelve a bodega indicando este ticket.
+      {% if user.gestiona_inventario %}{% for t in cq.tecnicos %} <a href="{% url 'inventario:devolucion' t.pk %}?ticket={{ ticket.pk }}">Recibir la devolución de {{ t }}</a>{% endfor %}{% endif %}</div>{% endif %}
+  </div>
+  {% endif %}
+  {% if ticket.estado == 'en_inventario' and user.es_coordinador %}
+  <form method="post" action="{% url 'inventario_listo' ticket.radicado %}" class="card-body bg-light">{% csrf_token %}
+    <div class="small mb-2">Pasa sola a <b>«Recepcionado»</b>, asignada al técnico, cuando bodega entregue todo y él confirme el acta de entrega. Si usted lo considera, puede pasarla antes.</div>
+    <div class="d-flex flex-wrap gap-2">
+      <input name="nota" class="form-control form-control-sm" style="max-width:420px" placeholder="Nota (opcional): p. ej. falta el NVR, llega el jueves">
+      <button class="btn btn-sm btn-primary" onclick="return confirm('El ticket pasará a «Recepcionado» para programar la instalación. ¿Continuar?')"><i class="bi bi-check2-square"></i> Pasar a Recepcionado</button>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endif %}

@@ -1,0 +1,1 @@
+{% if t.ficha and t.ficha.etapa != 'instalacion' %}<span class="badge rounded-pill text-bg-{{ t.ficha.color_etapa }}">{{ t.ficha.get_etapa_display }}</span>{% else %}<span class="badge rounded-pill text-bg-{{ t.color_estado }}">{{ t.get_estado_display }}</span>{% endif %}

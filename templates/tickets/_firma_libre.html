@@ -1,0 +1,10 @@
+{# Recuadro de firma a mano sin formulario de Django: «nombre» del campo y «sufijo» para que el id sea único en la página #}
+<div class="firma-pad" data-campo="firma-{{ sufijo }}">
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <span class="form-label fw-medium mb-0 small">{{ titulo }}{% if obligatoria %} <span class="text-danger">*</span>{% endif %}</span>
+    <button type="button" class="btn btn-link btn-sm p-0 borrar-firma">Borrar</button>
+  </div>
+  <canvas aria-label="{{ titulo }}: firme aquí con el dedo o el mouse"></canvas>
+  <div class="small text-muted-jn">Firme dentro del recuadro.</div>
+  <input type="hidden" name="{{ nombre|default:'firma' }}" id="firma-{{ sufijo }}">
+</div>

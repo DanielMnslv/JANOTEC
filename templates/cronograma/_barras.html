@@ -1,0 +1,16 @@
+<div class="col-lg-6">
+  <div class="card h-100">
+    <div class="card-header">{{ titulo }}</div>
+    <div class="card-body">
+      {% for f in filas %}
+        <div class="barra-fila">
+          <div class="barra-etiqueta small" title="{{ f.etiqueta }}">{{ f.etiqueta }}</div>
+          <div class="barra-pista"><div class="barra{% if alerta %} barra-alerta{% endif %}" style="width:{{ f.pct }}%"></div></div>
+          <div class="barra-n small fw-bold">{{ f.n }}</div>
+        </div>
+      {% empty %}
+        <div class="small text-muted-jn">Sin datos esta semana.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>

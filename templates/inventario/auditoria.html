@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block titulo %}Auditoría #{{ a.pk }}{% endblock %}
+{% block contenido %}
+<a href="{% url 'inventario:auditorias' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Auditorías</a>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mt-2 mb-3">
+  <div>
+    <h1 class="h3 page-title mb-1">Auditoría #{{ a.pk }} · {{ a.tecnico|default:a.tecnico_nombre }}</h1>
+    <span class="badge fs-6 {% if a.resultado == 'conforme' %}text-bg-success{% else %}text-bg-warning{% endif %}">{{ a.get_resultado_display }}</span>
+    <span class="text-muted-jn ms-1">{{ a.fecha|date:"d/m/Y h:i a" }} · auditó {{ a.auditor|default:a.auditor_nombre }}</span>
+  </div>
+  <div class="text-end small">{{ a.total_herramientas }} herramientas · {{ a.unidades_registradas }} unidades registradas · {{ a.unidades_encontradas }} encontradas · <strong>{{ a.novedades }} novedad{{ a.novedades|pluralize:"es" }}</strong>
+    <div><button class="btn btn-sm btn-light border mt-1 no-imprimir" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir / PDF</button></div></div>
+</div>
+{% if a.nota_general %}<div class="alert alert-light border small">{{ a.nota_general }}</div>{% endif %}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table mb-0 align-middle small">
+      <thead><tr><th>Herramienta</th><th>Serial</th><th class="text-end">Registrado</th><th class="text-end">Encontrado</th><th>Estado (reg. → enc.)</th><th>Resultado</th><th>Nota</th></tr></thead>
+      <tbody>
+      {% for d in detalles %}
+        <tr class="{% if d.resultado != 'conforme' %}table-warning{% endif %}">
+          <td>{% if d.herramienta %}<a href="{{ d.herramienta.get_absolute_url }}">{{ d.herramienta_nombre }}</a>{% else %}{{ d.herramienta_nombre }}{% endif %}{% if d.marca %}<div class="text-muted-jn">{{ d.marca }}</div>{% endif %}</td>
+          <td class="radicado">{{ d.serial|default:"—" }}</td>
+          <td class="text-end">{{ d.cantidad_registrada }}</td>
+          <td class="text-end">{{ d.cantidad_encontrada }}</td>
+          <td>{{ d.estado_registrado_display }} → {{ d.get_estado_encontrado_display }}</td>
+          <td><span class="badge {% if d.resultado == 'conforme' %}text-bg-success{% elif d.resultado == 'dada_de_baja' %}text-bg-dark{% else %}text-bg-warning{% endif %}">{{ d.get_resultado_display }}</span></td>
+          <td>{{ d.nota }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<p class="small text-muted-jn mt-2">Registro permanente: las auditorías no se editan ni se eliminan.</p>
+{% endblock %}

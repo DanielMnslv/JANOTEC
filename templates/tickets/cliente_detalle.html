@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block titulo %}{{ ticket.radicado }}{% endblock %}
+{% block contenido %}
+<a href="{% url 'mis_tickets' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {% if user.es_cliente %}Mis solicitudes{% else %}Solicitudes registradas{% endif %}</a>
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mt-2 mb-3">
+  <div>
+    <div class="radicado text-muted-jn">{{ ticket.radicado }}</div>
+    <h1 class="h3 page-title mb-1">{{ ticket.asunto }}</h1>
+    {% include "tickets/_tipo.html" with t=ticket %} {% include "tickets/_estado.html" with t=ticket %}
+  </div>
+  <div class="text-end small text-muted-jn">Registrado el {{ ticket.creado|date:"d/m/Y h:i a" }}{% if ticket.radicado_por and ticket.radicado_por != user %} por {{ ticket.radicado_por }}{% endif %}<br>Actualizado hace {{ ticket.actualizado|timesince }}</div>
+</div>
+
+{# --- Barra de progreso --- #}
+<div class="card mb-4"><div class="card-body">
+  {% if ficha %}{% include "comercial/_pasos_cliente.html" %}
+    <a class="btn btn-sm btn-outline-primary mt-3" href="{% url 'comercial:ficha_pdf' ticket.radicado %}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> Ficha de requerimiento (PDF)</a>
+  {% elif ticket.estado == 'cancelado' %}
+    <div class="text-danger"><i class="bi bi-x-circle"></i> Esta solicitud fue cancelada.</div>
+  {% else %}
+  {% include "tickets/_etapas.html" %}
+  {% endif %}
+  {% if ticket.estado == 'pendiente_visita' %}
+    <div class="alert alert-warning mt-3 mb-0"><i class="bi bi-calendar-plus"></i> <strong>Se requiere una nueva visita.</strong> La programaremos en el cronograma y le enviaremos la autorización de ingreso.</div>
+  {% elif ticket.estado == 'en_cronograma' %}
+    <div class="alert alert-info mt-3 mb-0"><i class="bi bi-envelope-open"></i> Programamos la visita: revise su correo para <strong>aceptar o rechazar</strong> la autorización de ingreso.</div>
+  {% endif %}
+</div></div>
+
+{% if ticket.visita_programada and ticket.abierto %}<div class="mb-4">{% include "tickets/_visita.html" %}</div>{% endif %}
+
+{# --- Propuesta económica por aprobar --- #}
+{% if ficha.etapa == 'enviada' %}
+<div class="card border-warning mb-4"><div class="card-body">
+  {% with v=ficha.version_actual %}
+  <h2 class="h5"><i class="bi bi-file-earmark-text"></i> Su propuesta económica está lista{% if v and v.numero > 1 %} <span class="badge text-bg-light border">Versión {{ v.numero }}</span>{% endif %}</h2>
+  {% if ficha.valor_propuesta %}<p class="mb-2">Valor: <strong>${{ ficha.valor_propuesta|floatformat:"0g" }}</strong> antes de IVA.</p>{% endif %}
+  <div class="d-flex flex-wrap gap-2 mb-2">
+    {% if v.archivo %}<a class="btn btn-outline-primary" href="{% url 'descargar_adjunto' v.archivo.pk %}"><i class="bi bi-download"></i> {{ v.archivo.nombre_original }}</a>
+    {% else %}{% for a in ticket.adjuntos.all %}{% if a.es_propuesta %}<a class="btn btn-outline-primary" href="{% url 'descargar_adjunto' a.pk %}"><i class="bi bi-download"></i> {{ a.nombre_original }}</a>{% endif %}{% endfor %}{% endif %}
+  </div>
+  {% endwith %}
+  <div class="d-flex flex-wrap gap-2">
+    <form method="post" action="{% url 'comercial:responder' ticket.radicado %}" onsubmit="return confirm('¿Aprobar la propuesta? Coordinaremos la instalación.')">{% csrf_token %}<input type="hidden" name="accion" value="aprobar"><button class="btn btn-success"><i class="bi bi-hand-thumbs-up"></i> Aprobar propuesta</button></form>
+    <button class="btn btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#cambios-propuesta"><i class="bi bi-pencil-square"></i> Pedir cambios</button>
+    <button class="btn btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#rechazar-propuesta">No la apruebo</button>
+  </div>
+  <form id="cambios-propuesta" class="collapse mt-3" method="post" action="{% url 'comercial:responder' ticket.radicado %}">{% csrf_token %}
+    <input type="hidden" name="accion" value="cambios">
+    <label class="form-label small" for="cambios-texto">¿Qué le gustaría cambiar?</label>
+    <textarea name="cambios" id="cambios-texto" class="form-control mb-2" rows="2" required minlength="5" placeholder="Ej.: prefiero cámaras marca Hikvision, que es la que siempre hemos usado"></textarea>
+    <button class="btn btn-primary btn-sm">Enviar cambios a mi asesor</button>
+  </form>
+  <form id="rechazar-propuesta" class="collapse mt-3" method="post" action="{% url 'comercial:responder' ticket.radicado %}">{% csrf_token %}
+    <input type="hidden" name="accion" value="rechazar">
+    <textarea name="motivo" class="form-control mb-2" rows="2" placeholder="Cuéntenos por qué (precio, alcance, tiempos…) para ajustarla"></textarea>
+    <button class="btn btn-danger btn-sm">Enviar respuesta</button>
+  </form>
+</div></div>
+{% endif %}
+
+{# --- Confirmación de solución --- #}
+{% if ticket.estado == 'visita_ejecutada' and user.es_cliente %}
+<div class="card border-success mb-4"><div class="card-body">
+  <h2 class="h5"><i class="bi bi-check2-circle text-success"></i> Realizamos la visita técnica</h2>
+  <p class="mb-1">¿Quedó solucionado el problema?</p>
+  {% if ticket.fecha_cierre_automatico %}<p class="small text-muted-jn mb-3"><i class="bi bi-hourglass-split"></i> Si no nos indica nada, la solicitud se cerrará automáticamente el <strong>{{ ticket.fecha_cierre_automatico|date:"l j \d\e F" }}</strong> a las {{ ticket.fecha_cierre_automatico|date:"h:i a" }}.</p>{% endif %}
+  <div class="d-flex flex-wrap gap-2">
+    <form method="post" action="{% url 'confirmar_solucion' ticket.radicado %}">{% csrf_token %}<input type="hidden" name="accion" value="aceptar"><button class="btn btn-success"><i class="bi bi-hand-thumbs-up"></i> Sí, cerrar solicitud</button></form>
+    <button class="btn btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#reabrir"><i class="bi bi-arrow-counterclockwise"></i> No, el problema sigue</button>
+  </div>
+  <form id="reabrir" class="collapse mt-3" method="post" action="{% url 'confirmar_solucion' ticket.radicado %}">{% csrf_token %}
+    <input type="hidden" name="accion" value="reabrir">
+    <textarea name="motivo" class="form-control mb-2" rows="2" placeholder="Cuéntenos qué sigue fallando…"></textarea>
+    <button class="btn btn-danger btn-sm">Solicitar nueva visita</button>
+  </form>
+</div></div>
+{% endif %}
+
+{# --- Calificación --- #}
+{% if ticket.estado == 'cerrado' and not ticket.calificacion and user.es_cliente %}
+<div class="card mb-4"><div class="card-body">
+  <form method="post" action="{% url 'calificar' ticket.radicado %}">{% csrf_token %}
+    <h2 class="h6">¿Cómo califica la atención recibida? <span class="fw-normal text-muted-jn">(1 a 10 estrellas)</span></h2>
+    <div class="mb-2">{% include "tickets/_selector_estrellas.html" with escala=escala_calificacion nota=None %}</div>
+    <textarea class="form-control" name="comentario" rows="2" maxlength="1000" placeholder="Comentario (opcional)"></textarea>
+    <button class="btn btn-primary btn-sm mt-2">Enviar calificación</button>
+  </form>
+</div></div>
+{% endif %}
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card mb-4">
+      <div class="card-header">Descripción</div>
+      <div class="card-body"><div style="white-space:pre-line">{{ ticket.descripcion }}</div>
+        {% if adjuntos_inicio %}<div class="mt-3">{% include "tickets/_adjuntos.html" with lista=adjuntos_inicio %}</div>{% endif %}
+      </div>
+    </div>
+
+    {% if actas_ticket %}
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-clipboard-check"></i> Actas de la visita técnica</div>
+      <ul class="list-group list-group-flush">
+        {% for a in actas_ticket %}
+          <a class="list-group-item list-group-item-action" href="{{ a.get_absolute_url }}"><span class="radicado">Acta {{ a.numero }}</span> · {{ a.fecha|date:"d/m/Y" }} {% include "tickets/_resultado.html" %}<div class="small text-muted-jn">{{ a.observaciones|truncatechars:120 }}</div></a>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <h2 class="h5 mb-3">Seguimiento</h2>
+    {% include "tickets/_timeline.html" with vista="cliente" %}
+
+    {% if ticket.abierto and user.es_cliente %}
+    <div class="card mt-3"><div class="card-body">
+      <form method="post" action="{% url 'responder_cliente' ticket.radicado %}" enctype="multipart/form-data">{% csrf_token %}
+        {% include "tickets/_campo.html" with campo=form_respuesta.mensaje %}
+        {% include "tickets/_campo.html" with campo=form_respuesta.archivos %}
+        <div class="text-end"><button class="btn btn-primary"><i class="bi bi-send"></i> Enviar</button></div>
+      </form>
+    </div></div>
+    {% endif %}
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header">Detalles</div>
+      <div class="card-body">
+        <dl class="dl-ficha mb-0">
+          <dt>Tipo</dt><dd>{{ ticket.get_tipo_display }}</dd>
+          <dt>Sistema</dt><dd>{{ ticket.sistema_display }}{% if ticket.falla_display %}<div class="small">{{ ticket.falla_display }}</div>{% endif %}</dd>
+          {% if ticket.sede %}<dt>Sede</dt><dd>{{ ticket.sede }}</dd>{% endif %}
+          {% if ticket.ubicacion %}<dt>Ubicación</dt><dd>{{ ticket.ubicacion }}</dd>{% endif %}
+          {% if ticket.impacto %}<dt>Nivel de urgencia</dt><dd><span class="badge prioridad prioridad-{{ ticket.impacto }}">{{ ticket.get_impacto_display }}</span></dd>{% endif %}
+          {% if ticket.desde_cuando %}<dt>Desde</dt><dd>{{ ticket.desde_cuando|date:"d/m/Y" }}</dd>{% endif %}
+          <dt>Gestionado por</dt><dd>{{ ticket.radicado_por|default:ticket.solicitante }}</dd>
+          <dt>Contacto</dt><dd>{{ ticket.contacto_nombre|default:"" }}{% if ticket.contacto_telefono %}<div class="small">{{ ticket.contacto_telefono }}</div>{% endif %}{% for c in ticket.correos_respuesta %}<div class="small">{{ c }}</div>{% endfor %}</dd>
+          {% if ticket.trabajo_alturas or ticket.acompanamiento_sst %}<dt>Condiciones</dt><dd class="small">{% if ticket.trabajo_alturas %}<div>Trabajo en alturas</div>{% endif %}{% if ticket.acompanamiento_sst %}<div>Acompañamiento SST</div>{% endif %}</dd>{% endif %}
+          {% if ticket.jornada %}<dt>Jornada para la visita</dt><dd class="small">{{ ticket.get_jornada_display }}</dd>{% endif %}
+          {% if ticket.tiene_restricciones %}<dt>No puede atendernos</dt><dd class="small">{{ ticket.resumen_no_disponible|default:"" }}{% if ticket.restricciones %}<div class="text-muted-jn">{{ ticket.restricciones }}</div>{% endif %}</dd>{% endif %}
+          <dt>Técnico JANOTEC</dt><dd>{% if ticket.asignado_a %}{{ ticket.asignado_a.get_full_name|default:ticket.asignado_a.username }}{% else %}<span class="text-muted-jn">Se define en el cronograma</span>{% endif %}</dd>
+          {% if ticket.calificacion %}<dt>Su calificación</dt><dd>{% include "tickets/_estrellas.html" with valor=ticket.calificacion %}</dd>{% endif %}
+        </dl>
+      </div>
+    </div>
+    {% if user.es_cliente and ticket.estado == 'generado' or user.es_cliente and ticket.estado == 'recepcionado' %}
+    <form method="post" action="{% url 'cancelar' ticket.radicado %}" class="mt-3" onsubmit="return confirm('¿Cancelar esta solicitud?')">{% csrf_token %}
+      <button class="btn btn-link text-danger btn-sm p-0"><i class="bi bi-x-circle"></i> Cancelar solicitud</button>
+    </form>
+    {% endif %}
+    {% include "tickets/_historial_sede.html" %}
+  </div>
+</div>
+{% endblock %}

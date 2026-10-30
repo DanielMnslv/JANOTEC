@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block titulo %}Indicadores del cronograma{% endblock %}
+{% block contenido %}
+<h1 class="h3 page-title mb-1">Indicadores de la semana</h1>
+<p class="text-muted-jn mb-3">Qué se atendió, dónde y quién: para priorizar sedes con soportes repetidos y equilibrar la carga de los técnicos.</p>
+{% include "cronograma/_pestanas.html" %}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3"><div class="kpi"><div class="valor">{{ ind.total }}</div><div class="etiqueta">Actividades · {{ ind.autorizadas }} autorizada{{ ind.autorizadas|pluralize }}{% if ind.en_rojo %} · <span class="text-danger">{{ ind.en_rojo }} en rojo</span>{% endif %}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="kpi"><div class="valor">{{ ind.tipo_top.n|default:0 }}</div><div class="etiqueta">Tipo más frecuente<br><strong>{{ ind.tipo_top.etiqueta|default:"—" }}</strong></div></div></div>
+  <div class="col-6 col-lg-3"><div class="kpi"><div class="valor">{{ ind.cliente_top.n|default:0 }}</div><div class="etiqueta">Cliente más recurrente<br><strong>{{ ind.cliente_top.etiqueta|default:"—" }}</strong></div></div></div>
+  <div class="col-6 col-lg-3"><div class="kpi alerta"><div class="valor">{{ ind.sede_top.n|default:0 }}</div><div class="etiqueta">Sede a priorizar<br><strong>{{ ind.sede_top.etiqueta|default:"—" }}</strong></div></div></div>
+</div>
+<div class="row g-3">
+  {% include "cronograma/_barras.html" with titulo="Actividades por tipo" filas=ind.por_tipo %}
+  {% include "cronograma/_barras.html" with titulo="Carga por técnico" filas=ind.por_tecnico %}
+  {% include "cronograma/_barras.html" with titulo="Visitas por cliente" filas=ind.por_cliente %}
+  {% include "cronograma/_barras.html" with titulo="Soporte y mantenimiento por sede" filas=ind.por_sede %}
+  {% include "cronograma/_barras.html" with titulo="Por línea / solución" filas=ind.por_linea %}
+  {% include "cronograma/_barras.html" with titulo="Soportes técnicos por cliente" filas=ind.soportes_por_cliente alerta=True %}
+</div>
+{% endblock %}

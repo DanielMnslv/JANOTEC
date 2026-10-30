@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Stock mínimo{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Stock mínimo de los insumos" subtitulo="Cuando lo libre en bodega (sin lo apartado para tickets) llega al mínimo, el lunes le llega a bodega la lista para reponer." %}
+{% if bajos %}<div class="alert alert-warning small"><i class="bi bi-exclamation-triangle"></i> {{ bajos }} insumo{{ bajos|pluralize }} en el mínimo o por debajo.</div>{% endif %}
+<form method="post" class="card">{% csrf_token %}
+  <div class="table-responsive"><table class="table table-tickets table-sm mb-0 align-middle">
+    <thead><tr><th>Código</th><th>Insumo</th><th class="text-end">En bodega</th><th class="text-end">Apartado</th><th class="text-end">Libre</th><th style="width:9rem">Mínimo</th></tr></thead>
+    <tbody>{% for f in filas %}
+      <tr class="{% if f.bajo %}table-warning{% endif %}">
+        <td class="radicado small">{{ f.insumo.codigo }}</td><td class="small">{{ f.insumo.descripcion }} <span class="text-muted-jn">({{ f.insumo.get_unidad_display|lower }})</span></td>
+        <td class="text-end">{{ f.bodega|cant }}</td><td class="text-end text-muted-jn">{{ f.apartado|cant }}</td><td class="text-end fw-semibold">{{ f.libre|cant }}</td>
+        <td><input type="number" step="any" min="0" name="minimo_{{ f.insumo.pk }}" value="{{ f.insumo.stock_minimo|floatformat:'-2' }}" class="form-control form-control-sm text-end" aria-label="Mínimo de {{ f.insumo.descripcion }}"></td>
+      </tr>{% endfor %}</tbody>
+  </table></div>
+  <div class="card-footer d-flex flex-wrap justify-content-end gap-2">
+    <button class="btn btn-outline-primary" name="enviar_ya" value="1"><i class="bi bi-envelope"></i> Guardar y enviarme la alerta ahora</button>
+    <button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar mínimos</button>
+  </div>
+</form>
+{% endblock %}

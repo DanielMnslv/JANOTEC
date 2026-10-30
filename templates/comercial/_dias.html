@@ -1,0 +1,17 @@
+<p class="small text-muted-jn mb-2">Trabajamos de lunes a viernes y el sábado de 8:00 a. m. a 12:00 m.</p>
+<div class="semana-atencion mb-3">
+    {% for dia in form.dias_no_disponible %}
+      <div class="dia">
+        <label class="form-label small fw-semibold mb-1" for="{{ dia.id_for_label }}">{{ dia.label }}</label>
+        {{ dia }}
+        {% for e in dia.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+      </div>
+    {% endfor %}
+</div>
+{% include "tickets/_campo.html" with campo=form.restricciones %}
+<script>
+  document.querySelectorAll('.semana-atencion select').forEach(function (s) {
+    function marcar() { s.closest('.dia').classList.toggle('restringido', !!s.value); }
+    s.addEventListener('change', marcar); marcar();
+  });
+</script>

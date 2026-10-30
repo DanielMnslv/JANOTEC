@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block titulo %}Indicadores de gestión · {{ etiqueta }}{% endblock %}
+{% block contenido %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div>
+    <h1 class="h3 page-title mb-1">Indicadores de gestión</h1>
+    <p class="text-muted-jn mb-0">Periodo: <b class="text-body">{{ etiqueta }}</b> · {% if user.es_direccion %}todas las áreas{% else %}área técnica{% endif %}</p>
+  </div>
+  <button type="button" class="btn btn-outline-primary d-print-none" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir o guardar PDF</button>
+</div>
+
+<form method="get" class="card card-body d-print-none mb-4">
+  <div class="row g-2 align-items-end">
+    <div class="col-sm-4 col-lg-3"><label class="form-label small mb-1" for="periodo">Periodo</label>
+      <select name="periodo" id="periodo" class="form-select">{% for valor, nombre in periodos %}<option value="{{ valor }}" {% if valor == periodo %}selected{% endif %}>{{ nombre }}</option>{% endfor %}</select></div>
+    <div class="col-6 col-sm-3 col-lg-2 rango"><label class="form-label small mb-1" for="desde">Desde</label><input type="date" name="desde" id="desde" class="form-control" value="{{ desde|date:'Y-m-d' }}"></div>
+    <div class="col-6 col-sm-3 col-lg-2 rango"><label class="form-label small mb-1" for="hasta">Hasta</label><input type="date" name="hasta" id="hasta" class="form-control" value="{{ hasta|date:'Y-m-d' }}"></div>
+    <div class="col-sm-2 col-lg-2 d-grid"><button class="btn btn-primary"><i class="bi bi-funnel"></i> Ver</button></div>
+  </div>
+</form>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3"><div class="kpi"><div class="valor">{{ v.recibidos }}</div><div class="etiqueta">Solicitudes recibidas</div></div></div>
+  <div class="col-6 col-md-3"><div class="kpi"><div class="valor">{{ v.cerrados }}</div><div class="etiqueta">Solicitudes cerradas</div></div></div>
+  <div class="col-6 col-md-3"><div class="kpi"><div class="valor">{{ v.pendientes }}</div><div class="etiqueta">Pendientes al final del periodo</div></div></div>
+  <div class="col-6 col-md-3"><div class="kpi"><div class="valor">{{ v.actas }}</div><div class="etiqueta">Actas de soporte{% if v.actas_no_programadas %} · {{ v.actas_no_programadas }} no programadas{% endif %}</div></div></div>
+</div>
+
+<h2 class="h5 mb-3">Indicadores del periodo</h2>
+<div class="row g-3 mb-4">
+  {% for i in indicadores %}
+  <div class="col-sm-6 col-xl-3">
+    <div class="card h-100 indicador {% if i.cumple is True %}indicador-cumple{% elif i.cumple is False %}indicador-no-cumple{% endif %}"><div class="card-body">
+      <div class="d-flex justify-content-between align-items-start gap-2">
+        <div class="fw-semibold">{{ i.nombre }}</div>
+        {% if i.cumple is True %}<span class="badge text-bg-success">Cumple</span>{% elif i.cumple is False %}<span class="badge text-bg-danger">No cumple</span>{% else %}<span class="badge text-bg-light">Sin datos</span>{% endif %}
+      </div>
+      <div class="indicador-valor">{% if i.valor is None %}—{% else %}{{ i.valor|floatformat:"-1" }}<small>{{ i.unidad }}</small>{% endif %}</div>
+      <div class="small text-muted-jn">Meta: {% if i.mayor_es_mejor %}≥{% else %}≤{% endif %} {{ i.meta|floatformat:"-1" }}{{ i.unidad }}{% if i.detalle %} · {{ i.detalle }}{% endif %}</div>
+      <div class="small mt-1">{% if i.anterior is not None %}
+        {% if i.tendencia == 'mejor' %}<span class="text-success"><i class="bi bi-arrow-up-right"></i> Mejoró</span>{% elif i.tendencia == 'peor' %}<span class="text-danger"><i class="bi bi-arrow-down-right"></i> Empeoró</span>{% else %}<span class="text-muted-jn"><i class="bi bi-arrow-right"></i> Igual</span>{% endif %}
+        <span class="text-muted-jn">· periodo anterior: {{ i.anterior|floatformat:"-1" }}{{ i.unidad }}</span>
+      {% else %}<span class="text-muted-jn">Sin dato del periodo anterior</span>{% endif %}</div>
+      <div class="small text-muted-jn mt-2 indicador-formula"><i class="bi bi-calculator"></i> {{ i.formula }}</div>
+    </div></div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-5"><div class="card h-100"><div class="card-header">Calificaciones del periodo (1 a 10)</div><div class="card-body">
+    {% if v.calificaciones %}
+      {% for n, cantidad, ancho in distribucion reversed %}
+      <div class="d-flex align-items-center gap-2 small mb-1">
+        <span class="text-nowrap" style="width:3.2rem"><span class="estrellas-nota">★</span> {{ n }}</span>
+        <div class="flex-grow-1 barra-fondo"><div class="barra {% if n >= 8 %}barra-buena{% elif n >= 6 %}barra-media{% else %}barra-mala{% endif %}" style="width:{{ ancho }}%"></div></div>
+        <span class="text-end fw-semibold" style="width:2rem">{{ cantidad }}</span>
+      </div>
+      {% endfor %}
+      <div class="small text-muted-jn mt-2">{{ v.calificaciones }} calificaciones · {% if v.respuesta_encuesta is not None %}{{ v.respuesta_encuesta|floatformat:"-1" }}% de las solicitudes cerradas fueron calificadas{% endif %}</div>
+    {% else %}<p class="text-muted-jn mb-0">Todavía no hay calificaciones en este periodo. Al cerrar una solicitud, el cliente recibe el correo para calificar de 1 a 10.</p>{% endif %}
+  </div></div></div>
+
+  <div class="col-lg-7"><div class="card h-100"><div class="card-header">Gestión por técnico</div>
+    <div class="table-responsive"><table class="table mb-0 table-tickets">
+      <thead><tr><th>Técnico</th><th class="text-end">Actas</th><th class="text-end">Cerrados</th><th class="text-end">Abiertos hoy</th><th class="text-end">Días de solución</th><th class="text-end">Satisfacción</th></tr></thead>
+      {% for f in por_responsable %}<tr><td>{{ f.nombre }}</td><td class="text-end">{{ f.actas }}</td><td class="text-end">{{ f.cerrados }}</td><td class="text-end">{{ f.abiertos }}</td>
+        <td class="text-end">{{ f.solucion_dias|default_if_none:"—" }}</td><td class="text-end">{% if f.satisfaccion is not None %}{{ f.satisfaccion }}/10 <span class="small text-muted-jn">({{ f.calificaciones }})</span>{% else %}—{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="6" class="text-muted-jn">Sin gestión de técnicos en el periodo.</td></tr>{% endfor %}
+    </table></div>
+  </div></div>
+
+  <div class="col-lg-6"><div class="card h-100"><div class="card-header">Clientes con más solicitudes</div>
+    <div class="table-responsive"><table class="table mb-0 table-tickets">
+      <thead><tr><th>Cliente</th><th class="text-end">Recibidas</th><th class="text-end">Cerradas</th><th class="text-end">Satisfacción</th></tr></thead>
+      {% for c in por_cliente %}<tr><td>{{ c.empresa__razon_social }}</td><td class="text-end fw-semibold">{{ c.n }}</td><td class="text-end">{{ c.cerrados }}</td><td class="text-end">{% if c.satisfaccion %}{{ c.satisfaccion|floatformat:1 }}/10{% else %}—{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="4" class="text-muted-jn">Sin solicitudes en el periodo.</td></tr>{% endfor %}
+    </table></div>
+  </div></div>
+
+  <div class="col-lg-6"><div class="card h-100"><div class="card-header">Solicitudes por tipo de servicio</div>
+    <div class="table-responsive"><table class="table mb-0 table-tickets">
+      {% for nombre, n, pct in por_tipo %}<tr><td>{{ nombre }}</td><td class="text-end fw-semibold">{{ n }}</td><td class="text-end text-muted-jn">{{ pct|floatformat:"-1" }}%</td></tr>
+      {% empty %}<tr><td class="text-muted-jn">Sin solicitudes en el periodo.</td></tr>{% endfor %}
+    </table></div>
+    {% if por_falla %}<div class="card-header border-top">Fallas más frecuentes</div>
+    <table class="table mb-0 table-tickets">{% for f in por_falla %}<tr><td>{{ f.falla__nombre }}<div class="small text-muted-jn">{{ f.categoria__nombre }}</div></td><td class="text-end fw-semibold">{{ f.n }}</td></tr>{% endfor %}</table>{% endif %}
+  </div></div>
+
+  {% if ve_comercial %}
+  <div class="col-lg-6"><div class="card h-100"><div class="card-header">Gestión comercial</div><div class="card-body">
+    <dl class="dl-ficha mb-0">
+      <dt>Propuestas enviadas</dt><dd>{{ v.propuestas }}</dd>
+      <dt>Propuestas aprobadas</dt><dd>{{ v.aprobadas }}</dd>
+      <dt>Valor aprobado (antes de IVA)</dt><dd>${{ v.valor_aprobado|floatformat:"0g" }}</dd>
+    </dl>
+  </div></div></div>
+  {% endif %}
+
+  <div class="col-lg-6"><div class="card h-100"><div class="card-header">Estado actual de las solicitudes <span class="small text-muted-jn">(hoy, sin importar el periodo)</span></div>
+    <table class="table mb-0 table-tickets">{% for nombre, n, valor in por_estado %}<tr><td><a href="{% url 'panel' %}?estado={{ valor }}">{{ nombre }}</a></td><td class="text-end fw-semibold">{{ n }}</td></tr>{% endfor %}</table>
+  </div></div>
+</div>
+
+<p class="small text-muted-jn mt-4 mb-0">Informe generado el {{ generado|date:"d/m/Y h:i a" }} por {{ user.get_full_name|default:user.username }}. Las metas son las definidas para el área y se pueden ajustar.</p>
+<script>
+  (function () {
+    const sel = document.getElementById('periodo');
+    const mostrar = function () { document.querySelectorAll('.rango').forEach(function (c) { c.hidden = sel.value !== 'rango'; }); };
+    sel.addEventListener('change', mostrar); mostrar();
+  })();
+</script>
+{% endblock %}

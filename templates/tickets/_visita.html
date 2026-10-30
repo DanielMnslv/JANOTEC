@@ -1,0 +1,11 @@
+{# Visita técnica: la ven todos; la programa el área administrativa #}
+{% if ticket.visita_programada %}
+  <div class="visita-cita">
+    <i class="bi bi-calendar-event"></i>
+    <div>
+      <div class="small text-uppercase fw-semibold">Visita técnica programada</div>
+      <div class="fw-bold">{{ ticket.visita_programada|date:"l j \d\e F" }} · {{ ticket.visita_programada|date:"g:i a" }}</div>
+      {% if ticket.asignado_a %}<div class="small">Con {{ ticket.asignado_a.get_full_name|default:ticket.asignado_a.username }}</div>{% endif %}
+    </div>
+  </div>
+{% endif %}

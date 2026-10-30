@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block titulo %}{% if objeto %}{{ objeto }}{% elif tipo == 'clientes' %}Nuevo cliente{% else %}Nuevo proveedor{% endif %}{% endblock %}
+{% block contenido %}
+<a href="{% if not objeto %}{% url 'inventario:contactos' %}?tipo={{ tipo }}{% elif tipo == 'proveedores' %}{% url 'inventario:proveedor' objeto.pk %}{% else %}{% url 'inventario:cliente' objeto.pk %}{% endif %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {% if objeto %}{{ objeto }}{% else %}Clientes y proveedores{% endif %}</a>
+<h1 class="h3 page-title my-2">{% if objeto %}{{ objeto }}{% elif tipo == 'clientes' %}Nuevo cliente{% else %}Nuevo proveedor{% endif %}</h1>
+{% if texto_anterior %}<p class="small text-muted-jn">Al guardarlo, los registros del inventario que decían «{{ texto_anterior }}» quedan asociados a este cliente.</p>{% endif %}
+<form method="post" class="card" style="max-width:760px">{% csrf_token %}{% if texto_anterior %}<input type="hidden" name="texto_anterior" value="{{ texto_anterior }}">{% endif %}
+  <div class="card-body"><div class="row g-3">
+    {% for campo in form %}{% if campo.name == 'marcas' %}
+    <div class="col-12"><label class="form-label fw-medium">{{ campo.label|capfirst }}</label>
+      <div class="d-flex flex-wrap gap-3">{% for op in campo %}<div class="form-check">{{ op.tag }} <label class="form-check-label" for="{{ op.id_for_label }}">{{ op.choice_label }}</label></div>{% endfor %}</div>
+      <div class="form-text">{{ campo.help_text }} ¿Falta una? Créela en <a href="{% url 'inventario:catalogo' 'marcas' %}">Marcas</a>.</div></div>
+    {% else %}<div class="{% if campo.name == 'razon_social' or campo.name == 'direccion' or campo.name == 'notas' %}col-12{% else %}col-md-6{% endif %}">{% include "tickets/_campo.html" %}</div>{% endif %}{% endfor %}
+  </div></div>
+  <div class="card-footer text-end"><button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button></div>
+</form>
+{% endblock %}

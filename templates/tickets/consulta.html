@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% load static %}
+{% block titulo %}Consultar mi servicio{% endblock %}
+{% block cuerpo %}
+<div class="container py-5" style="max-width:520px">
+  <div class="text-center mb-4"><a href="{% url 'login' %}"><img src="{% static 'img/marca/logo-color.webp' %}" alt="JANOTEC" class="logo-login"></a></div>
+  <div class="card p-4">
+    <h1 class="h4 page-title mb-1">Consultar mi servicio</h1>
+    <p class="text-muted-jn small mb-4">Sin usuario ni contraseña: escriba el número de radicado que le llegó al correo y el teléfono de contacto con el que se registró la solicitud.</p>
+    {% for m in messages %}<div class="alert alert-{% if m.tags == 'error' %}danger{% else %}{{ m.tags }}{% endif %} py-2 small">{{ m }}</div>{% endfor %}
+    <form method="post">{% csrf_token %}
+      <div class="mb-3"><label class="form-label" for="id_radicado">Número de radicado</label>
+        <input type="text" name="radicado" id="id_radicado" class="form-control text-uppercase" required autofocus value="{{ radicado|default:'' }}" placeholder="Ej.: JNT-2026-000123"></div>
+      <div class="mb-3"><label class="form-label" for="id_telefono">Teléfono de contacto</label>
+        <input type="tel" name="telefono" id="id_telefono" class="form-control" required inputmode="tel" autocomplete="tel" placeholder="Ej.: 310 123 4567"></div>
+      <button class="btn btn-primary w-100"><i class="bi bi-search"></i> Consultar</button>
+    </form>
+    <div class="text-center mt-3 small"><a href="{% url 'login' %}">¿Tiene usuario? Ingrese al portal</a></div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,131 @@
+{% extends "base.html" %}{% load static %}
+{% block titulo %}Acta {{ acta.numero }}{% endblock %}
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center no-imprimir">
+  <a href="{% url 'actas_lista' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Historial de servicio</a>
+  <button type="button" class="btn btn-sm btn-outline-primary" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir / guardar PDF</button>
+</div>
+<div class="solo-impresion mb-3">
+  <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+    <img src="{% static 'img/marca/logo-color.webp' %}" alt="JANOTEC" style="height:44px">
+    <div class="text-end small">Acta de Soporte, Instalación, Desinstalación<br>Versión 1 · Fecha vigencia: 22/06/2026</div>
+  </div>
+  <div class="small mt-2">FORMULARIO No. {{ acta.numero }} · Usuario gestor: {{ acta.tecnico_texto|upper }} · Fecha elaboración: {{ acta.fecha|date:"Y-m-d H:i:s" }}</div>
+</div>
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mt-2 mb-4">
+  <div>
+    <div class="radicado text-muted-jn">ACTA {{ acta.numero }}{% if acta.ticket %} · <a href="{{ acta.ticket.get_absolute_url }}">{{ acta.ticket.radicado }}</a>{% endif %}</div>
+    <h1 class="h3 page-title mb-2">{{ acta.actividad|default:"Visita técnica" }}{% if acta.sistema %} · {{ acta.sistema|title }}{% endif %}</h1>
+    {% include "tickets/_resultado.html" with a=acta %}
+  </div>
+  <div class="text-end small text-muted-jn">{{ acta.fecha|date:"l d \d\e F \d\e Y" }}<br>{{ acta.fecha|date:"h:i a" }}</div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card mb-4">
+      <div class="card-header">Diagnóstico</div>
+      <div class="card-body"><div style="white-space:pre-line">{{ acta.diagnostico|default:"—" }}</div></div>
+    </div>
+    <div class="card mb-4">
+      <div class="card-header">Trabajo realizado y observaciones</div>
+      <div class="card-body"><div style="white-space:pre-line">{{ acta.observaciones|default:"—" }}</div></div>
+    </div>
+    {% include "tickets/_tabla_equipos_acta.html" with lista=acta.equipos_intervenidos titulo="Equipos intervenidos" icono="bi-wrench-adjustable" %}
+    {% include "tickets/_tabla_equipos_acta.html" with lista=acta.equipos_utilizados titulo="Materiales y equipos utilizados" icono="bi-box-seam" %}
+    {% include "tickets/_tabla_equipos_acta.html" with lista=acta.equipos_retirados titulo="Equipos retirados" icono="bi-box-arrow-left" %}
+    {% include "inventario/_acta_detalle_materiales.html" %}
+    {% if evidencias or form_evidencias %}
+    <div class="card mb-4" id="evidencias">
+      <div class="card-header"><i class="bi bi-camera"></i> Evidencias del trabajo</div>
+      <div class="card-body">
+        {% regroup evidencias by get_etapa_display as grupos %}
+        {% for g in grupos %}
+          <div class="small fw-semibold mb-2">{{ g.grouper }}</div>
+          <div class="d-flex flex-wrap gap-2 fotos-equipo mb-3">
+            {% for ev in g.list %}{% url 'archivo_acta' 'evidencia' ev.pk as url_ev %}
+              {% if ev.es_imagen %}<a href="{{ url_ev }}" target="_blank" rel="noopener"><img src="{{ url_ev }}" alt="Evidencia: {{ g.grouper|lower }}" loading="lazy"></a>
+              {% elif ev.es_video %}<video src="{{ url_ev }}" controls preload="metadata" style="max-height:160px;max-width:240px" aria-label="Video de evidencia"></video>
+              {% else %}<a class="btn btn-sm btn-light border align-self-center" href="{{ url_ev }}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> {{ ev.nombre_original|truncatechars:30 }}</a>{% endif %}
+            {% endfor %}
+          </div>
+        {% empty %}<p class="small text-muted-jn">Todavía no hay evidencias del trabajo.</p>
+        {% endfor %}
+        {% if form_evidencias %}
+        <form method="post" enctype="multipart/form-data" action="{% url 'acta_evidencias' acta.numero %}" class="row g-2 align-items-end no-imprimir border-top pt-3">{% csrf_token %}
+          <div class="col-md-4">{% include "tickets/_campo.html" with campo=form_evidencias.etapa %}</div>
+          <div class="col-md-5">{% include "tickets/_campo.html" with campo=form_evidencias.archivos %}</div>
+          <div class="col-md-3 mb-3"><button class="btn btn-outline-primary w-100"><i class="bi bi-upload"></i> Agregar</button></div>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    {% if user.es_personal and acta.oportunidad %}
+    <div class="card mb-4 border-success no-imprimir">
+      <div class="card-header"><i class="bi bi-graph-up-arrow"></i> Oportunidad comercial detectada <span class="small text-muted-jn fw-normal">(interno)</span></div>
+      <div class="card-body">
+        <div class="d-flex flex-wrap gap-1 mb-2">{% for s in acta.oportunidad.servicios_display %}<span class="badge badge-tipo">{{ s }}</span>{% endfor %}</div>
+        {% if acta.oportunidad.nota %}<div style="white-space:pre-line">{{ acta.oportunidad.nota }}</div>{% endif %}
+        <div class="small text-muted-jn mt-2">Estado: <span class="badge text-bg-{{ acta.oportunidad.color_estado }}">{{ acta.oportunidad.get_estado_display }}</span>
+          {% if user.es_supervisor %} · <a href="{% url 'oportunidades' %}">Ver oportunidades</a>{% endif %}</div>
+      </div>
+    </div>
+    {% endif %}
+    {% if acta.firmas.all %}
+    <div class="card mb-4">
+      <div class="card-header">Asistentes y firmas</div>
+      <div class="card-body">
+        <div class="row g-4">
+          {% for f in acta.firmas.all %}
+            <div class="col-sm-6 col-md-4">
+              <img class="firma-img" src="{% url 'archivo_acta' 'firma' f.pk %}" alt="Firma de {{ f.nombre }}">
+              <div class="fw-semibold small">{{ f.nombre }}</div>
+              <div class="small text-muted-jn">{{ f.cargo|capfirst }} · {{ f.get_rol_display }}</div>
+            </div>
+          {% endfor %}
+        </div>
+        {% if acta.es_virtual %}<div class="small text-muted-jn mt-3">Atención virtual: no lleva firma del cliente.{% if acta.recibio %} Atendió por el cliente: {{ acta.recibio|title }}.{% endif %}</div>{% endif %}
+        {% if acta.copia_correo %}<div class="small text-muted-jn mt-3">Copia correo a: {{ acta.copia_correo }}</div>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card mb-3">
+      <div class="card-header">Datos de la visita</div>
+      <div class="card-body">
+        <dl class="dl-ficha mb-0">
+          <dt>Cliente</dt><dd>{{ acta.empresa.razon_social }}</dd>
+          <dt>Sede</dt><dd>{{ acta.lugar|default:"—" }}{% if acta.sede and acta.sede.direccion %}<div class="small text-muted-jn">{{ acta.sede.direccion }}</div>{% endif %}</dd>
+          {% if acta.sede.abonado and user.es_personal %}<dt>Abonado de alarma</dt><dd class="radicado">{{ acta.sede.abonado }}</dd>{% endif %}
+          {% if acta.modalidad %}<dt>Modalidad</dt><dd>{{ acta.get_modalidad_display }}</dd>{% endif %}
+          <dt>Técnico</dt><dd>{{ acta.tecnico.get_full_name|default:acta.tecnico_texto|title }}{% if acta.tecnico.cargo %}<div class="small text-muted-jn">{{ acta.tecnico.cargo }}</div>{% endif %}</dd>
+          {% if acta.recibio %}<dt>Recibió por el cliente</dt><dd>{{ acta.recibio|title }}{% if acta.cargo_recibio %}<div class="small text-muted-jn">{{ acta.cargo_recibio|capfirst }}</div>{% endif %}</dd>{% endif %}
+        </dl>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          {% if acta.origen == 'plataforma' %}<span class="badge badge-tipo align-self-center"><i class="bi bi-phone"></i> Diligenciada en la plataforma</span>{% endif %}
+          {% if acta.pdf_original %}<a class="btn btn-sm btn-accent no-imprimir" href="{% url 'archivo_acta' 'original' acta.pk %}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> Ver acta original (PDF)</a>{% endif %}
+          {% if acta.enlace_imagenes %}<a class="btn btn-sm btn-outline-primary no-imprimir" href="{{ acta.enlace_imagenes }}" target="_blank" rel="noopener noreferrer"><i class="bi bi-images"></i> Ver fotos</a>{% endif %}
+          {% if acta.latitud and acta.longitud %}<a class="btn btn-sm btn-outline-primary" href="https://www.google.com/maps?q={{ acta.latitud|stringformat:'s' }},{{ acta.longitud|stringformat:'s' }}" target="_blank" rel="noopener noreferrer"><i class="bi bi-geo-alt"></i> Ubicación</a>{% endif %}
+        </div>
+      </div>
+    </div>
+    {% if anteriores %}
+    <div class="card">
+      <div class="card-header">Otras visitas a esta sede</div>
+      <ul class="list-group list-group-flush">
+        {% for a in anteriores %}
+          <a class="list-group-item list-group-item-action small" href="{{ a.get_absolute_url }}">
+            <span class="radicado">{{ a.numero }}</span> · {{ a.fecha|date:"d/m/Y" }} {% include "tickets/_resultado.html" %}
+            <div class="text-truncate">{{ a.diagnostico }}</div>
+          </a>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

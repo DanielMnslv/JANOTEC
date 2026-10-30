@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% block titulo %}{{ ticket.radicado }} · comercial{% endblock %}
+{% block contenido %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 no-imprimir">
+  <a href="{% url 'comercial:bandeja' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Bandeja comercial</a>
+  <div class="d-flex flex-wrap gap-2">
+    {% if user.es_direccion %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'ticket_detalle' ticket.radicado %}"><i class="bi bi-tools"></i> Vista técnica</a>{% endif %}
+    {% url 'comercial:ficha_pdf' ticket.radicado as url_ficha %}
+    <div class="btn-group">
+      <a class="btn btn-sm btn-outline-primary" href="{{ url_ficha }}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> Ficha PDF</a>
+      <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-label="Más versiones de la ficha"></button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li><a class="dropdown-item" href="{{ url_ficha }}" target="_blank" rel="noopener">Versión interna (con presupuesto y calificación)</a></li>
+        <li><a class="dropdown-item" href="{{ url_ficha }}?version=cliente" target="_blank" rel="noopener">Versión para el cliente</a></li>
+        <li><a class="dropdown-item" href="{{ url_ficha }}?version=cliente&amp;descargar=1">Descargar versión cliente</a></li>
+      </ul>
+    </div>
+    {% if ticket.contacto_telefono %}<a class="btn btn-sm btn-outline-success" target="_blank" rel="noopener" id="btn-whatsapp"
+       data-telefono="{{ ticket.contacto_telefono }}" data-pdf="{{ url_ficha }}?version=cliente" data-archivo="Ficha-requerimiento-{{ ticket.radicado }}.pdf"
+       data-texto="Hola {{ ticket.contacto_nombre }}, le escribimos de JANOTEC. Le compartimos la ficha de su requerimiento {{ ticket.radicado }} ({{ ticket.asunto }}). Puede seguir el avance aquí: {{ request.scheme }}://{{ request.get_host }}{{ ticket.get_absolute_url }}"
+       title="En el celular adjunta el PDF; en el computador lo descarga para que lo arrastre al chat"><i class="bi bi-whatsapp"></i> Enviar ficha por WhatsApp</a>{% endif %}
+    <button type="button" class="btn btn-sm btn-outline-primary" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir / PDF</button>
+  </div>
+</div>
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mt-2 mb-3">
+  <div>
+    <div class="radicado text-muted-jn">{{ ticket.radicado }} · {{ ficha.get_origen_display }}{% if ficha.referencia_externa %} · antes {{ ficha.referencia_externa }}{% endif %}</div>
+    <h1 class="h3 page-title mb-1">{{ ticket.asunto }}</h1>
+    <span class="badge text-bg-{{ ficha.color_etapa }}">{{ ficha.get_etapa_display }}</span>
+    <span class="badge {% if en_comercial %}text-bg-light border{% else %}text-bg-info{% endif %}"><i class="bi {% if en_comercial %}bi-briefcase{% else %}bi-tools{% endif %}"></i> {{ ticket.get_area_display }}</span>
+    {% if ticket.empresa.es_prospecto %}<span class="badge text-bg-light border">Prospecto</span>{% endif %}
+    {% if ficha.propuesta_vencida %}<span class="badge text-bg-danger"><i class="bi bi-alarm"></i> Fecha de propuesta vencida</span>{% endif %}
+  </div>
+  <div class="text-end small text-muted-jn">Radicado el {{ ticket.creado|date:"d/m/Y h:i a" }}
+    {% if ficha.fecha_max_propuesta %}<br>Propuesta antes del <strong class="text-body">{{ ficha.fecha_max_propuesta|date:"d/m/Y h:i a" }}</strong>{% endif %}</div>
+</div>
+
+<div class="card mb-4"><div class="card-body">
+  {% include "comercial/_pasos_cliente.html" %}
+  {% if not en_comercial %}<div class="alert alert-info small mt-3 mb-0"><i class="bi bi-tools"></i>
+    {% if ficha.etapa == 'levantamiento' %}Está en el <strong>área técnica</strong> para la visita de levantamiento ·
+      {% if ticket.visita_programada %}programada el <strong>{{ ticket.visita_programada|date:"d/m/Y h:i a" }}</strong>{% if ticket.asignado_a %} con {{ ticket.asignado_a }}{% endif %}{% else %}{{ ticket.get_estado_display|lower }}: el coordinador del área técnica la asigna y la programa{% endif %}.
+      Volverá aquí con el resultado. Le avisamos por correo cuando se programe.
+    {% else %}Está en el <strong>área técnica</strong> para la instalación · {{ ticket.get_estado_display }}{% if ticket.asignado_a %} · {{ ticket.asignado_a }}{% endif %}. Usted lo sigue en modo consulta.{% endif %}
+  </div>{% endif %}
+</div></div>
+
+{% include "comercial/_pasos_comercial.html" %}
+
+{% if en_comercial and ficha.etapa == 'aprobada' %}
+<div class="card border-success mb-4 no-imprimir"><div class="card-body">
+  <h2 class="h5"><i class="bi bi-check2-circle text-success"></i> Propuesta aprobada</h2>
+  <ol class="small mb-3 ps-3">
+    <li class="{% if material_pendiente %}fw-semibold{% else %}text-success{% endif %}">Bodega revisa el material aprobado
+      {% if material_pendiente %}· <a href="{{ material_pendiente.get_absolute_url }}">{{ material_pendiente.numero }}</a> <span class="badge text-bg-{{ material_pendiente.color_estado }}">{{ material_pendiente.get_estado_display }}</span>
+      {% if material_pendiente.estado == 'borrador' %}<div class="text-muted-jn">La propuesta no trae el material: escríbalo en la solicitud para que bodega lo revise.</div>{% endif %}
+      {% else %} <i class="bi bi-check2"></i>{% endif %}</li>
+    <li class="{% if material_pendiente %}text-muted-jn{% else %}fw-semibold{% endif %}">Traspase la instalación al área técnica: asignará al técnico y seguirá hasta el cierre, con el mismo número.</li>
+  </ol>
+  <form method="post" action="{% url 'comercial:traspasar' ticket.radicado %}" class="d-flex flex-wrap gap-2">{% csrf_token %}
+    <input name="nota" class="form-control" style="max-width:520px" placeholder="Lo acordado con el cliente (alcance, fechas, condiciones)…" {% if material_pendiente %}disabled{% endif %}>
+    <button class="btn btn-success" {% if material_pendiente %}disabled title="Primero bodega revisa el material"{% endif %}><i class="bi bi-send"></i> Traspasar al área técnica</button>
+  </form>
+</div></div>
+{% endif %}
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card mb-4">
+      <div class="card-header">Necesidad</div>
+      <div class="card-body">
+        <div style="white-space:pre-line">{{ ticket.descripcion }}</div>
+        {% if ficha.servicios %}<div class="d-flex flex-wrap gap-1 mt-3">{% for s in ficha.servicios_display %}<span class="badge badge-tipo">{{ s }}</span>{% endfor %}</div>{% endif %}
+        <dl class="dl-ficha row mb-0 mt-2">
+          {% if ficha.sistema_actual %}<div class="col-sm-6"><dt>Sistema actual</dt><dd>{{ ficha.sistema_actual }}</dd></div>{% endif %}
+          {% if ficha.tamano %}<div class="col-sm-6"><dt>Tamaño / puntos</dt><dd>{{ ficha.tamano }}</dd></div>{% endif %}
+          {% if ficha.energia %}<div class="col-sm-3"><dt>Energía</dt><dd>{{ ficha.get_energia_display }}</dd></div>{% endif %}
+          {% if ficha.internet %}<div class="col-sm-3"><dt>Internet</dt><dd>{{ ficha.get_internet_display }}</dd></div>{% endif %}
+          {% if ticket.impacto %}<div class="col-sm-3"><dt>Urgencia</dt><dd><span class="badge prioridad prioridad-{{ ticket.impacto }}">{{ ticket.get_impacto_display }}</span></dd></div>{% endif %}
+        </dl>
+        {% if adjuntos_inicio %}<div class="mt-3">{% include "tickets/_adjuntos.html" with lista=adjuntos_inicio %}</div>{% endif %}
+      </div>
+    </div>
+
+    <div class="card mb-4 border-success">
+      <div class="card-header"><i class="bi bi-lock"></i> Oportunidad de negocio <span class="small text-muted-jn fw-normal">(interno comercial)</span></div>
+      <div class="card-body">
+        <dl class="dl-ficha row mb-0">
+          <div class="col-sm-6"><dt>Nivel de decisión del contacto</dt><dd>{{ ficha.get_nivel_decision_display|default:"—" }}</dd></div>
+          <div class="col-sm-6"><dt>¿Otras sedes / fincas?</dt><dd>{{ ficha.otras_sedes|yesno:"Sí (más proyectos potenciales),No" }}</dd></div>
+          <div class="col-sm-6"><dt>Presupuesto / tiempos</dt><dd>{{ ficha.presupuesto|default:"—" }}</dd></div>
+          <div class="col-sm-6"><dt>Otras necesidades</dt><dd>{{ ficha.otras_necesidades|default:"—" }}</dd></div>
+        </dl>
+        {% if ficha.observaciones %}<div class="mt-2" style="white-space:pre-line">{{ ficha.observaciones }}</div>{% endif %}
+        {% if ficha.oportunidad %}<div class="small text-muted-jn mt-2">Viene de la oportunidad detectada por {{ ficha.oportunidad.detectada_por }}{% if ficha.oportunidad.acta %} en el <a href="{{ ficha.oportunidad.acta.get_absolute_url }}">acta {{ ficha.oportunidad.acta.numero }}</a>{% endif %}.</div>{% endif %}
+      </div>
+    </div>
+
+    {% include "inventario/_solicitudes_ticket.html" %}
+    <div class="card mb-4 {% if not informe %}border-warning{% endif %}" id="informe">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-clipboard2-data"></i> Informe del requerimiento</span>
+        {% if informe %}<span class="badge text-bg-success">Listo</span>{% else %}<span class="badge text-bg-warning">Obligatorio</span>{% endif %}
+      </div>
+      <div class="card-body">
+        {% if informe %}
+          {% include "comercial/_informe.html" %}
+          {% if adjuntos_informe %}<div class="mt-3">{% include "tickets/_adjuntos.html" with lista=adjuntos_informe %}</div>{% endif %}
+          {% if form_informe %}
+          <button class="btn btn-sm btn-outline-primary mt-3 no-imprimir" type="button" data-bs-toggle="collapse" data-bs-target="#editar-informe"><i class="bi bi-pencil"></i> Ajustar informe</button>
+          <div class="collapse" id="editar-informe">{% include "comercial/_form_informe.html" with boton="Guardar cambios del informe" %}</div>
+          {% endif %}
+        {% elif ficha.etapa == 'levantamiento' %}
+          <div class="small text-muted-jn">El técnico lo entrega al terminar la visita de levantamiento.</div>
+        {% else %}
+          <p class="small mb-3">Antes de elaborar la propuesta debe quedar escrito <b>qué quiere y necesita el cliente</b> y los <b>materiales y equipos</b> que se van a cotizar. Hay dos caminos:</p>
+          {% if form_informe %}
+          <div class="border rounded p-3 mb-3 no-imprimir">
+            <div class="fw-semibold mb-2"><i class="bi bi-telephone"></i> Sin visita: regístrelo usted</div>
+            {% include "comercial/_form_informe.html" with boton="Guardar informe" %}
+          </div>
+          {% endif %}
+          {% if en_comercial and ficha.abierta and ficha.etapa != 'enviada' and ficha.etapa != 'aprobada' %}
+          <div class="border rounded p-3 no-imprimir">
+            <div class="fw-semibold mb-2"><i class="bi bi-geo-alt"></i> Con visita: pida un levantamiento al área técnica</div>
+        <form method="post" action="{% url 'comercial:levantamiento' ticket.radicado %}" class="no-imprimir">{% csrf_token %}
+                    <label class="form-label small" for="nota-levantamiento">Qué debe revisar el técnico en sitio <span class="text-danger">*</span></label>
+          <textarea name="nota" id="nota-levantamiento" class="form-control mb-2" rows="2" required minlength="10"
+                    placeholder="Ej.: confirmar si van domos o balas en el parqueadero, si hay energía y wifi, cuántos puntos y metros de cable"></textarea>
+          <div class="d-flex flex-wrap align-items-end gap-2">
+            <div><label class="form-label small mb-1" for="jornada-levantamiento">Jornada para la visita <span class="text-danger">*</span></label>
+              <select name="jornada" id="jornada-levantamiento" class="form-select" required>
+                <option value="">— Elija —</option>
+                <option value="manana" {% if ticket.jornada == 'manana' %}selected{% endif %}>Mañana (8:00 a. m. a 12:00 m.)</option>
+                <option value="tarde" {% if ticket.jornada == 'tarde' %}selected{% endif %}>Tarde (lunes a viernes)</option>
+              </select></div>
+            <button class="btn btn-outline-primary"><i class="bi bi-send"></i> Asignar al área técnica para levantamiento</button>
+          </div>
+          <div class="small text-muted-jn mt-1">Entra a la recepción del área técnica como cualquier ticket: el coordinador (Juan Daniel Guana) lo recepciona, asigna el técnico y lo programa en el cronograma. Le avisamos cuándo y con quién, y vuelve aquí con el resultado.</div>
+        </form>
+            <div class="small text-muted-jn mt-1">El técnico visita, diligencia el acta y entrega el informe; el ticket vuelve aquí con él.</div>
+          </div>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+
+    {% if form_gestion %}
+    <div class="card mb-4 border-primary no-imprimir" id="gestion-comercial">
+      <div class="card-header"><i class="bi bi-sliders"></i> Gestionar propuesta</div>
+      {% if ficha.etapa == 'gestion' or ficha.etapa == 'elaborando' or ficha.etapa == 'ajustes' %}
+      <div class="card-body border-bottom bg-light">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <div class="small"><b>Arme la propuesta en la plataforma:</b> ítems del catálogo de precios, descuento, IVA y el PDF con su código PE, listo para enviar.</div>
+          <a class="btn btn-accent" href="{% url 'comercial:cotizador' ticket.radicado %}"><i class="bi bi-calculator"></i> {% if ficha.etapa == 'ajustes' %}Ajustar en el cotizador{% else %}Abrir el cotizador{% endif %}</a>
+        </div>
+      </div>
+      {% endif %}
+      <div class="card-body">
+        <form method="post" action="{% url 'comercial:gestionar' ticket.radicado %}" enctype="multipart/form-data">{% csrf_token %}
+          <div class="row g-2">
+            <div class="col-md-4"><label class="form-label small mb-1">Etapa</label>{{ form_gestion.etapa }}</div>
+            <div class="col-md-4"><label class="form-label small mb-1">Asesor comercial</label>{{ form_gestion.comercial }}</div>
+            <div class="col-md-4"><label class="form-label small mb-1">Valor propuesta (antes de IVA)</label>{{ form_gestion.valor_propuesta }}</div>
+            <div class="col-md-6"><label class="form-label small mb-1">Propuesta (PDF)</label>{{ form_gestion.propuesta }}</div>
+            <div class="col-md-6"><label class="form-label small mb-1">Motivo (si no se aprobó)</label>{{ form_gestion.motivo_rechazo }}</div>
+            <div class="col-12"><label class="form-label small mb-1">Cambios que pidió el cliente <span class="text-muted-jn">(etapa «Ajustando propuesta»)</span></label>{{ form_gestion.cambios }}</div>
+          </div>
+          <div class="mt-2 form-check-inline-list">{% for r in form_gestion.visibilidad %}<div class="form-check form-check-inline">{{ r.tag }}<label class="form-check-label" for="{{ r.id_for_label }}">{{ r.choice_label }}</label></div>{% endfor %}</div>
+          {{ form_gestion.mensaje }}
+          <div class="small text-muted-jn mt-2"><i class="bi bi-info-circle"></i> Cada vez que pasa a «Propuesta enviada» con un PDF nuevo se crea una <b>versión</b> y le llega por correo al cliente. Si el cliente pide cambios (otra marca, otro alcance), elija «Ajustando propuesta» y escriba los cambios; luego envíe la nueva versión. Si respondió por otro medio, registre usted la aprobación.</div>
+          <div class="text-end mt-2"><button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button></div>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    <h2 class="h5 mb-3">Historial completo</h2>
+    {% include "tickets/_timeline.html" with vista="personal" %}
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card mb-3">
+      <div class="card-header">Cliente</div>
+      <div class="card-body">
+        <dl class="dl-ficha mb-0">
+          <dt>Empresa</dt><dd>{{ ticket.empresa.razon_social }}{% if ticket.empresa.nit %}<div class="small text-muted-jn">NIT {{ ticket.empresa.nit }}</div>{% endif %}</dd>
+          {% if ticket.sede %}<dt>Sede</dt><dd>{{ ticket.sede }}</dd>{% endif %}
+          {% if ficha.municipio or ficha.direccion %}<dt>Ubicación</dt><dd>{{ ficha.direccion }}{% if ficha.direccion and ficha.municipio %} · {% endif %}{{ ficha.municipio }}</dd>{% endif %}
+          <dt>Contacto</dt><dd>{{ ticket.contacto_nombre }}{% if ficha.contacto_cargo %} · <span class="small">{{ ficha.contacto_cargo }}</span>{% endif %}
+            <div class="small"><a href="tel:{{ ticket.contacto_telefono }}">{{ ticket.contacto_telefono }}</a>{% if ticket.contacto_email %}<br><a href="mailto:{{ ticket.contacto_email }}">{{ ticket.contacto_email }}</a>{% endif %}</div></dd>
+          {% if ticket.jornada %}<dt>Jornada pedida</dt><dd>{{ ticket.get_jornada_display }}</dd>{% endif %}
+          <dt>Cuándo NO puede atender</dt><dd>{% include "tickets/_semana_atencion.html" %}</dd>
+          <dt>Asesor comercial</dt><dd>{{ ficha.comercial|default:"—" }}</dd>
+          {% if ficha.valor_propuesta %}<dt>Valor propuesta</dt><dd>${{ ficha.valor_propuesta|floatformat:"0g" }} <span class="small text-muted-jn">antes de IVA</span></dd>{% endif %}
+        </dl>
+      </div>
+    </div>
+    {% if versiones %}
+    <div class="card">
+      <div class="card-header">Versiones de la propuesta</div>
+      <ul class="list-group list-group-flush">
+        {% for v in versiones %}
+        <li class="list-group-item small">
+          <div class="d-flex justify-content-between align-items-center gap-2">
+            <span class="fw-semibold">Versión {{ v.numero }}{% if v.codigo %} · <span class="radicado">{{ v.codigo }}</span>{% endif %}</span>
+            <span class="badge text-bg-{{ v.color }}">{{ v.get_estado_display }}</span>
+          </div>
+          <div class="text-muted-jn">{{ v.enviada|date:"d/m/Y h:i a" }}{% if v.valor %} · ${{ v.valor|floatformat:"0g" }}{% endif %}</div>
+          {% if v.archivo %}<a href="{% url 'descargar_adjunto' v.archivo.pk %}"><i class="bi bi-file-earmark-pdf text-danger"></i> {{ v.archivo.nombre_original }}</a>{% endif %}
+          {% if v.cambios %}<div class="mt-1 p-2 rounded bg-light"><b>Cambios pedidos:</b> {{ v.cambios }}</div>{% endif %}
+          {% if v.motivo %}<div class="mt-1 text-danger">{{ v.motivo }}</div>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+// WhatsApp: número colombiano de 10 dígitos → +57. En el celular comparte el PDF como archivo;
+// en el computador lo descarga y abre el chat para arrastrarlo (wa.me no permite adjuntar).
+(function () {
+  const b = document.getElementById('btn-whatsapp');
+  if (!b) return;
+  let n = b.dataset.telefono.replace(/\D/g, '');
+  if (n.length === 10) n = '57' + n;
+  b.href = 'https://wa.me/' + n + '?text=' + encodeURIComponent(b.dataset.texto);
+  b.addEventListener('click', async function (ev) {
+    ev.preventDefault();
+    let archivo = null;
+    try {
+      const r = await fetch(b.dataset.pdf, {credentials: 'same-origin'});
+      if (r.ok) archivo = new File([await r.blob()], b.dataset.archivo, {type: 'application/pdf'});
+    } catch (e) { /* sin PDF: se envía solo el mensaje */ }
+    if (archivo && navigator.canShare && navigator.canShare({files: [archivo]})) {
+      try { await navigator.share({files: [archivo], text: b.dataset.texto}); return; }
+      catch (e) { if (e.name === 'AbortError') return; }
+    }
+    if (archivo) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(archivo);
+      a.download = b.dataset.archivo;
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+    window.open(b.href, '_blank', 'noopener');
+  });
+})();
+</script>
+{% endblock %}

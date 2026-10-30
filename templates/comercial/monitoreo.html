@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block titulo %}Contratos de monitoreo{% endblock %}
+{% block contenido %}
+<a href="{% url 'comercial:bandeja' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Bandeja comercial</a>
+<h1 class="h3 page-title mt-2 mb-1">Contratos de monitoreo</h1>
+<p class="text-muted-jn mb-3">Lo que cada cliente paga al mes por el monitoreo de sus sedes. El valor se ajusta una vez al año y cada ajuste queda registrado.</p>
+
+<form method="get" class="d-flex flex-wrap gap-2 align-items-center mb-4">
+  <select name="empresa" class="form-select w-auto" onchange="this.form.submit()">
+    <option value="">Todos los clientes</option>
+    {% for c in clientes %}<option value="{{ c.pk }}" {% if empresa and c.pk == empresa.pk %}selected{% endif %}>{{ c }}</option>{% endfor %}
+  </select>
+  <span class="ms-auto">Total mensual{% if empresa %} del cliente{% endif %}: <strong class="fs-5">${{ total|floatformat:"0g" }}</strong></span>
+</form>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    {% for g in grupos %}
+    <div class="card mb-4">
+      <div class="card-header d-flex flex-wrap justify-content-between gap-2">
+        <span><a href="?empresa={{ g.empresa.pk }}" class="text-decoration-none fw-semibold">{{ g.empresa }}</a>
+          <span class="text-muted-jn">· {{ g.activos }} sede{{ g.activos|pluralize }}</span></span>
+        <span>${{ g.total|floatformat:"0g" }} / mes</span>
+      </div>
+      <div class="table-responsive"><table class="table table-hover mb-0 small align-middle">
+        <thead><tr><th>Sede</th><th class="text-end">Cant.</th><th class="text-end">Valor mensual</th><th>Año</th><th>Último ajuste</th><th></th></tr></thead>
+        <tbody>
+        {% for s in g.servicios %}
+          <tr class="{% if not s.activo %}text-muted-jn{% endif %}">
+            <td>{{ s.sede.nombre }}{% if s.sede.ciudad %} <span class="text-muted-jn">({{ s.sede.ciudad }})</span>{% endif %}
+              {% if not s.activo %} <span class="badge text-bg-secondary">Inactivo</span>{% endif %}
+              {% if s.observaciones %}<div class="text-muted-jn">{{ s.observaciones }}</div>{% endif %}</td>
+            <td class="text-end">{{ s.cantidad }}</td>
+            <td class="text-end text-nowrap">${{ s.total_mensual|floatformat:"0g" }}</td>
+            <td>{{ s.anio_valor }}</td>
+            <td class="text-muted-jn">{% with a=s.ajustes.all.0 %}{% if a %}+{{ a.porcentaje|floatformat:"-2" }} % en {{ a.anio }} (antes ${{ a.valor_anterior|floatformat:"0g" }}){% else %}—{% endif %}{% endwith %}</td>
+            <td><a class="btn btn-sm btn-light border py-0" href="?{% if empresa %}empresa={{ empresa.pk }}&{% endif %}editar={{ s.pk }}" title="Editar"><i class="bi bi-pencil"></i></a></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </div>
+    {% empty %}
+    <div class="card"><div class="card-body text-center py-4 text-muted-jn">No hay contratos de monitoreo registrados.</div></div>
+    {% endfor %}
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card mb-4"><div class="card-header">{% if editar %}Editar monitoreo{% else %}Agregar sede con monitoreo{% endif %}</div>
+      <form method="post" class="card-body">{% csrf_token %}
+        {% if editar %}<input type="hidden" name="pk" value="{{ editar.pk }}">{% endif %}
+        {% if not empresa and not editar %}<p class="small text-muted-jn">Elija primero el cliente arriba para ver solo sus sedes.</p>{% endif %}
+        {% for campo in form %}{% include "tickets/_campo.html" %}{% endfor %}
+        <div class="d-flex gap-2"><button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button>
+          {% if editar %}<a href="?{% if empresa %}empresa={{ empresa.pk }}{% endif %}" class="btn btn-light">Cancelar</a>{% endif %}</div>
+      </form>
+    </div>
+    {% if empresa %}
+    <div class="card"><div class="card-header">Ajuste anual de {{ empresa }}</div>
+      <form method="post" class="card-body" onsubmit="return confirm('¿Aplicar el incremento a todas las sedes activas de este cliente?')">{% csrf_token %}
+        <input type="hidden" name="accion" value="ajuste">
+        <p class="small text-muted-jn">Sube el valor de todas las sedes activas del cliente que aún tienen el valor de un año anterior. No se aplica dos veces el mismo año.</p>
+        {% for campo in ajuste %}{% include "tickets/_campo.html" %}{% endfor %}
+        <button class="btn btn-outline-primary"><i class="bi bi-graph-up-arrow"></i> Aplicar ajuste</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Solicitudes de material{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Solicitudes de material" subtitulo="Nada sale de bodega hacia un cliente sin validación de existencias y firmas de aprobación. Si el material corre por cuenta del cliente, primero va la propuesta." %}
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg"><a class="kpi" href="?estado=validacion"><div class="valor">{{ conteo.validacion|default:0 }}</div><div class="etiqueta">Por validar en bodega</div></a></div>
+  <div class="col-6 col-lg"><a class="kpi {% if conteo.compra %}alerta{% endif %}" href="?estado=compra"><div class="valor">{{ conteo.compra|default:0 }}</div><div class="etiqueta">Con solicitud de compra</div></a></div>
+  <div class="col-6 col-lg"><a class="kpi" href="?estado=propuesta"><div class="valor">{{ conteo.propuesta|default:0 }}</div><div class="etiqueta">Esperando al cliente (propuesta)</div></a></div>
+  <div class="col-6 col-lg"><a class="kpi {% if por_firmar %}aviso{% endif %}" href="?estado=mias"><div class="valor">{{ por_firmar }}</div><div class="etiqueta">Por mi firma</div></a></div>
+  <div class="col-6 col-lg"><a class="kpi" href="?estado=aprobada"><div class="valor">{{ conteo.aprobada|default:0 }}</div><div class="etiqueta">Aprobadas por entregar</div></a></div>
+</div>
+
+{% if compras %}
+<div class="card mb-4 border-danger">
+  <div class="card-header"><i class="bi bi-cart-x text-danger"></i> Compras pendientes (lo que falta para las solicitudes)</div>
+  <ul class="list-group list-group-flush small">
+    {% for s, f in compras %}<li class="list-group-item d-flex justify-content-between"><span><strong>{{ f.falta|cant }}</strong> {{ f.item.descripcion }} <span class="text-muted-jn">· {{ s.numero }} · {{ s.ticket.empresa }}</span></span>
+      {% if user.gestiona_inventario %}<a href="{% url 'inventario:compra' %}?tipo={% if f.item.referencia %}activo{% else %}insumo{% endif %}">Registrar compra</a>{% endif %}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<form class="d-flex gap-2 mb-3" method="get">
+  <select name="estado" class="form-select" style="max-width:320px" onchange="this.form.submit()">
+    <option value="abiertas" {% if estado == 'abiertas' %}selected{% endif %}>Abiertas</option>
+    <option value="mias" {% if estado == 'mias' %}selected{% endif %}>Por mi firma</option>
+    {% for v, n in estados %}<option value="{{ v }}" {% if v == estado %}selected{% endif %}>{{ n }}</option>{% endfor %}
+    <option value="" {% if not estado %}selected{% endif %}>Todas</option>
+  </select>
+</form>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle small">
+      <thead><tr><th>Solicitud</th><th>Cliente / ticket</th><th>Origen</th><th>Material</th><th>Estado</th></tr></thead>
+      <tbody>
+      {% for s in lista %}
+        <tr class="fila-click" data-href="{{ s.get_absolute_url }}">
+          <td><a class="radicado" href="{{ s.get_absolute_url }}">{{ s.numero }}</a><div class="text-muted-jn">{{ s.creado|date:"d/m/Y" }}</div></td>
+          <td>{{ s.ticket.empresa }}<div class="radicado text-muted-jn">{{ s.ticket.radicado }}</div></td>
+          <td>{% if s.origen == 'comercial' %}<i class="bi bi-briefcase"></i> Comercial{% else %}<i class="bi bi-tools"></i> Técnica{% endif %}{% if s.tecnico %}<div class="text-muted-jn">{{ s.tecnico }}</div>{% endif %}</td>
+          <td>{% for i in s.items.all|slice:":3" %}<div>{{ i.cantidad|cant }} {{ i.descripcion|truncatechars:45 }}</div>{% endfor %}{% if s.items.all|length > 3 %}<div class="text-muted-jn">y {{ s.items.all|length|add:"-3" }} más</div>{% endif %}</td>
+          <td><span class="badge text-bg-{{ s.color_estado }}">{{ s.get_estado_display }}</span>{% if s.cargo == 'cliente' %}<div class="small text-warning-emphasis">A cargo del cliente</div>{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="text-center py-4 text-muted-jn">No hay solicitudes con ese filtro.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

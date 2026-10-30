@@ -1,0 +1,4 @@
+{# Botones de una actividad (tablero y tabla): editar, correo de la actividad, SST #}
+<button type="button" class="btn btn-sm btn-outline-primary py-0 btn-editar" data-actividad="{{ a.pk }}" title="Editar"><i class="bi bi-pencil"></i></button>
+<form method="post" action="{% url 'cronograma:enviar_actividad' a.pk %}" class="d-inline" onsubmit="return confirm('¿Enviar el correo de esta actividad a sus técnicos y a la administrativa?')">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary py-0" title="Enviar correo de la actividad a los técnicos"><i class="bi bi-envelope"></i></button></form>
+{% if a.sst %}<a class="btn btn-sm btn-outline-warning py-0" href="{% url 'cronograma:correo_sst' a.pk %}" title="Ver correo SST"><i class="bi bi-cone-striped"></i></a>{% endif %}

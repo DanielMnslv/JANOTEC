@@ -1,0 +1,34 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Etiquetas de placas{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Etiquetas de placas" subtitulo="Hoja carta de 30 etiquetas (3 × 10, tipo Avery 5160). El QR lleva la placa: con un lector o el celular se escribe sola en el buscador del inventario." %}
+<form method="get" class="card mb-4"><div class="card-body">
+  <div class="row g-3">
+    <div class="col-md-5"><label class="form-label small mb-1" for="placas">Placas <span class="text-muted-jn">(una por línea o separadas por coma)</span></label>
+      <textarea id="placas" name="placas" rows="3" class="form-control" placeholder="CAM-BAL-2MP010&#10;CAM-BAL-2MP011">{{ placas }}</textarea></div>
+    <div class="col-md-3"><label class="form-label small mb-1" for="factura">O todas las de una factura</label>
+      <input id="factura" name="factura" value="{{ factura }}" class="form-control" placeholder="N.º de factura">
+      <label class="form-label small mb-1 mt-2" for="prefijo">O por código de placa</label>
+      <input id="prefijo" name="prefijo" value="{{ prefijo }}" class="form-control" list="lista-codigos" placeholder="CAM-BAL-2MP"></div>
+    <div class="col-6 col-md-2"><label class="form-label small mb-1" for="desde">Empezar en la etiqueta</label>
+      <input id="desde" type="number" name="desde" min="1" max="30" value="{{ desde }}" class="form-control">
+      <div class="form-text">Para usar una hoja ya empezada.</div></div>
+    <div class="col-6 col-md-2"><label class="form-label small mb-1" for="copias">Copias por placa</label>
+      <input id="copias" type="number" name="copias" min="1" max="5" value="{{ copias }}" class="form-control"></div>
+  </div>
+  <div class="d-flex flex-wrap gap-2 mt-3">
+    <button class="btn btn-outline-primary"><i class="bi bi-search"></i> Ver cuáles salen</button>
+    {% if activos %}<button class="btn btn-accent" name="imprimir" value="1" formtarget="_blank"><i class="bi bi-printer"></i> Imprimir {{ activos|length }} etiqueta{{ activos|length|pluralize }}{% if copias > 1 %} × {{ copias }}{% endif %}</button>{% endif %}
+  </div>
+</div></form>
+{% if buscado %}
+<div class="card"><div class="table-responsive"><table class="table table-sm mb-0 align-middle">
+  <thead><tr><th>Placa</th><th>Descripción</th><th>Serial</th><th>Factura</th><th>Estado</th></tr></thead>
+  <tbody>{% for a in activos %}
+    <tr><td class="fw-semibold"><a href="{{ a.get_absolute_url }}">{{ a.placa }}</a></td><td class="small">{{ a.descripcion }}</td><td class="small">{{ a.serial|default:"—" }}</td>
+      <td class="small">{{ a.factura|default:"—" }}</td><td><span class="badge text-bg-{{ a.color_estado }}">{{ a.get_estado_display }}</span></td></tr>
+  {% empty %}<tr><td colspan="5" class="text-center py-4 text-muted-jn">No se encontraron equipos.</td></tr>{% endfor %}</tbody>
+</table></div></div>
+{% endif %}
+<datalist id="lista-codigos">{% for c in codigos %}<option value="{{ c.codigo }}">{{ c.descripcion }}</option>{% endfor %}</datalist>
+{% endblock %}

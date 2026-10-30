@@ -1,0 +1,60 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}{{ activo.placa }}{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo=activo.placa subtitulo=activo.descripcion %}
+{% if user.gestiona_inventario %}<div class="mb-3 d-flex flex-wrap gap-2"><a class="btn btn-sm btn-outline-primary" href="{% url 'inventario:activo_editar' activo.placa %}"><i class="bi bi-pencil"></i> Editar</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'inventario:modelo' %}?ref={{ activo.referencia|urlencode }}"><i class="bi bi-grid-3x3-gap"></i> Ver el modelo {{ activo.referencia }}</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'inventario:etiquetas' %}?placas={{ activo.placa|urlencode }}&amp;imprimir=1" target="_blank" rel="noopener"><i class="bi bi-qr-code"></i> Imprimir etiqueta</a>
+  {% for gg in activo.garantias.all %}<a class="btn btn-sm {% if gg.abierta %}btn-warning{% else %}btn-light border{% endif %}" href="{% url 'inventario:garantia' gg.pk %}"><i class="bi bi-shield-exclamation"></i> {{ gg.numero }} · {{ gg.get_estado_display }}</a>{% endfor %}</div>{% endif %}
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card mb-4"><div class="card-body d-flex flex-wrap gap-3 align-items-center">
+      <span class="badge fs-6 text-bg-{{ activo.color_estado }}">{{ activo.get_estado_display }}</span>
+      <div><div class="fw-semibold">{{ activo.ubicacion }}</div>
+        <div class="small text-muted-jn">{% if activo.modalidad %}{{ activo.get_modalidad_display }} · {% endif %}desde el {{ activo.fecha_ultimo_movimiento|date:"d/m/Y" }}{% if activo.ticket_destino %} · para <a href="{{ activo.ticket_destino.get_absolute_url }}">{{ activo.ticket_destino.radicado }}</a>{% endif %}</div></div>
+      {% if activo.estado == 'alquilado' or activo.estado == 'prestado' %}
+        <div class="ms-auto text-end">{% include "inventario/_devolucion.html" with a=activo %}</div>
+      {% endif %}
+    </div>
+    {% if user.gestiona_inventario and activo.estado == 'alquilado' or user.gestiona_inventario and activo.estado == 'prestado' %}
+    <form method="post" action="{% url 'inventario:cambiar_devolucion' activo.placa %}" class="card-footer d-flex flex-wrap gap-2 align-items-center small">{% csrf_token %}
+      <span>{% if activo.fecha_devolucion %}Prorrogar hasta{% else %}Fijar la devolución para{% endif %}</span>
+      <input type="date" name="fecha" class="form-control form-control-sm" style="max-width:160px" required aria-label="Nueva fecha de devolución">
+      <input name="motivo" class="form-control form-control-sm" style="max-width:320px" required minlength="5" placeholder="Motivo" aria-label="Motivo">
+      <button class="btn btn-sm btn-outline-primary">Guardar</button>
+    </form>
+    {% endif %}
+    </div>
+    <h2 class="h5 mb-3">Hoja de vida</h2>
+    <ul class="list-group mb-4">{% for m in movimientos %}{% include "inventario/_movimiento.html" %}{% empty %}<li class="list-group-item text-muted-jn">Sin movimientos.</li>{% endfor %}</ul>
+  </div>
+  <div class="col-lg-4">
+    <div class="card mb-3">
+      <div class="card-header">Datos del equipo</div>
+      <div class="card-body"><dl class="dl-compacta mb-0 small">
+        <dt>Serial</dt><dd>{{ activo.serial|default:"—" }}</dd>
+        <dt>Categoría</dt><dd>{{ activo.categoria|default:"—" }}</dd>
+        <dt>Tipo / subtipo</dt><dd>{{ activo.tipo }} {{ activo.subtipo }}</dd>
+        <dt>Marca / referencia</dt><dd>{{ activo.marca }} {{ activo.referencia }}</dd>
+        <dt>Compra</dt><dd>{{ activo.fecha_compra|date:"d/m/Y"|default:"—" }}{% if activo.proveedor %} · {{ activo.proveedor }}{% endif %}{% if activo.factura %} · factura {{ activo.factura }}{% endif %}</dd>
+        {% if user.gestiona_inventario %}<dt>Valor</dt><dd>{{ activo.valor|pesos }} + IVA {{ activo.iva|cant }}% = <strong>{{ activo.valor_con_iva|pesos }}</strong></dd>{% endif %}
+        {% if activo.responsable_compra %}<dt>Compró</dt><dd>{{ activo.responsable_compra }}</dd>{% endif %}
+      </dl></div>
+    </div>
+    {% if form %}
+    <div class="card">
+      <div class="card-header"><i class="bi bi-arrow-left-right"></i> Registrar otro movimiento</div>
+      <div class="card-body">
+        <p class="small text-muted-jn">Las entregas a técnicos se hacen en «Entregar a técnico» y la instalación la registra el técnico en el acta.</p>
+        <form method="post" action="{% url 'inventario:cambiar_estado' activo.placa %}" id="cambio-estado">{% csrf_token %}
+          {% include "tickets/_campo.html" with campo=form.accion %}
+          {% include "tickets/_campo.html" with campo=form.fecha %}
+          {% include "tickets/_campo.html" with campo=form.observaciones %}
+          <button class="btn btn-primary w-100">Guardar</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

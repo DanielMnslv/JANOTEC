@@ -1,0 +1,67 @@
+{% extends "base.html" %}{% load tickets_extras %}
+{% block titulo %}Oportunidades{% endblock %}
+{% block contenido %}
+<div class="mb-4">
+  <h1 class="h3 page-title mb-1">Oportunidades detectadas en campo</h1>
+  <p class="text-muted-jn mb-0">Necesidades que los técnicos vieron en sus visitas. «Una venta jala otra»: contacte al cliente, cotice y registre el avance.</p>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md"><a class="kpi" href="?estado=nueva"><div class="valor">{{ conteo.nueva|default:0 }}</div><div class="etiqueta">Nuevas</div></a></div>
+  <div class="col-6 col-md"><a class="kpi" href="?estado=contactado"><div class="valor">{{ conteo.contactado|default:0 }}</div><div class="etiqueta">Contactadas</div></a></div>
+  <div class="col-6 col-md"><a class="kpi" href="?estado=cotizado"><div class="valor">{{ conteo.cotizado|default:0 }}</div><div class="etiqueta">Cotizadas</div></a></div>
+  <div class="col-6 col-md"><a class="kpi" href="?estado=ganada"><div class="valor">{{ conteo.ganada|default:0 }}</div><div class="etiqueta">Ganadas</div></a></div>
+</div>
+
+<div class="card">
+  <div class="card-body border-bottom">
+    <form class="row g-2" method="get">
+      <div class="col-md-4"><select name="estado" class="form-select">
+        <option value="abiertas" {% if estado == 'abiertas' %}selected{% endif %}>Abiertas (sin ganar ni descartar)</option>
+        <option value="todas" {% if estado == 'todas' %}selected{% endif %}>Todas</option>
+        {% for v, n in estados %}<option value="{{ v }}" {% if estado == v %}selected{% endif %}>{{ n }}</option>{% endfor %}
+      </select></div>
+      <div class="col-md-4"><select name="servicio" class="form-select">
+        <option value="">Todo servicio</option>
+        {% for v, n in servicios %}<option value="{{ v }}" {% if servicio == v %}selected{% endif %}>{{ n }}</option>{% endfor %}
+      </select></div>
+      <div class="col-md-2 d-grid"><button class="btn btn-outline-primary"><i class="bi bi-funnel"></i> Filtrar</button></div>
+    </form>
+  </div>
+  <ul class="list-group list-group-flush">
+    {% for o in pagina %}
+      <li class="list-group-item py-3">
+        <div class="d-flex flex-wrap justify-content-between gap-2">
+          <div>
+            <div class="fw-semibold">{{ o.empresa.razon_social }}{% if o.sede %} <span class="text-muted-jn fw-normal">· {{ o.sede }}</span>{% endif %}</div>
+            <div class="d-flex flex-wrap gap-1 my-1">{% for s in o.servicios_display %}<span class="badge badge-tipo">{{ s }}</span>{% empty %}<span class="small text-muted-jn">Sin servicio marcado</span>{% endfor %}</div>
+            {% if o.nota %}<div class="small" style="white-space:pre-line">{{ o.nota }}</div>{% endif %}
+            <div class="small text-muted-jn mt-1">
+              Detectada por {{ o.detectada_por|default:"—" }}
+              {% if o.acta %} · <a href="{{ o.acta.get_absolute_url }}">Acta {{ o.acta.numero }}</a>{% if o.acta.ticket %} · <a href="{{ o.acta.ticket.get_absolute_url }}">{{ o.acta.ticket.radicado }}</a>{% endif %}{% endif %}
+            </div>
+            {% if o.seguimiento %}<div class="small mt-2 p-2 rounded" style="background:var(--jn-bg);white-space:pre-line">{{ o.seguimiento }}</div>{% endif %}
+          </div>
+          <div class="text-end">
+            <div class="small text-muted-jn mb-1" title="{{ o.creado|date:'d/m/Y H:i' }}">{{ o.creado|fecha_correo }}</div>
+            <span class="badge text-bg-{{ o.color_estado }}">{{ o.get_estado_display }}</span>
+            <div class="mt-2">
+              {% if o.requerimiento %}<a class="small" href="{{ o.requerimiento.get_absolute_url }}"><i class="bi bi-briefcase"></i> {{ o.requerimiento.radicado }}</a>
+              {% else %}<a class="btn btn-sm btn-accent" href="{% url 'comercial:nuevo' %}?oportunidad={{ o.pk }}"><i class="bi bi-arrow-right-circle"></i> Convertir en requerimiento</a>{% endif %}
+            </div>
+          </div>
+        </div>
+        <form method="post" action="{% url 'oportunidad_actualizar' o.pk %}" class="row g-2 mt-2">{% csrf_token %}
+          <input type="hidden" name="volver" value="{{ request.get_full_path }}">
+          <div class="col-md-3"><select name="estado" class="form-select form-select-sm">{% for v, n in estados %}<option value="{{ v }}" {% if o.estado == v %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></div>
+          <div class="col-md-7"><input name="nota" class="form-control form-control-sm" placeholder="Nota de seguimiento (ej.: se envió cotización COT-123)"></div>
+          <div class="col-md-2 d-grid"><button class="btn btn-sm btn-primary">Guardar</button></div>
+        </form>
+      </li>
+    {% empty %}
+      <li class="list-group-item text-center py-5 text-muted-jn"><i class="bi bi-graph-up-arrow fs-2 d-block mb-2"></i>No hay oportunidades con estos filtros. Aparecen cuando un técnico las reporta en el acta de soporte.</li>
+    {% endfor %}
+  </ul>
+</div>
+{% include "tickets/_paginacion.html" %}
+{% endblock %}

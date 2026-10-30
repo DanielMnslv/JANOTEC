@@ -1,0 +1,30 @@
+{# Casos de «Salud de los procesos» del área: lo que la plataforma detectó y alguien debe corregir o revisar #}
+{% load tickets_extras %}{% casos_area user area_1 area_2 as casos %}
+{% if casos %}
+<details class="card mb-4 border-warning casos-area" {% if casos|length <= 3 %}open{% endif %}>
+  <summary class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <span><i class="bi bi-heart-pulse text-danger"></i> <b>Situaciones por revisar</b> <span class="text-muted-jn small">· lo que la plataforma detectó en su área</span></span>
+    <span class="badge text-bg-warning">{{ casos|length }}</span>
+  </summary>
+  <ul class="list-group list-group-flush small">
+    {% for h in casos %}
+    <li class="list-group-item">
+      <div class="d-flex flex-wrap justify-content-between gap-2">
+        <div>
+          <span class="badge text-bg-{% if h.gravedad == 'alta' %}danger{% elif h.gravedad == 'media' %}warning{% else %}secondary{% endif %} me-1">{{ h.gravedad|capfirst }}</span>
+          {% if h.url %}<a href="{{ h.url }}" class="fw-semibold text-decoration-none">{{ h.titulo }}</a>{% else %}<span class="fw-semibold">{{ h.titulo }}</span>{% endif %}
+          {% if h.detalle %}<div class="text-muted-jn">{{ h.detalle }}</div>{% endif %}
+        </div>
+        <details class="text-end"><summary class="small text-muted-jn">No requiere acción</summary>
+          <form method="post" action="{% url 'hallazgo_revisar' h.pk %}" class="d-flex gap-1 mt-1">{% csrf_token %}
+            <input type="hidden" name="volver" value="{{ request.get_full_path }}">
+            <input name="motivo" class="form-control form-control-sm" style="min-width:220px" required minlength="5" placeholder="¿Por qué? Ej.: es así a propósito">
+            <button class="btn btn-sm btn-outline-secondary">Revisado</button>
+          </form></details>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  <div class="card-footer small text-muted-jn">Cada caso se cierra solo cuando se corrige. Si no requiere acción, márquelo como revisado con el motivo.</div>
+</details>
+{% endif %}

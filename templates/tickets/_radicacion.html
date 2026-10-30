@@ -1,0 +1,227 @@
+{# Registro de la solicitud (paso 1). Lo usan el cliente, el personal JANOTEC, la central de monitoreo y comercial; #}
+{# el área técnica lo reutiliza para corregir datos al recepcionar. Prioridad, técnico y estado no van aquí. #}
+
+<section class="paso-form">
+  <h2 class="h6 paso-titulo"><span class="paso-num">1</span> ¿Quién gestiona esta solicitud?</h2>
+  <p class="small text-muted-jn mt-n1">Quien gestiona puede cambiar de un día a otro: indique quién la está gestionando hoy, para responderle a esa persona.</p>
+  <div class="row">
+    {% include "tickets/_campo.html" with campo=form.contacto_nombre clase="col-md-4" %}
+    {% include "tickets/_campo.html" with campo=form.contacto_telefono clase="col-md-3" %}
+    {% include "tickets/_campo.html" with campo=form.contacto_email clase="col-md-5" %}
+    <div class="col-12" id="aviso-contacto-interno" hidden><div class="alert alert-warning small py-2 mb-2"><i class="bi bi-exclamation-triangle"></i>
+      <b>Ese correo es del personal JANOTEC.</b> Los avisos y la autorización de ingreso no le llegarán al cliente. Escriba los datos de quien recibe en la sede.</div></div>
+  </div>
+  <div class="small text-muted-jn"><i class="bi bi-clock"></i> Fecha de registro: <strong>{% if ticket %}{{ ticket.creado|date:"d/m/Y h:i a" }}{% else %}{% now "d/m/Y h:i a" %} (automática){% endif %}</strong>
+    · Registrado con el usuario <strong>{% if ticket %}{{ ticket.radicado_por|default:ticket.solicitante }}{% else %}{{ user.get_full_name|default:user.username }}{% endif %}</strong></div>
+</section>
+
+<section class="paso-form">
+  <h2 class="h6 paso-titulo"><span class="paso-num">2</span> ¿Dónde es la atención?</h2>
+  <div class="row">
+    {% if form.empresa_nombre %}{% include "tickets/_campo.html" with campo=form.empresa_nombre clase="col-md-6" %}
+    {% else %}<div class="mb-3 col-md-6"><label class="form-label fw-medium">Empresa</label><input class="form-control" value="{{ user.empresa }}" disabled></div>{% endif %}
+    {% include "tickets/_campo.html" with campo=form.sede_nombre clase="col-md-6" %}
+    {% include "tickets/_campo.html" with campo=form.departamento clase="col-md-3" %}
+    {% include "tickets/_campo.html" with campo=form.municipio clase="col-md-3" %}
+    <div class="col-md-6 mb-3 d-flex align-items-end">
+      <button type="button" class="btn btn-outline-primary w-100" id="usar-ubicacion"><i class="bi bi-geo-alt"></i> Usar mi ubicación</button>
+    </div>
+    {% include "tickets/_campo.html" with campo=form.direccion clase="col-md-8" %}
+    {% include "tickets/_campo.html" with campo=form.punto_referencia clase="col-md-4" %}
+  </div>
+  {{ form.latitud }}{{ form.longitud }}
+  <div class="small mb-1" id="estado-ubicacion" aria-live="polite">{% if form.latitud.value %}<i class="bi bi-check2-circle text-success"></i> Ubicación del sitio registrada.{% endif %}</div>
+  <a class="small" href="#" id="ver-mapa" target="_blank" rel="noopener"><i class="bi bi-map"></i> Verificar la dirección en el mapa</a>
+  {{ form.sedes_por_empresa|json_script:"sedes-por-empresa" }}
+  {{ form.empresas_del_grupo|json_script:"empresas-del-grupo" }}
+  {{ form.municipios_coordenadas|json_script:"municipios-meta" }}
+</section>
+
+<section class="paso-form">
+  <h2 class="h6 paso-titulo"><span class="paso-num">3</span> {{ form.tipo.label }} <span class="text-danger">*</span></h2>
+  <div class="row g-2 opciones-tipo mb-3">
+    {% for op, ayuda in form.opciones_tipo %}
+      <div class="col-sm-6 col-lg-4">
+        <label class="opcion-tipo h-100" for="{{ op.id_for_label }}">
+          {{ op.tag }}
+          <span class="d-block fw-semibold">{{ op.choice_label }}</span>
+          <span class="d-block small text-muted-jn">{{ ayuda }}</span>
+        </label>
+      </div>
+    {% endfor %}
+  </div>
+  {% for e in form.tipo.errors %}<div class="text-danger small mb-2">{{ e }}</div>{% endfor %}
+  {% include "tickets/_campo.html" with campo=form.sistema %}
+  {{ form.fallas_por_servicio|json_script:"fallas-por-servicio" }}
+</section>
+
+<section class="paso-form">
+  <h2 class="h6 paso-titulo"><span class="paso-num">4</span> La novedad</h2>
+  <p class="small text-muted-jn mt-n1">Como un correo: la falla o necesidad es el asunto; luego la descripción y la evidencia.</p>
+  {% include "tickets/_campo.html" with campo=form.falla_nombre %}
+  {% include "tickets/_campo.html" with campo=form.descripcion %}
+  {% include "tickets/_campo.html" with campo=form.archivos %}
+  {% if form.define_urgencia %}
+  <div class="mb-3">
+    <label class="form-label fw-medium">{{ form.impacto.label }} <span class="text-danger">*</span></label>
+    <div class="row g-2 opciones-impacto">
+      {% for op, ayuda in form.opciones_impacto %}
+        <div class="col-sm-4">
+          <label class="opcion-impacto impacto-{{ op.data.value }} h-100" for="{{ op.id_for_label }}">
+            {{ op.tag }}
+            <span class="badge prioridad prioridad-{{ op.data.value }}">{{ op.choice_label }}</span>
+            <span class="d-block small text-muted-jn mt-1">{{ ayuda }}</span>
+          </label>
+        </div>
+      {% endfor %}
+    </div>
+    {% for e in form.impacto.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+    <div class="form-text">Solo lo define el coordinador técnico: sin él el ticket no se recepciona.</div>
+  </div>
+  {% endif %}
+</section>
+
+<section class="paso-form">
+  <h2 class="h6 paso-titulo"><span class="paso-num">5</span> Condiciones de la visita</h2>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label fw-medium"><i class="bi bi-ladder"></i> {{ form.alturas.label }} <span class="text-danger">*</span></label>
+      <div class="d-flex gap-3">{% for op in form.alturas %}<div class="form-check">{{ op.tag }} <label class="form-check-label" for="{{ op.id_for_label }}">{{ op.choice_label }}</label></div>{% endfor %}</div>
+      <div class="form-text">Si es en alturas, los técnicos llevan el equipo de trabajo seguro y sus certificados.</div>
+      {% for e in form.alturas.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="col-md-6">
+      <label class="form-label fw-medium"><i class="bi bi-cone-striped"></i> {{ form.sst.label }} <span class="text-danger">*</span></label>
+      <div class="d-flex gap-3">{% for op in form.sst %}<div class="form-check">{{ op.tag }} <label class="form-check-label" for="{{ op.id_for_label }}">{{ op.choice_label }}</label></div>{% endfor %}</div>
+      <div class="form-text">Si lo requiere, la visita se agenda según la disponibilidad del experto SST.</div>
+      {% for e in form.sst.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="paso-form">
+  <h2 class="h6 paso-titulo"><span class="paso-num">6</span> ¿Cuándo podemos atenderle?</h2>
+  <label class="form-label fw-medium">Días en que <strong>no</strong> pueden recibir a nuestro personal (opcional)</label>
+  <div class="semana-atencion mb-3">
+    {% for dia in form.dias_no_disponible %}
+      <div class="dia">
+        <label class="form-label small fw-semibold mb-1" for="{{ dia.id_for_label }}">{{ dia.label }}</label>
+        {{ dia }}
+        {% for e in dia.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<script>
+(function () {
+  // Campos para escribir con sugerencias: las listas de sede y de falla dependen de lo que se escribió antes
+  const norm = function (t) { return (t || '').trim().replace(/\s+/g, ' ').toLowerCase(); };
+  const lista = function (input) { return input ? document.getElementById(input.getAttribute('list')) : null; };
+  const llenar = function (dl, valores) {
+    if (!dl) return;
+    dl.innerHTML = '';
+    valores.forEach(function (v) { const o = document.createElement('option'); o.value = v; dl.appendChild(o); });
+  };
+
+  // Sede según la empresa, y la ubicación desde la sede elegida
+  const sedes = JSON.parse(document.getElementById('sedes-por-empresa').textContent);
+  const empresa = document.getElementById('id_empresa_nombre');
+  const sede = document.getElementById('id_sede_nombre');
+  const ubic = {departamento: 1, municipio: 2, direccion: 3};
+  const sedesDe = function () { return sedes[empresa ? norm(empresa.value) : ''] || []; };
+  function sugerirSedes() { llenar(lista(sede), sedesDe().map(function (s) { return s[0]; })); }
+  function ubicacionDesdeSede() {
+    const s = sedesDe().find(function (x) { return norm(x[0]) === norm(sede.value); });
+    if (!s) return;
+    // El contacto de quien recibe en la sede (si está registrado) se llena solo; se puede cambiar
+    Object.entries({contacto_nombre: 4, contacto_telefono: 5, contacto_email: 6}).forEach(function ([campo, i]) {
+      const el = document.getElementById('id_' + campo);
+      if (el && s[i] && (!el.value || el.dataset.auto === '1')) { el.value = s[i]; el.dataset.auto = '1'; }
+    });
+    revisarContacto();
+    Object.entries(ubic).forEach(function ([campo, i]) {
+      const el = document.getElementById('id_' + campo);
+      if (el && s[i] && (!el.value || el.dataset.auto === '1')) { el.value = s[i]; el.dataset.auto = '1'; }
+    });
+  }
+  Object.keys(ubic).concat(['contacto_nombre', 'contacto_telefono', 'contacto_email']).forEach(function (c) {
+    const el = document.getElementById('id_' + c);
+    if (el) el.addEventListener('input', function () { el.dataset.auto = ''; });
+  });
+  // Advertencia: el contacto es del personal JANOTEC (salvo en las empresas del grupo)
+  const grupo = JSON.parse(document.getElementById('empresas-del-grupo').textContent);
+  const correoContacto = document.getElementById('id_contacto_email');
+  function revisarContacto() {
+    const aviso = document.getElementById('aviso-contacto-interno');
+    if (!aviso || !correoContacto) return;
+    const correos = correoContacto.value.toLowerCase().split(/[;,]/).map(function (c) { return c.trim(); }).filter(Boolean);
+    const delGrupo = empresa && grupo.includes(norm(empresa.value));
+    aviso.hidden = delGrupo || !correos.length || !correos.every(function (c) { return c.endsWith('@janotec.app'); });
+  }
+  if (correoContacto) ['input', 'change'].forEach(function (ev) { correoContacto.addEventListener(ev, revisarContacto); });
+  if (empresa) empresa.addEventListener('change', revisarContacto);
+  if (empresa) ['input', 'change'].forEach(function (ev) { empresa.addEventListener(ev, sugerirSedes); });
+  ['input', 'change'].forEach(function (ev) { sede.addEventListener(ev, ubicacionDesdeSede); });
+  sugerirSedes();
+  ubicacionDesdeSede();
+
+  // «Usar mi ubicación»: municipio y departamento del Meta más cercanos (se calcula aquí, sin servicios externos)
+  const MUNICIPIOS = JSON.parse(document.getElementById('municipios-meta').textContent);
+  const boton = document.getElementById('usar-ubicacion'), estado = document.getElementById('estado-ubicacion');
+  boton.addEventListener('click', function () {
+    if (!navigator.geolocation) { estado.textContent = 'Este navegador no permite tomar la ubicación: escríbala.'; return; }
+    estado.textContent = 'Buscando su ubicación…';
+    navigator.geolocation.getCurrentPosition(function (p) {
+      const lat = p.coords.latitude, lon = p.coords.longitude;
+      document.getElementById('id_latitud').value = lat.toFixed(7);
+      document.getElementById('id_longitud').value = lon.toFixed(7);
+      let mejor = null, dist = 1e9;
+      MUNICIPIOS.forEach(function (m) {
+        const d = Math.hypot(m[1] - lat, (m[2] - lon) * Math.cos(lat * Math.PI / 180)) * 111;
+        if (d < dist) { dist = d; mejor = m; }
+      });
+      if (mejor && dist < 45) {
+        document.getElementById('id_municipio').value = mejor[0];
+        document.getElementById('id_departamento').value = 'Meta';
+        estado.innerHTML = '<i class="bi bi-check2-circle text-success"></i> Ubicación registrada: ' + mejor[0] + ', Meta. Escriba la dirección exacta.';
+      } else {
+        estado.innerHTML = '<i class="bi bi-check2-circle text-success"></i> Ubicación registrada. Escriba el municipio y el departamento.';
+      }
+      actualizarMapa();
+    }, function () { estado.textContent = 'No se pudo tomar la ubicación (permiso negado o sin señal): escríbala.'; },
+    {enableHighAccuracy: true, timeout: 15000});
+  });
+  // «Verificar en el mapa»: abre la dirección escrita (o la ubicación tomada) en Google Maps
+  const mapa = document.getElementById('ver-mapa');
+  function actualizarMapa() {
+    const lat = document.getElementById('id_latitud').value, lon = document.getElementById('id_longitud').value;
+    const partes = ['direccion', 'municipio', 'departamento'].map(function (c) { return document.getElementById('id_' + c).value.trim(); }).filter(Boolean);
+    mapa.href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(
+      partes.length ? partes.concat('Colombia').join(', ') : (lat && lon ? lat + ',' + lon : 'Villavicencio, Meta'));
+  }
+  ['direccion', 'municipio', 'departamento'].forEach(function (c) { document.getElementById('id_' + c).addEventListener('input', actualizarMapa); });
+  actualizarMapa();
+
+  // Fallas sugeridas según el sistema escrito (si el sistema no está en la lista, se sugieren todas)
+  const fallas = JSON.parse(document.getElementById('fallas-por-servicio').textContent);
+  const sistema = document.getElementById('id_sistema');
+  const falla = document.getElementById('id_falla_nombre');
+  const todas = [].concat.apply([], Object.values(fallas));
+  function sugerirFallas() { llenar(lista(falla), fallas[norm(sistema.value)] || todas); }
+  ['input', 'change'].forEach(function (ev) { sistema.addEventListener(ev, sugerirFallas); });
+  sugerirFallas();
+
+  function marcar() {
+    document.querySelectorAll('.opcion-tipo, .opcion-impacto').forEach(function (l) {
+      l.classList.toggle('activa', l.querySelector('input').checked);
+    });
+    document.querySelectorAll('.semana-atencion select').forEach(function (s) {
+      s.closest('.dia').classList.toggle('restringido', !!s.value);
+    });
+  }
+  document.querySelectorAll('input[name=tipo], input[name=impacto], .semana-atencion select').forEach(function (r) { r.addEventListener('change', marcar); });
+  marcar();
+
+})();
+</script>

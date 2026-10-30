@@ -1,0 +1,152 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}{{ s.numero }}{% endblock %}
+{% block contenido %}
+<a href="{% url 'inventario:bandeja' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Tickets en bodega</a>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mt-2 mb-3">
+  <div>
+    <div class="radicado text-muted-jn">{{ s.numero }} · <a href="{{ s.ticket.get_absolute_url }}">{{ s.ticket.radicado }}</a></div>
+    <h1 class="h3 page-title mb-1">Solicitud de material · {{ s.ticket.empresa }}</h1>
+    <span class="badge text-bg-{{ s.color_estado }} fs-6">{{ s.get_estado_display }}</span>
+    <span class="badge text-bg-light border">{{ s.get_origen_display }}</span>
+    {% if s.cargo %}<span class="badge {% if s.cargo == 'cliente' %}text-bg-warning{% else %}text-bg-light border{% endif %}">{{ s.get_cargo_display }}</span>{% endif %}
+    {% if s.cliente_aprobo %}<span class="badge text-bg-success"><i class="bi bi-check2"></i> Cliente aprobó la propuesta</span>{% endif %}
+  </div>
+  <div class="text-end small text-muted-jn">Pedida por {{ s.solicitado_por|default:"—" }} · {{ s.creado|date:"d/m/Y h:i a" }}
+    {% if s.tecnico %}<br>Para {{ s.tecnico }}{% endif %}{% if s.modalidad %} · {{ s.get_modalidad_display }}{% endif %}{% if s.fecha_devolucion %} · vuelve el {{ s.fecha_devolucion|date:"d/m/Y" }}{% endif %}
+    {% if s.nota %}<br>{{ s.nota }}{% endif %}</div>
+</div>
+
+{% if s.motivo_devolucion and s.estado != 'cancelada' %}<div class="alert alert-warning small"><i class="bi bi-arrow-return-left"></i> <strong>Devuelta:</strong> {{ s.motivo_devolucion }}</div>{% endif %}
+{% if s.estado == 'cancelada' %}<div class="alert alert-dark small"><i class="bi bi-x-circle"></i> Cancelada: {{ s.motivo_devolucion }}</div>{% endif %}
+{% if s.estado == 'propuesta' %}<div class="alert alert-warning small"><i class="bi bi-briefcase"></i> El material está <strong>a cargo del cliente</strong>: el ticket pasó al área comercial para enviarle la propuesta. Cuando el cliente la apruebe, la solicitud sigue sola. No se entrega nada antes.</div>{% endif %}
+{% if s.estado == 'compra' %}<div class="alert alert-danger small"><i class="bi bi-cart-x"></i> <strong>Solicitud de compra:</strong> no hay existencias suficientes. Cuando bodega registre la compra en «Registrar compra», la solicitud pasa sola a firmas.</div>{% endif %}
+{% if s.estado != 'cancelada' and seguimiento.numero %}{% include "inventario/_pasos_bodega.html" with f=seguimiento %}{% endif %}
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-box-seam"></i> Material solicitado</div>
+      <div class="table-responsive">
+        <table class="table mb-0 align-middle small">
+          <thead><tr><th class="text-end">Cantidad</th><th>Material</th><th class="text-end">En bodega</th><th class="text-end">Falta</th></tr></thead>
+          <tbody>
+          {% for f in filas %}
+            <tr class="{% if f.falta %}table-danger{% endif %}">
+              <td class="text-end text-nowrap fw-bold">{{ f.item.cantidad|cant }}{% if f.item.adicional %} <span class="badge text-bg-light border" title="Holgura de consumibles: el sobrante se devuelve">+{{ f.item.adicional|cant }}</span>{% endif %}</td>
+              <td>{% if f.item.seccion == 'adicional' %}<span class="badge text-bg-warning" title="Adicional para poder instalar (no venía en la propuesta)">Adicional</span> {% endif %}{{ f.item.descripcion }} <span class="text-muted-jn">{% if f.item.insumo %}({{ f.item.insumo.codigo }}){% elif f.item.referencia %}(equipo {{ f.item.referencia }}){% else %}(escrito a mano · no está en el inventario){% endif %}</span></td>
+              <td class="text-end">{% if f.en_inventario %}{{ f.hay|cant }}{% if f.apartado_otros %}<div class="small text-warning" title="En bodega {{ f.en_bodega|cant }}; apartado para {{ f.para_quien|join:', ' }}">{{ f.apartado_otros|cant }} apartado para otros</div>{% endif %}{% else %}<span class="text-muted-jn">—</span>{% endif %}</td>
+              <td class="text-end">{% if f.falta %}<strong class="text-danger">{{ f.falta|cant }}</strong>{% if user.gestiona_inventario %} <a class="small" href="{% url 'inventario:compra' %}?tipo={% if f.item.referencia %}activo{% else %}insumo{% endif %}">comprar</a>{% endif %}{% else %}<i class="bi bi-check2 text-success"></i>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-center py-4 text-muted-jn">Aún no tiene material.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% if puede_editar %}
+    <div class="card mb-4 border-primary">
+      <div class="card-header"><i class="bi bi-pencil"></i> {% if s.origen == 'comercial' %}Material de la propuesta aprobada{% else %}Corregir el material{% endif %}</div>
+      <form method="post" action="{% url 'inventario:solicitud_accion' s.pk 'enviar' %}" class="card-body">{% csrf_token %}
+        <p class="small text-muted-jn">Busque en el inventario y agregue cada elemento con su cantidad. Bodega revisa que haya existencias; si falta algo, genera la compra.</p>
+        {% include "cronograma/_selector_inventario.html" with campo_id="materiales" %}
+        <textarea name="materiales" id="materiales" class="form-control" rows="4" placeholder="Busque arriba en el inventario o escriba: 4 cámara bala 2 MP, 100 m cable UTP">{{ texto }}</textarea>
+        <button class="btn btn-primary mt-2"><i class="bi bi-send"></i> Enviar a bodega</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if form_validar %}
+    <div class="card mb-4 border-info">
+      <div class="card-header"><i class="bi bi-clipboard-check"></i> Validación de bodega</div>
+      <form method="post" action="{% url 'inventario:solicitud_accion' s.pk 'validar' %}" class="card-body">{% csrf_token %}
+        <p class="small text-muted-jn">Antes de entregar, tenga claro todo: que lo pedido es lo que el cliente solicitó, a cargo de quién corre (si el daño no lo cubre JANOTEC, primero va la propuesta al cliente) y que hay existencias. Puede dar un poco más de consumibles: lo que sobre, el técnico lo devuelve.</p>
+        {% include "tickets/_campo.html" with campo=form_validar.cargo %}
+        <div class="row g-3"><div class="col-md-6">{% include "tickets/_campo.html" with campo=form_validar.modalidad %}</div>
+          <div class="col-md-6">{% include "tickets/_campo.html" with campo=form_validar.tecnico %}</div>
+          <div class="col-md-6">{% include "tickets/_campo.html" with campo=form_validar.fecha_devolucion %}</div></div>
+        {% if form_validar.campos_adicionales %}
+          <div class="fw-semibold small mb-1">Adicional de consumibles (holgura)</div>
+          <div class="row g-2 mb-3">{% for item, campo in form_validar.campos_adicionales %}
+            <div class="col-sm-6 small"><label class="form-label mb-0" for="{{ campo.id_for_label }}">{{ item.descripcion|truncatechars:45 }} <span class="text-muted-jn">(pide {{ item.cantidad|cant }})</span></label>{{ campo }}</div>{% endfor %}</div>
+        {% endif %}
+        {% if form_validar.campos_a_mano %}
+          <div class="fw-semibold small mb-1">Material escrito a mano (no está en el inventario)</div>
+          <p class="small text-muted-jn mb-2">Marque lo que bodega ya tiene. Lo que no marque pasa a <b>solicitud de compra</b>; cuando lo compre, vuelva aquí y márquelo.</p>
+          <div class="mb-3">{% for item, campo in form_validar.campos_a_mano %}
+            <div class="form-check small">{{ campo }} <label class="form-check-label" for="{{ campo.id_for_label }}">{{ item.cantidad|cant }} {{ item.descripcion }} — <span class="text-muted-jn">ya lo tengo en bodega</span></label></div>{% endfor %}</div>
+        {% endif %}
+        {% include "tickets/_campo.html" with campo=form_validar.comentario %}
+        <button class="btn btn-info"><i class="bi bi-check2-square"></i> Validar{% if user.rol == 'bodega' or user.is_superuser %} y firmar como bodega{% endif %}</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if s.estado in s.ESTADOS_ABIERTOS and user.gestiona_inventario or s.estado in s.ESTADOS_ABIERTOS and user.es_coordinador %}
+    <details class="card card-body mb-4 small"><summary class="fw-semibold">Agregar adicionales para la instalación (sección 2 de la lista)</summary>
+      <form method="post" action="{% url 'inventario:solicitud_accion' s.pk 'adicionales' %}" class="mt-2">{% csrf_token %}
+        <textarea name="adicionales" class="form-control form-control-sm mb-2" rows="3" required placeholder="20 Conector RJ45 [CON-RJ45]&#10;10 m Canaleta 20x12"></textarea>
+        <button class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg"></i> Agregar a la lista</button>
+        <span class="form-text ms-1">Uno por línea, con cantidad (con el código del inventario entre corchetes si lo tiene).</span>
+      </form></details>
+    {% endif %}
+    {% if s.estado == 'compra' and user.gestiona_inventario or s.cotizaciones.exists %}
+    <div class="card mb-4"><div class="card-header d-flex justify-content-between align-items-center"><span><i class="bi bi-chat-left-quote"></i> Cotizaciones a proveedores</span>
+      {% if s.estado == 'compra' and user.gestiona_inventario %}<form method="post" action="{% url 'inventario:cotizacion_nueva' %}">{% csrf_token %}<input type="hidden" name="solicitud" value="{{ s.pk }}"><button class="btn btn-sm btn-accent"><i class="bi bi-plus-lg"></i> Cotizar lo que falta</button></form>{% endif %}</div>
+      <ul class="list-group list-group-flush small">{% for c in s.cotizaciones.all %}<li class="list-group-item d-flex justify-content-between"><span>{% if user.gestiona_inventario %}<a href="{{ c.get_absolute_url }}">{{ c.numero }}</a>{% else %}{{ c.numero }}{% endif %}</span><span class="badge text-bg-{{ c.color_estado }}">{{ c.get_estado_display }}</span></li>{% empty %}<li class="list-group-item text-muted-jn">Aún no se ha pedido cotización.</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+    {% if s.estado == 'compra' and user.gestiona_inventario or s.ordenes_compra.exists %}
+    <div class="card mb-4"><div class="card-header d-flex justify-content-between align-items-center"><span><i class="bi bi-receipt"></i> Órdenes de compra</span>
+      {% if s.estado == 'compra' and user.gestiona_inventario %}<form method="post" action="{% url 'inventario:orden_nueva' %}">{% csrf_token %}<input type="hidden" name="solicitud" value="{{ s.pk }}"><button class="btn btn-sm btn-accent"><i class="bi bi-plus-lg"></i> Orden con lo que falta</button></form>{% endif %}</div>
+      <ul class="list-group list-group-flush small">{% for o in s.ordenes_compra.all %}<li class="list-group-item d-flex justify-content-between"><span><a href="{{ o.get_absolute_url }}">{{ o.numero }}</a> · {{ o.proveedor|default:"sin proveedor" }}{% if o.fecha_estimada %} · llega {{ o.fecha_estimada|date:"d/m/Y" }}{% endif %}</span><span class="badge text-bg-{{ o.color_estado }}">{{ o.get_estado_display }}</span></li>{% empty %}<li class="list-group-item text-muted-jn">Aún no hay orden de compra.</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+    {% if movimientos %}
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-box-arrow-right"></i> Entregado con esta solicitud</div>
+      <ul class="list-group list-group-flush small">{% for m in movimientos %}<li class="list-group-item">{{ m.fecha|date:"d/m/Y" }} · {% if m.activo %}<a href="{{ m.activo.get_absolute_url }}">{{ m.activo.placa }}</a> {{ m.activo.descripcion_corta }}{% else %}{{ m.cantidad|cant }} {{ m.insumo.descripcion }}{% endif %} · {{ m.responsable }}</li>{% endfor %}</ul>
+      {% if s.tecnico and user.gestiona_inventario %}<div class="card-footer small">¿Sobró material? <a href="{% url 'inventario:devolucion' s.tecnico.pk %}">Recibir la devolución de {{ s.tecnico }}</a></div>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card mb-4 {% if puede_firmar %}border-warning{% endif %}">
+      <div class="card-header"><i class="bi bi-pen"></i> Firmas de aprobación de salida</div>
+      <ul class="list-group list-group-flush small">
+        {% for c in casillas %}
+          <li class="list-group-item d-flex justify-content-between gap-2"><span>{{ c.nombre }}</span>
+            <span class="text-end">{% for f in c.firmas %}{% if f.aprobada %}{% if f.imagen %}<img class="firma-img ms-auto" src="{% url 'inventario:firma' 'aprobacion' f.pk %}" alt="Firma de {{ f.usuario }}" style="max-height:56px">{% endif %}<span class="text-success"><i class="bi bi-check2-circle"></i> {{ f.usuario }} · {{ f.creado|date:"d/m h:i a" }}</span>{% else %}<span class="text-danger"><i class="bi bi-x-circle"></i> {{ f.usuario }}</span>{% endif %}{% endfor %}
+            {% if c.pendiente %}<span class="text-muted-jn">Pendiente</span>{% endif %}</span></li>
+        {% endfor %}
+      </ul>
+      {% if puede_firmar %}
+      <form method="post" action="{% url 'inventario:solicitud_accion' s.pk 'firmar' %}" class="card-body border-top">{% csrf_token %}
+        <p class="small mb-2">Verifique que lo que se va a entregar es lo mismo que el cliente solicitó.</p>
+        {% if puede_firmar|length > 1 %}<select name="rol" class="form-select form-select-sm mb-2">{% for r in puede_firmar %}<option value="{{ r }}">Firmar como {% for k, v in roles.items %}{% if k == r %}{{ v }}{% endif %}{% endfor %}</option>{% endfor %}</select>{% endif %}
+        <div class="mb-2">{% include "tickets/_firma_libre.html" with sufijo="aprobacion" titulo="Su firma para aprobar la salida" obligatoria=True %}</div>
+        <textarea name="comentario" class="form-control form-control-sm mb-2" rows="2" placeholder="Comentario (obligatorio si no aprueba)"></textarea>
+        <div class="d-flex gap-2"><button class="btn btn-success" name="decision" value="aprobar"><i class="bi bi-pen"></i> Firmar y aprobar salida</button>
+          <button class="btn btn-outline-danger" name="decision" value="rechazar">No aprobar</button></div>
+      </form>
+      {% endif %}
+    </div>
+    {% if s.estado == 'aprobada' and user.gestiona_inventario %}
+      <a class="btn btn-accent w-100 mb-3" href="{% url 'inventario:entrega' %}?solicitud={{ s.pk }}"><i class="bi bi-box-arrow-right"></i> Entregar al técnico</a>
+    {% endif %}
+    {% if firmas|length > s.firmas_ronda|length %}
+    <div class="card mb-3"><div class="card-header small">Firmas de rondas anteriores</div>
+      <ul class="list-group list-group-flush small">{% for f in firmas %}{% if f.ronda != s.ronda %}<li class="list-group-item">Ronda {{ f.ronda }} · {{ f.get_rol_display }} · {{ f.usuario }} · {% if f.aprobada %}aprobó{% else %}no aprobó{% endif %}{% if f.comentario %}: {{ f.comentario }}{% endif %}</li>{% endif %}{% endfor %}</ul></div>
+    {% endif %}
+    {% if s.estado in s.ESTADOS_ABIERTOS and user.gestiona_inventario or s.estado in s.ESTADOS_ABIERTOS and s.solicitado_por_id == user.pk %}
+    <form method="post" action="{% url 'inventario:solicitud_accion' s.pk 'cancelar' %}" class="small">{% csrf_token %}
+      <details><summary class="text-muted-jn">Cancelar la solicitud</summary>
+        <input name="motivo" class="form-control form-control-sm my-2" placeholder="Motivo" required minlength="10">
+        <button class="btn btn-sm btn-outline-dark">Cancelar solicitud</button></details>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block titulo %}Insumos de la semana{% endblock %}
+{% block contenido %}
+<h1 class="h3 page-title mb-1">Insumos de la semana</h1>
+<p class="text-muted-jn mb-3">Se suman los insumos escritos en cada actividad («3 batería 12V 7.5 A, 20 m UTP»). Úselo para alistar el almacén.</p>
+{% include "cronograma/_pestanas.html" %}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3"><div class="kpi"><div class="valor">{{ resumen.items }}</div><div class="etiqueta">Ítems distintos</div></div></div>
+  <div class="col-6 col-lg-3"><div class="kpi"><div class="valor">{{ resumen.unidades }}</div><div class="etiqueta">Unidades en total</div></div></div>
+  <div class="col-6 col-lg-3"><div class="kpi"><div class="valor">{{ resumen.metros }}</div><div class="etiqueta">Metros de cable</div></div></div>
+  <div class="col-6 col-lg-3"><div class="kpi"><div class="valor">{{ resumen.sedes }}</div><div class="etiqueta">Sedes con insumos</div></div></div>
+</div>
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-box-seam"></i> Consolidado</div>
+      <div class="table-responsive">
+        <table class="table mb-0 align-middle">
+          <thead><tr><th class="text-end">Cantidad</th><th>Insumo / equipo</th><th class="text-end text-nowrap">En bodega</th><th>Sedes</th></tr></thead>
+          <tbody>
+          {% for i in consolidado %}
+            <tr><td class="text-end fw-bold text-nowrap">{{ i.cantidad_texto }} {% if i.unidad == 'm' %}m{% endif %}</td><td>{{ i.descripcion }}</td><td class="text-end text-nowrap">{% if i.en_bodega is not None %}{% if i.falta %}<span class="badge text-bg-danger" title="Faltan {{ i.falta|floatformat:'-2' }}: hay que comprar o conseguir">{{ i.en_bodega|floatformat:"-2" }} · faltan {{ i.falta|floatformat:"-2" }}</span>{% else %}<span class="badge text-bg-success">{{ i.en_bodega|floatformat:"-2" }}</span>{% endif %}{% else %}<span class="small text-muted-jn" title="Escrito a mano: no está ligado a un código del inventario">—</span>{% endif %}</td><td class="small text-muted-jn">{{ i.sedes|join:" · " }}</td></tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-center py-4 text-muted-jn">No hay insumos registrados en las actividades de esta semana.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-geo-alt"></i> Por sede</div>
+      <ul class="list-group list-group-flush">
+        {% for sede, items in por_sede %}
+          <li class="list-group-item small">
+            <div class="fw-semibold">{{ sede }}</div>
+            <ul class="mb-0 ps-3">{% for it in items %}<li>{{ it.cantidad|floatformat:"-1" }} {% if it.unidad == 'm' %}m {% endif %}{{ it.descripcion }}</li>{% endfor %}</ul>
+          </li>
+        {% empty %}
+          <li class="list-group-item small text-muted-jn">Sin insumos.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

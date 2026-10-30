@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Editar {{ insumo.codigo }}{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Editar "|add:insumo.codigo subtitulo=insumo.descripcion %}
+<a href="{{ insumo.get_absolute_url }}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ insumo.codigo }}</a>
+<div class="row g-4 mt-1">
+  <div class="col-lg-7">
+    <form method="post" class="card"><div class="card-body">{% csrf_token %}
+      {% for campo in form %}{% include "tickets/_campo.html" %}{% endfor %}
+      <p class="small text-muted-jn">Las cantidades no se editan aquí: cambian con las compras, entregas y devoluciones.</p>
+      <div class="d-flex gap-2"><button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button>
+        <a class="btn btn-light border" href="{{ insumo.get_absolute_url }}">Cancelar</a></div>
+    </div></form>
+  </div>
+  <div class="col-lg-5">
+    <div class="card border-danger"><div class="card-header text-danger"><i class="bi bi-trash"></i> Eliminar</div><div class="card-body small">
+      {% if puede_eliminar %}
+        <p>No tiene movimientos: se puede borrar (por ejemplo, si se creó por error).</p>
+        <form method="post">{% csrf_token %}<input type="hidden" name="accion" value="eliminar">
+          <button class="btn btn-outline-danger w-100" onclick="return confirm('¿Eliminar {{ insumo.codigo|escapejs }}? No se puede deshacer.')"><i class="bi bi-trash"></i> Eliminar {{ insumo.codigo }}</button></form>
+      {% else %}
+        <p class="mb-0">Ya tiene movimientos (compras o entregas) y su historia se conserva. Si ya no se usa, desmarque «Se sigue usando»: sale de las listas sin borrarse.</p>
+      {% endif %}
+    </div></div>
+  </div>
+</div>
+{% endblock %}

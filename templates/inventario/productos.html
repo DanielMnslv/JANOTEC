@@ -1,0 +1,70 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Inventario{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Inventario" subtitulo="Todos los productos en un solo lugar. Los equipos van por modelo (cada unidad con su placa y su serial); los materiales, por cantidad." %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <ul class="nav nav-pills small">
+    <li class="nav-item"><a class="nav-link {% if tipo == 'todos' %}active{% endif %}" href="?tipo=todos{% if q %}&amp;q={{ q|urlencode }}{% endif %}">Todos</a></li>
+    <li class="nav-item"><a class="nav-link {% if tipo == 'equipos' %}active{% endif %}" href="?tipo=equipos{% if q %}&amp;q={{ q|urlencode }}{% endif %}"><i class="bi bi-upc-scan"></i> Equipos</a></li>
+    <li class="nav-item"><a class="nav-link {% if tipo == 'materiales' %}active{% endif %}" href="?tipo=materiales{% if q %}&amp;q={{ q|urlencode }}{% endif %}"><i class="bi bi-box-seam"></i> Materiales</a></li>
+    {% if bajos or solo_bajos %}<li class="nav-item"><a class="nav-link {% if solo_bajos %}active bg-danger{% else %}text-danger{% endif %}" href="?tipo={{ tipo }}&amp;bajos=1"><i class="bi bi-exclamation-triangle"></i> Por reponer ({{ bajos }})</a></li>{% endif %}
+  </ul>
+  <div class="dropdown">
+    <button class="btn btn-accent dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-plus-lg"></i> Nuevo producto</button>
+    <ul class="dropdown-menu dropdown-menu-end">
+      <li><a class="dropdown-item" href="{% url 'inventario:compra' %}?tipo=activo"><i class="bi bi-upc-scan"></i> Equipo <span class="text-muted-jn small">(ingresa con su placa y serial)</span></a></li>
+      <li><a class="dropdown-item" href="{% url 'inventario:insumo_nuevo' %}"><i class="bi bi-box-seam"></i> Material nuevo en el catálogo</a></li>
+      <li><hr class="dropdown-divider"></li>
+      <li><a class="dropdown-item" href="{% url 'inventario:compra' %}?tipo=insumo"><i class="bi bi-cart-plus"></i> Entrada de material comprado</a></li>
+      <li><a class="dropdown-item" href="{% url 'inventario:ordenes' %}"><i class="bi bi-receipt"></i> Recibir una factura (orden de compra)</a></li>
+    </ul>
+  </div>
+</div>
+
+<form method="get" class="row g-2 align-items-center mb-2">
+  <input type="hidden" name="tipo" value="{{ tipo }}">
+  <div class="col-md-7"><input class="form-control" name="q" value="{{ q }}" autofocus placeholder="Buscar por modelo, código, descripción, marca, placa o serial…"></div>
+  <div class="col-md-3"><div class="form-check"><input class="form-check-input" type="checkbox" name="todos" value="1" id="todos" {% if todos %}checked{% endif %} onchange="this.form.submit()">
+    <label class="form-check-label small" for="todos">Ver también lo que ya no está</label></div></div>
+  <div class="col-md-2"><button class="btn btn-primary w-100"><i class="bi bi-search"></i> Buscar</button></div>
+</form>
+<p class="small text-muted-jn mb-2">{{ equipos }} modelo{{ equipos|pluralize }} de equipo y {{ materiales }} material{{ materiales|pluralize:"es" }}{% if ocultos and not todos %} · se ocultan {{ ocultos }} que hoy no tiene JANOTEC (vendidos, alquilados, de baja o sin existencias){% endif %}.</p>
+
+<div class="card tabla-ancha"><div class="table-responsive"><table class="table table-hover mb-0 align-middle small tabla-productos">
+  <thead class="table-light"><tr>
+    <th>Código / modelo</th><th>Tipo</th><th>Grupo</th><th>Nombre</th><th>Marca</th>
+    <th class="text-end" title="Costo promedio con IVA">Costo</th><th class="text-end">En bodega</th><th class="text-end">Con técnicos</th>
+    <th class="text-end" title="Alquilados o prestados">Con clientes</th><th class="text-end">Acciones</th></tr></thead>
+  <tbody>
+  {% for f in filas %}
+    <tr class="{% if f.bajo %}table-danger{% elif not f.activo %}text-muted-jn{% endif %}">
+      <td class="text-nowrap fw-semibold">{{ f.codigo }}{% if not f.activo %} <span class="badge text-bg-secondary fw-normal">Inactivo</span>{% endif %}</td>
+      <td><span class="badge {% if f.tipo == 'equipo' %}text-bg-primary{% else %}text-bg-secondary{% endif %}">{% if f.tipo == 'equipo' %}Equipo{% else %}Material{% endif %}</span></td>
+      <td class="text-nowrap">{{ f.categoria|default:"—" }}{% if f.subtipo %}<div class="text-muted-jn">{{ f.subtipo }}</div>{% endif %}</td>
+      <td style="min-width:16rem">{{ f.descripcion|truncatechars:80 }}</td>
+      <td class="text-nowrap">{{ f.marca|default:"—" }}</td>
+      <td class="text-end text-nowrap">{% if f.costo %}{{ f.costo|pesos }}{% else %}<span class="text-muted-jn">—</span>{% endif %}</td>
+      <td class="text-end text-nowrap"><span class="fw-semibold {% if f.bajo %}text-danger{% endif %}">{{ f.bodega|cant }}</span> <span class="text-muted-jn">{{ f.unidad }}</span></td>
+      <td class="text-end">{% if f.tecnicos %}{{ f.tecnicos|cant }}{% else %}—{% endif %}</td>
+      <td class="text-end">{% if f.tipo == 'equipo' %}{{ f.clientes|default:"—" }}{% else %}—{% endif %}</td>
+      <td class="text-end text-nowrap">
+        {% if f.tipo == 'equipo' %}
+          <a class="btn btn-sm btn-outline-primary py-0" href="{% url 'inventario:modelo' %}?ref={{ f.clave|urlencode }}" title="Ver cada unidad con su placa y serial"><i class="bi bi-eye"></i> Ver</a>
+          <a class="btn btn-sm btn-light border py-0" href="{% url 'inventario:modelo' %}?ref={{ f.clave|urlencode }}#datos-modelo" title="Modificar los datos del modelo"><i class="bi bi-pencil"></i></a>
+        {% else %}
+          <a class="btn btn-sm btn-outline-primary py-0" href="{{ f.insumo.get_absolute_url }}" title="Ver existencias y movimientos"><i class="bi bi-eye"></i> Ver</a>
+          <a class="btn btn-sm btn-light border py-0" href="{% url 'inventario:insumo_editar' f.clave %}" title="Modificar"><i class="bi bi-pencil"></i></a>
+        {% endif %}
+        <form method="post" class="d-inline">{% csrf_token %}
+          <input type="hidden" name="accion" value="eliminar"><input type="hidden" name="tipo" value="{{ f.tipo }}"><input type="hidden" name="clave" value="{{ f.clave }}">
+          <input type="hidden" name="volver" value="{{ request.get_full_path }}">
+          <button class="btn btn-sm btn-light border py-0 text-danger" title="Eliminar (solo si se registró por error)" onclick="return confirm('¿Eliminar {{ f.codigo|escapejs }}? Solo se puede si se registró por error y no tiene movimientos.')"><i class="bi bi-trash"></i></button>
+        </form>
+      </td>
+    </tr>
+  {% empty %}<tr><td colspan="10" class="text-center py-4 text-muted-jn">No hay productos con esa búsqueda.</td></tr>{% endfor %}
+  </tbody>
+</table></div></div>
+<p class="small text-muted-jn mt-2"><i class="bi bi-info-circle"></i> Las filas en rojo quedaron por debajo de su stock mínimo (1 unidad, salvo que se haya cambiado al ingresar o modificar el producto). Eliminar solo borra lo registrado por error; lo que ya tuvo movimientos se da de baja desde el equipo, para conservar su historia.</p>
+{% endblock %}

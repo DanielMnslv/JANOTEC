@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block titulo %}{{ conf.titulo }}{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo=conf.titulo subtitulo="Catálogo central: cada equipo, insumo y herramienta usa la escritura oficial. Renombrar o unificar cambia todos los registros." %}
+<ul class="nav nav-pills mb-3 small">
+  <li class="nav-item"><a class="nav-link {% if tipo == 'marcas' %}active{% endif %}" href="{% url 'inventario:catalogo' 'marcas' %}">Marcas</a></li>
+  <li class="nav-item"><a class="nav-link {% if tipo == 'categorias' %}active{% endif %}" href="{% url 'inventario:catalogo' 'categorias' %}">Categorías</a></li>
+  <li class="nav-item"><a class="nav-link" href="{% url 'inventario:contactos' %}">Clientes y proveedores</a></li>
+  <li class="nav-item"><a class="nav-link" href="{% url 'inventario:funcionarios' %}">Funcionarios</a></li>
+</ul>
+
+{% if con_variantes %}<div class="alert alert-warning small"><i class="bi bi-exclamation-triangle"></i> {{ con_variantes }} {{ conf.singular }}{{ con_variantes|pluralize }} {% if con_variantes == 1 %}tiene{% else %}tienen{% endif %} registros escritos distinto. Use «Unificar» para dejarlos con la escritura oficial.</div>{% endif %}
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <form class="d-flex gap-2 mb-3" method="get"><input class="form-control" name="q" value="{{ q }}" placeholder="Buscar {{ conf.singular }}…" aria-label="Buscar"><button class="btn btn-primary"><i class="bi bi-search"></i></button></form>
+    <div class="card">
+      <ul class="list-group list-group-flush">
+        {% for f in filas %}
+          <li class="list-group-item">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+              <div><strong>{{ f.item.nombre }}</strong> <span class="small text-muted-jn">· {{ f.usos }} registro{{ f.usos|pluralize }}</span>
+                {% for v, n in f.variantes %}<div class="small text-warning-emphasis"><i class="bi bi-arrow-return-right"></i> escrito «{{ v }}» en {{ n }} registro{{ n|pluralize }}</div>{% endfor %}</div>
+              {% if user.gestiona_inventario %}
+              <div class="d-flex flex-wrap gap-1">
+                {% if f.variantes %}<form method="post">{% csrf_token %}<input type="hidden" name="accion" value="unificar"><input type="hidden" name="id" value="{{ f.item.pk }}"><button class="btn btn-sm btn-warning">Unificar</button></form>{% endif %}
+                <details class="d-inline-block"><summary class="btn btn-sm btn-light border">Renombrar</summary>
+                  <form method="post" class="d-flex gap-1 mt-1">{% csrf_token %}<input type="hidden" name="accion" value="renombrar"><input type="hidden" name="id" value="{{ f.item.pk }}">
+                    <input name="nombre" value="{{ f.item.nombre }}" class="form-control form-control-sm" required aria-label="Nuevo nombre de {{ f.item.nombre }}"><button class="btn btn-sm btn-primary">Guardar</button></form></details>
+                {% if not f.usos %}<form method="post">{% csrf_token %}<input type="hidden" name="accion" value="eliminar"><input type="hidden" name="id" value="{{ f.item.pk }}"><button class="btn btn-sm btn-outline-danger" aria-label="Eliminar {{ f.item.nombre }}"><i class="bi bi-trash"></i></button></form>{% endif %}
+              </div>
+              {% endif %}
+            </div>
+          </li>
+        {% empty %}<li class="list-group-item text-muted-jn">No hay resultados.</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    {% if user.gestiona_inventario %}
+    <div class="card mb-3"><div class="card-body">
+      <form method="post" class="d-flex gap-2">{% csrf_token %}<input type="hidden" name="accion" value="crear">
+        <input name="nombre" class="form-control" placeholder="Nueva {{ conf.singular }}" required aria-label="Nueva {{ conf.singular }}"><button class="btn btn-accent"><i class="bi bi-plus-lg"></i></button></form>
+      <p class="small text-muted-jn mt-2 mb-0">Si escribe una que ya existe con otra escritura (mayúsculas, tildes), se le avisa. Al registrar compras o herramientas, lo escrito se ajusta solo a la escritura oficial.</p>
+    </div></div>
+    {% endif %}
+    {% if sueltas %}
+    <div class="card"><div class="card-header small">Usadas pero sin entrada en el catálogo</div>
+      <ul class="list-group list-group-flush small">{% for s in sueltas %}<li class="list-group-item d-flex justify-content-between"><span>{{ s.nombre }}</span><span class="text-muted-jn">{{ s.usos }}</span></li>{% endfor %}</ul></div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

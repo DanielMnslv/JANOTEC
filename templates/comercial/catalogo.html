@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block titulo %}Catálogo de precios{% endblock %}
+{% block contenido %}
+<a href="{% url 'comercial:bandeja' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Bandeja comercial</a>
+<h1 class="h3 page-title mt-2 mb-1">Catálogo de precios</h1>
+<p class="text-muted-jn mb-4">Lo que se cotiza seguido, con su valor de referencia antes de IVA. El cotizador lo sugiere al escribir el ítem; el precio se puede ajustar en cada propuesta.</p>
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-body border-bottom"><form method="get" class="d-flex gap-2"><input name="q" value="{{ q }}" class="form-control" placeholder="Buscar ítem…"><button class="btn btn-outline-primary"><i class="bi bi-search"></i></button></form></div>
+      <div class="table-responsive"><table class="table table-hover mb-0 small align-middle">
+        <thead><tr><th>Ítem</th><th>Tipo</th><th class="text-end">Valor unitario</th><th class="text-end">IVA</th><th>Origen del precio</th><th></th></tr></thead>
+        <tbody>
+        {% for i in items %}
+          <tr class="{% if not i.activo %}text-muted-jn{% endif %}">
+            <td>{{ i.descripcion }}{% if i.unidad %} <span class="text-muted-jn">({{ i.unidad }})</span>{% endif %}{% if not i.activo %} <span class="badge text-bg-secondary">Inactivo</span>{% endif %}</td>
+            <td>{{ i.get_tipo_display }}</td>
+            <td class="text-end text-nowrap">${{ i.valor_unitario|floatformat:"2g" }}</td>
+            <td class="text-end">{{ i.iva|floatformat:"-2" }}%</td>
+            <td class="text-muted-jn">{{ i.fuente|default:"—" }} · {{ i.actualizado|date:"d/m/Y" }}</td>
+            <td><a class="btn btn-sm btn-light border py-0" href="?editar={{ i.pk }}" title="Editar"><i class="bi bi-pencil"></i></a></td>
+          </tr>
+        {% empty %}<tr><td colspan="6" class="text-center py-4 text-muted-jn">No hay ítems.</td></tr>{% endfor %}
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card"><div class="card-header">{% if editar %}Editar ítem{% else %}Nuevo ítem{% endif %}</div>
+      <form method="post" class="card-body">{% csrf_token %}
+        {% if editar %}<input type="hidden" name="pk" value="{{ editar.pk }}">{% endif %}
+        {% for campo in form %}{% include "tickets/_campo.html" %}{% endfor %}
+        <div class="d-flex gap-2"><button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button>
+          {% if editar %}<a href="{% url 'comercial:catalogo' %}" class="btn btn-light">Cancelar</a>{% endif %}</div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

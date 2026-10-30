@@ -1,0 +1,15 @@
+{# Recorrido completo de una solicitud comercial, con el mismo número de principio a fin #}
+{% with paso=ficha.paso_cliente %}
+{% if paso < 0 %}
+  <div class="text-danger"><i class="bi bi-x-circle"></i> {{ ficha.get_etapa_display }}{% if ficha.motivo_rechazo %}: {{ ficha.motivo_rechazo }}{% endif %}</div>
+{% else %}
+<ol class="progreso">
+  {% for nombre in ficha.PASOS_CLIENTE %}
+    <li class="{% if forloop.counter0 < paso %}hecho{% elif forloop.counter0 == paso %}actual{% endif %}">
+      <span class="punto">{% if forloop.counter0 < paso %}<i class="bi bi-check-lg"></i>{% else %}{{ forloop.counter }}{% endif %}</span>
+      <span class="txt">{{ nombre }}</span>
+    </li>
+  {% endfor %}
+</ol>
+{% endif %}
+{% endwith %}

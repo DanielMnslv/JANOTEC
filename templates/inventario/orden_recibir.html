@@ -1,0 +1,65 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Recibir factura · {{ orden.numero }}{% endblock %}
+{% block contenido %}
+<a href="{{ orden.get_absolute_url }}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ orden.numero }}</a>
+<h1 class="h4 page-title mt-2 mb-1">Recibir factura · {{ orden.numero }}</h1>
+<p class="text-muted-jn mb-3">Confirme lo que llegó: todo entra a bodega de una vez.
+  {% if orden.solicitud %}Lo que era para <a href="{{ orden.solicitud.get_absolute_url }}">{{ orden.solicitud.numero }}</a> ({{ orden.solicitud.ticket.radicado }}) queda apartado para ese ticket; lo adicional queda libre en bodega.{% endif %}</p>
+
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
+  <div class="card mb-3"><div class="card-body"><div class="row g-3">
+    <div class="col-md-3">{% include "tickets/_campo.html" with campo=cabecera.factura %}</div>
+    <div class="col-md-3">{% include "tickets/_campo.html" with campo=cabecera.fecha %}</div>
+    <div class="col-md-3">{% include "tickets/_campo.html" with campo=cabecera.proveedor %}</div>
+    <div class="col-md-3">{% include "tickets/_campo.html" with campo=cabecera.soporte %}</div>
+  </div></div></div>
+
+  {{ filas.management_form }}
+  {% for e in filas.non_form_errors %}<div class="alert alert-danger py-2 small">{{ e }}</div>{% endfor %}
+  {% for f in filas %}
+  <div class="card mb-2 fila-recepcion">{{ f.linea }}
+    <div class="card-body py-2">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-2"><label class="form-label small mb-1">Llegó como</label>{{ f.clase }}</div>
+        <div class="col-md-4"><label class="form-label small mb-1">Descripción{% if not f.linea.value %} <span class="text-muted-jn">(otro ítem de la factura)</span>{% endif %}</label>{{ f.descripcion }}{% for e in f.descripcion.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+        <div class="col-4 col-md-2"><label class="form-label small mb-1">Cantidad</label>{{ f.cantidad }}{% for e in f.cantidad.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+        <div class="col-5 col-md-2"><label class="form-label small mb-1">Valor unit. sin IVA</label>{{ f.valor_unitario }}{% for e in f.valor_unitario.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+        <div class="col-3 col-md-2"><label class="form-label small mb-1">IVA %</label>{{ f.iva }}</div>
+      </div>
+      <div class="row g-2 mt-1 solo-insumo">
+        <div class="col-md-5"><label class="form-label small mb-1">Código del insumo <span class="text-muted-jn">(elija uno o escriba uno nuevo)</span></label>{{ f.codigo }}{% for e in f.codigo.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+        <div class="col-md-3"><label class="form-label small mb-1">Unidad (si es nuevo)</label>{{ f.unidad }}</div>
+      </div>
+      <div class="row g-2 mt-1 solo-equipo">
+        <div class="col-md-3"><label class="form-label small mb-1">Código de placa</label>{{ f.prefijo }}{% for e in f.prefijo.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+        <div class="col-md-3"><label class="form-label small mb-1">Referencia</label>{{ f.referencia }}</div>
+        <div class="col-md-2"><label class="form-label small mb-1">Marca</label>{{ f.marca }}</div>
+        <div class="col-md-4"><label class="form-label small mb-1">Seriales <span class="text-muted-jn">(uno por línea)</span></label>{{ f.seriales }}{% for e in f.seriales.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  <p class="small text-muted-jn">Las últimas filas vacías son para lo que venga en la factura sin estar en la orden (por ejemplo, algo más que pidió logística): entra todo a bodega como adicional.</p>
+  <div class="d-flex justify-content-end gap-2 mb-4">
+    <a href="{{ orden.get_absolute_url }}" class="btn btn-light border">Cancelar</a>
+    <button class="btn btn-success"><i class="bi bi-box-arrow-in-down"></i> Ingresar todo a bodega</button>
+  </div>
+</form>
+<datalist id="lista-proveedores">{% for p in proveedores %}<option value="{{ p }}">{% endfor %}</datalist>
+<datalist id="lista-insumos">{% for i in insumos %}<option value="{{ i.codigo }} · {{ i.descripcion }}">{% endfor %}</datalist>
+<datalist id="lista-codigos">{% for c in codigos %}<option value="{{ c.codigo }}">{{ c.descripcion }}</option>{% endfor %}</datalist>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll('.fila-recepcion').forEach(function (fila) {
+  const clase = fila.querySelector('select[name$="-clase"]');
+  function mostrar() {
+    fila.querySelectorAll('.solo-insumo').forEach(function (el) { el.hidden = clase.value !== 'insumo'; });
+    fila.querySelectorAll('.solo-equipo').forEach(function (el) { el.hidden = clase.value !== 'equipo'; });
+    fila.classList.toggle('opacity-50', clase.value === 'no');
+  }
+  clase.addEventListener('change', mostrar);
+  mostrar();
+});
+</script>
+{% endblock %}

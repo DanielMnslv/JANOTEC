@@ -1,0 +1,45 @@
+{% extends "base.html" %}{% load static %}
+{% block titulo %}Autorización de ingreso{% endblock %}
+{% block cuerpo %}
+<div class="container py-5" style="max-width:640px">
+  <div class="text-center mb-4"><img src="{% static 'img/marca/logo-color.webp' %}" alt="JANOTEC" style="height:56px"></div>
+  <div class="card"><div class="card-body p-4">
+    {% if invalido %}
+      <h1 class="h4 page-title"><i class="bi bi-link-45deg"></i> Enlace no válido</h1>
+      <p class="mb-0">Este enlace venció o la visita fue reprogramada. Si recibió un correo más reciente de JANOTEC, use ese; si no, comuníquese con nosotros al 310 229 8160.</p>
+    {% elif respondida %}
+      {% if a.autorizacion == 'aceptada' %}
+        <h1 class="h4 page-title text-success"><i class="bi bi-check2-circle"></i> ¡Gracias! Autorizó el ingreso</h1>
+        <p class="mb-0">Nuestro personal técnico llegará el <strong>{{ cuando }}</strong>{% if a.sede %} a {{ a.sede }}{% endif %}.</p>
+      {% else %}
+        <h1 class="h4 page-title"><i class="bi bi-calendar-x"></i> Registramos su respuesta</h1>
+        <p class="mb-0">No se realizará la visita del {{ cuando }}. El área técnica le propondrá una nueva fecha.</p>
+      {% endif %}
+    {% else %}
+      <h1 class="h4 page-title mb-1">Autorización de ingreso</h1>
+      <p class="text-muted-jn">{{ a.cliente }}{% if a.sede %} · {{ a.sede }}{% endif %}{% if a.ticket %} · Solicitud {{ a.ticket.radicado }}{% endif %}</p>
+      <dl class="dl-ficha mb-4">
+        <dt>Fecha y hora</dt><dd class="fw-bold">{{ cuando }}</dd>
+        <dt>Tipo</dt><dd>{{ a.get_tipo_display }}{% if a.trabajo_alturas %} · <span class="text-danger fw-semibold">trabajo en alturas</span>{% endif %}</dd>
+        <dt>Actividad</dt><dd>{{ a.actividad|linebreaksbr }}</dd>
+        <dt>Personal técnico</dt><dd>{% for t in tecnicos %}{{ t.get_full_name|default:t.username }}{% if t.cargo %} <span class="small text-muted-jn">· {{ t.cargo }}</span>{% endif %}<br>{% endfor %}</dd>
+      </dl>
+      {% if a.autorizacion == 'aceptada' or a.autorizacion == 'rechazada' %}
+        <div class="alert alert-info small">Ya había respondido: <strong>{{ a.get_autorizacion_display|lower }}</strong>. Puede cambiar su respuesta.</div>
+      {% endif %}
+      <div class="d-flex flex-wrap gap-2">
+        <form method="post">{% csrf_token %}<input type="hidden" name="accion" value="aceptar">
+          <button class="btn btn-success btn-lg{% if elegida == 'rechazar' %} btn-outline-success{% endif %}"><i class="bi bi-check2"></i> Aceptar la visita</button></form>
+        <button type="button" class="btn btn-outline-danger btn-lg" data-bs-toggle="collapse" data-bs-target="#rechazo"><i class="bi bi-x-lg"></i> Rechazar</button>
+      </div>
+      <form method="post" id="rechazo" class="collapse{% if elegida == 'rechazar' %} show{% endif %} mt-3">{% csrf_token %}
+        <input type="hidden" name="accion" value="rechazar">
+        <label class="form-label" for="motivo">¿Por qué no puede recibirnos? (opcional)</label>
+        <textarea class="form-control mb-2" name="motivo" id="motivo" rows="2" maxlength="300" placeholder="Ej.: ese día no hay personal en la sede; mejor la próxima semana"></textarea>
+        <button class="btn btn-danger">Confirmar rechazo</button>
+      </form>
+    {% endif %}
+  </div></div>
+  <p class="text-center small text-muted-jn mt-3">JANOTEC S.A.S. · Villavicencio · Tel: 310 229 8160</p>
+</div>
+{% endblock %}

@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block titulo %}{{ ticket.radicado }}{% endblock %}
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center">
+  <a href="{% url 'panel' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Bandeja</a>
+  {% if user.es_supervisor %}<div class="d-flex gap-2">
+    {% if ticket.estado == 'generado' %}<form method="post" action="{% url 'recepcionar' ticket.radicado %}">{% csrf_token %}<button class="btn btn-sm btn-accent" data-confirmar-recepcion="{{ ticket.radicado }}" data-correos="{{ ticket.correos_respuesta|join:', ' }}"><i class="bi bi-inbox"></i> Marcar como recepcionado</button></form>{% endif %}
+    {% if ticket.estado in ticket.ESTADOS_PROGRAMABLES %}<a class="btn btn-sm btn-accent" href="{% url 'cronograma:semana' %}"><i class="bi bi-calendar-week"></i> Llevar al cronograma</a>{% endif %}
+    {% if form_aplazar %}<a class="btn btn-sm btn-outline-danger" href="#aplazar" onclick="document.getElementById('form-aplazar').classList.add('show')"><i class="bi bi-calendar-x"></i> Aplazar visita</a>{% endif %}
+    <a class="btn btn-sm btn-outline-primary" href="{% url 'editar_ticket' ticket.radicado %}"><i class="bi bi-pencil"></i> Editar datos</a>
+  </div>{% endif %}
+</div>
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mt-2 mb-4">
+  <div>
+    <div class="radicado text-muted-jn">{{ ticket.radicado }}</div>
+    <h1 class="h3 page-title mb-2">{{ ticket.asunto }}</h1>
+    {% include "tickets/_tipo.html" with t=ticket %} {% include "tickets/_estado.html" with t=ticket %} {% include "tickets/_prioridad.html" with t=ticket %} {% include "tickets/_aplazado.html" with t=ticket %}
+    {% if ticket.por_confirmar %}<span class="badge text-bg-warning"><i class="bi bi-question-circle"></i> Por confirmar: {{ ticket.por_confirmar_display|join:", " }}</span>{% endif %}
+    {% if ticket.trabajo_alturas %}<span class="badge text-bg-danger"><i class="bi bi-ladder"></i> Trabajo en alturas</span>{% endif %}
+    {% if ticket.acompanamiento_sst %}<span class="badge text-bg-warning"><i class="bi bi-cone-striped"></i> Acompañamiento SST</span>{% endif %}
+    {% if es_levantamiento %}<span class="badge text-bg-info"><i class="bi bi-rulers"></i> Levantamiento para comercial</span>{% elif ficha %}<span class="badge text-bg-light border"><i class="bi bi-briefcase"></i> Viene de comercial</span>{% endif %}
+  </div>
+  <div class="text-end small text-muted-jn">Radicado {{ ticket.creado|date:"d/m/Y h:i a" }} ({{ ticket.creado|timesince }})<br>
+    {% if ticket.radicado_por %}por {{ ticket.radicado_por }} · {{ ticket.radicado_por.rol_corto }}<br>{% endif %}
+    {% if ticket.fecha_resolucion %}Visita ejecutada {{ ticket.fecha_resolucion|date:"d/m/Y h:i a" }}<br>{% endif %}
+    {% if ticket.fecha_cierre_automatico %}<span class="text-body"><i class="bi bi-hourglass-split"></i> Se cierra solo el {{ ticket.fecha_cierre_automatico|date:"d/m/Y h:i a" }} si el cliente no responde</span><br>{% endif %}
+    {% if ticket.fecha_cierre %}Cerrado {{ ticket.fecha_cierre|date:"d/m/Y h:i a" }}{% endif %}
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    {% include "tickets/_servicio_repetido.html" %}
+    {% include "tickets/_pasos_tecnica.html" %}
+    <div class="card mb-4">
+      <div class="card-header">Descripción de la novedad</div>
+      <div class="card-body"><div style="white-space:pre-line">{{ ticket.descripcion }}</div>
+        {% if adjuntos_inicio %}<div class="mt-3">{% include "tickets/_adjuntos.html" with lista=adjuntos_inicio %}</div>{% endif %}
+      </div>
+    </div>
+
+    {% include "comercial/_ficha_para_tecnica.html" %}
+    {% include "cronograma/_actividades_ticket.html" %}
+
+    {% if puede_acta or actas_ticket or puede_vincular or acta_bloqueada %}
+    <div class="card mb-4" id="actas">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-clipboard-check"></i> Actas de soporte de esta solicitud</span>
+        {% if puede_acta %}<a class="btn btn-sm btn-accent" href="{% url 'acta_nueva' ticket.radicado %}"><i class="bi bi-pencil-square"></i> Diligenciar acta de soporte</a>
+        {% elif acta_bloqueada %}<span class="small text-muted-jn" title="Paso a paso: primero el técnico y la programación de la visita"><i class="bi bi-lock"></i> El acta se habilita cuando la visita esté programada</span>{% endif %}
+      </div>
+      {% if actas_ticket %}
+      <ul class="list-group list-group-flush">
+        {% for a in actas_ticket %}
+          <div class="list-group-item small d-flex justify-content-between align-items-center gap-2">
+            <a class="text-decoration-none" href="{{ a.get_absolute_url }}"><span class="radicado">{{ a.numero }}</span> · {{ a.fecha|date:"d/m/Y h:i a" }} · {{ a.tecnico_texto }} {% include "tickets/_resultado.html" %}{% if a.origen == 'safetytrack' %} <span class="badge text-bg-light border">Histórica · vinculada</span>{% endif %}</a>
+            {% if a.origen == 'safetytrack' and user.es_supervisor %}<form method="post" action="{% url 'desvincular_acta' ticket.radicado a.numero %}" onsubmit="return confirm('¿Desvincular el acta {{ a.numero }} de este ticket? El acta no se borra.')">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary py-0" title="Desvincular"><i class="bi bi-link-45deg"></i> Desvincular</button></form>{% endif %}
+          </div>
+        {% endfor %}
+      </ul>
+      {% else %}<div class="card-body small text-muted-jn">Al terminar la visita, diligencie aquí el acta: reemplaza el acta en SafetyTrack.</div>{% endif %}
+      {% if vincular %}
+      <div class="card-body border-top bg-warning-subtle">
+        <div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle text-warning"></i> Revise antes de vincular el acta {{ vincular.acta.numero }}</div>
+        <div class="small mb-2">{{ vincular.acta.fecha|date:"d/m/Y" }} · {{ vincular.acta.empresa }}{% if vincular.acta.sede %} · {{ vincular.acta.sede }}{% endif %} · {{ vincular.acta.tecnico_texto }}<br>{{ vincular.acta.diagnostico|truncatechars:160 }}</div>
+        <ul class="small mb-2">{% for aviso in vincular.avisos %}<li>{{ aviso }}</li>{% endfor %}</ul>
+        <form method="post" action="{% url 'vincular_acta' ticket.radicado %}" class="d-flex flex-wrap gap-2">{% csrf_token %}
+          <input type="hidden" name="numero" value="{{ vincular.acta.numero }}"><input type="hidden" name="confirmar" value="1">
+          <button class="btn btn-sm btn-warning"><i class="bi bi-link-45deg"></i> Sí, vincularla de todas formas</button>
+          <a class="btn btn-sm btn-light" href="{% url 'ticket_detalle' ticket.radicado %}#actas">Cancelar</a>
+        </form>
+      </div>
+      {% elif puede_vincular %}
+      <form method="post" action="{% url 'vincular_acta' ticket.radicado %}" class="card-body border-top d-flex flex-wrap align-items-center gap-2">{% csrf_token %}
+        <label class="small text-muted-jn" for="numero-acta"><i class="bi bi-link-45deg"></i> ¿El acta ya existe (p. ej. una histórica de SafetyTrack)? Vincúlela:</label>
+        <input type="number" name="numero" id="numero-acta" class="form-control form-control-sm" style="max-width:9rem" placeholder="N.º de acta" required min="1">
+        <button class="btn btn-sm btn-outline-primary">Vincular acta</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if puede_informe %}{% include "tickets/_informe.html" %}{% endif %}
+    {% include "tickets/_aplazamientos.html" %}
+    {% include "inventario/_solicitudes_ticket.html" %}
+
+    {# --- Gestión --- #}
+    <div class="card mb-4 border-primary" id="gestion">
+      <div class="card-header"><i class="bi bi-tools"></i> {% if user.es_supervisor %}Direccionar y gestionar{% else %}Atender ticket{% endif %}</div>
+      <div class="card-body">
+        <form method="post" action="{% url 'gestionar' ticket.radicado %}" enctype="multipart/form-data">{% csrf_token %}
+          <div class="mb-2 form-check-inline-list" id="visibilidad">
+            {% for r in form_gestion.visibilidad %}
+              <div class="form-check form-check-inline">
+                {{ r.tag }}<label class="form-check-label" for="{{ r.id_for_label }}">{% if r.data.value == 'interno' %}<i class="bi bi-lock"></i>{% else %}<i class="bi bi-eye"></i>{% endif %} {{ r.choice_label }}</label>
+              </div>
+            {% endfor %}
+          </div>
+          {{ form_gestion.mensaje }}
+          <div class="row g-2 mt-1">
+            <div class="col-md-4"><label class="form-label small mb-1">Estado</label>{{ form_gestion.estado }}</div>
+            {% if user.es_supervisor %}
+            <div class="col-md-4"><label class="form-label small mb-1">Prioridad</label>{{ form_gestion.prioridad }}</div>
+            <div class="col-md-4"><label class="form-label small mb-1">Encargado</label>{{ form_gestion.asignado_a }}</div>
+            {% else %}
+            <div class="col-md-8 small text-muted-jn d-flex align-items-end pb-2"><span><i class="bi bi-diagram-3"></i> La prioridad y la programación las define el área técnica. Al terminar la visita, diligencie el acta.</span></div>
+            {% endif %}
+          </div>
+          <div class="mt-2">{{ form_gestion.archivos }}<div class="form-text">{{ form_gestion.archivos.help_text }}</div></div>
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+            <div class="small text-muted-jn" id="aviso-vis"><i class="bi bi-eye"></i> El cliente verá este mensaje y recibirá un correo.</div>
+            <button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if user.es_supervisor and ticket.abierto %}{% include "tickets/_etapas_editor.html" %}{% endif %}
+
+    <h2 class="h5 mb-3">Historial completo</h2>
+    {% include "tickets/_timeline.html" with vista="personal" %}
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card mb-3">
+      <div class="card-header">Cliente</div>
+      <div class="card-body">
+        <dl class="dl-ficha mb-0">
+          <dt>Empresa</dt><dd>{{ ticket.empresa }}<div class="small text-muted-jn">NIT {{ ticket.empresa.nit }}</div></dd>
+          {% if ticket.sede %}<dt>Sede</dt><dd>{{ ticket.sede }}{% if ticket.sede.direccion %}<div class="small text-muted-jn">{{ ticket.sede.direccion }}</div>{% endif %}{% if ticket.sede.abonado %}<div class="small text-muted-jn"><i class="bi bi-broadcast"></i> Abonado <span class="radicado">{{ ticket.sede.abonado }}</span></div>{% endif %}</dd>{% endif %}
+          {% if ticket.ubicacion %}<dt>Ubicación de la visita</dt><dd>{{ ticket.ubicacion }}{% if ticket.punto_referencia %}<div class="small text-muted-jn">Referencia: {{ ticket.punto_referencia }}</div>{% endif %}
+            {% if ticket.enlace_mapa %}<div class="small"><a href="{{ ticket.enlace_mapa }}" target="_blank" rel="noopener"><i class="bi bi-map"></i> {% if ticket.latitud %}Ver ubicación exacta en el mapa{% else %}Ver la dirección en el mapa{% endif %}</a></div>{% endif %}</dd>{% endif %}
+          <dt>Registrado por</dt><dd>{{ ticket.solicitante }}{% if ticket.solicitante.cargo %} · <span class="small">{{ ticket.solicitante.cargo }}</span>{% endif %}
+            <div class="small">{% if ticket.solicitante.email %}<a href="mailto:{{ ticket.solicitante.email }}">{{ ticket.solicitante.email }}</a>{% endif %}
+            {% if ticket.solicitante.telefono %}<br><a href="tel:{{ ticket.solicitante.telefono }}">{{ ticket.solicitante.telefono }}</a>{% endif %}</div></dd>
+          <dt>Tipo / sistema</dt><dd>{{ ticket.get_tipo_display }} · {{ ticket.sistema_display }}{% if ticket.falla_display %}<div class="small fw-semibold">{{ ticket.falla_display }}</div>{% endif %}</dd>
+          <dt>Nivel de urgencia</dt><dd>{% if ticket.impacto %}<span class="badge prioridad prioridad-{{ ticket.impacto }}">{{ ticket.get_impacto_display }}</span>{% else %}<span class="badge text-bg-warning">Por definir</span>{% if user.es_coordinador %} <a class="small" href="{% url 'editar_ticket' ticket.radicado %}">Definir</a>{% endif %}{% endif %}</dd>
+          {% if ticket.desde_cuando %}<dt>Ocurre desde</dt><dd>{{ ticket.desde_cuando|date:"d/m/Y" }} <span class="small text-muted-jn">({{ ticket.desde_cuando|timesince }})</span></dd>{% endif %}
+          <dt>Contacto</dt><dd>{{ ticket.contacto_nombre|default:"—" }}
+            {% if ticket.contacto_telefono %}<div class="small"><a href="tel:{{ ticket.contacto_telefono }}">{{ ticket.contacto_telefono }}</a></div>{% endif %}
+            {% for c in ticket.correos_respuesta %}<div class="small"><a href="mailto:{{ c }}">{{ c }}</a></div>{% endfor %}</dd>
+          <dt>Jornada pedida</dt><dd>{% if ticket.jornada %}<i class="bi {% if ticket.jornada == 'manana' %}bi-sunrise{% else %}bi-sunset{% endif %}"></i> {{ ticket.get_jornada_display }}{% else %}<span class="text-muted-jn">Sin indicar</span>{% endif %}</dd>
+          <dt>Cuándo NO puede atender</dt><dd>{% include "tickets/_semana_atencion.html" %}
+            {% for r in rangos %}<div class="small text-danger"><i class="bi bi-calendar-x"></i> {{ r }}</div>{% endfor %}</dd>
+          {% if ticket.calificacion %}<dt>Calificación del cliente</dt><dd>{% include "tickets/_estrellas.html" with valor=ticket.calificacion %}{% if ticket.comentario_calificacion %}<div class="small text-body">“{{ ticket.comentario_calificacion }}”</div>{% endif %}</dd>{% endif %}
+        </dl>
+      </div>
+    </div>
+    {% include "tickets/_historial_sede.html" %}
+    {% if otros_tickets %}
+    <div class="card">
+      <div class="card-header">Otros tickets de {{ ticket.empresa }}</div>
+      <ul class="list-group list-group-flush">
+        {% for t in otros_tickets %}
+          <a class="list-group-item list-group-item-action small" href="{{ t.get_absolute_url }}">
+            <span class="radicado">{{ t.radicado }}</span> {% include "tickets/_estado.html" %}<div class="text-truncate">{{ t.asunto }}</div>
+          </a>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const aviso = document.getElementById('aviso-vis');
+  const caja = document.getElementById('id_mensaje');
+  function actualizar() {
+    const interno = document.querySelector('input[name=visibilidad]:checked').value === 'interno';
+    aviso.innerHTML = interno
+      ? '<i class="bi bi-lock"></i> Nota interna: el cliente <strong>no</strong> la verá.'
+      : '<i class="bi bi-eye"></i> El cliente verá este mensaje y recibirá un correo.';
+    caja.style.background = interno ? '#fff8e6' : '';
+  }
+  document.querySelectorAll('input[name=visibilidad]').forEach(r => r.addEventListener('change', actualizar));
+  actualizar();
+})();
+</script>
+{% endblock %}

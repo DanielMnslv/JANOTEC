@@ -1,0 +1,80 @@
+{# Agregar insumos y equipos desde el inventario (con lo que hay en bodega). Escribe en el campo de texto «Insumos y equipos». #}
+<div class="selector-inventario mb-2">
+  <div class="row g-2">
+    <div class="col-md-7"><input type="text" class="form-control form-control-sm" id="inv-buscar" list="inv-lista" autocomplete="off"
+         placeholder="Buscar en el inventario: batería, UTP, cámara bala, DS2CD…"></div>
+    <div class="col-5 col-md-2"><input type="number" class="form-control form-control-sm" id="inv-cantidad" min="0" step="any" value="1" aria-label="Cantidad"></div>
+    <div class="col-7 col-md-3 d-grid"><button type="button" class="btn btn-sm btn-outline-primary" id="inv-agregar"><i class="bi bi-plus-lg"></i> Agregar</button></div>
+  </div>
+  <div class="small mt-1" id="inv-aviso"></div>
+  <div class="d-flex flex-wrap gap-1 mt-2" id="inv-chips"></div>
+</div>
+<datalist id="inv-lista">{% for i in catalogo_inventario %}<option value="{{ i.nombre }} [{{ i.codigo }}]">{% if i.clase == 'activo' %}Equipo · {% endif %}{% if i.disponible > 0 %}hay {{ i.disponible|floatformat:"-2" }}{% if i.unidad == 'm' %} m{% endif %}{% else %}sin existencias{% endif %}</option>{% endfor %}</datalist>
+{{ catalogo_inventario|json_script:"inv-catalogo" }}
+<script>
+(function () {
+  const catalogo = JSON.parse(document.getElementById('inv-catalogo').textContent);
+  const porCodigo = Object.fromEntries(catalogo.map(i => [i.codigo.toUpperCase(), i]));
+  const buscar = document.getElementById('inv-buscar'), cantidad = document.getElementById('inv-cantidad');
+  const aviso = document.getElementById('inv-aviso'), chips = document.getElementById('inv-chips');
+  const campo = () => document.getElementById('{% firstof campo_id form.insumos.id_for_label %}');
+  // Igual que el cronograma lee los insumos: separados por línea, «;», «·» o coma (que no sea decimal)
+  const partes = t => (t || '').split(/[·;\n]|,(?!\d)/).map(x => x.trim()).filter(Boolean);
+  const codigoDe = t => { const m = /\[([^\]]+)\]\s*$/.exec(t); return m ? m[1].toUpperCase() : ''; };
+  const elegido = () => porCodigo[codigoDe(buscar.value)] || catalogo.find(i => i.nombre.toLowerCase() === buscar.value.trim().toLowerCase());
+
+  function pintar() {
+    chips.innerHTML = '';
+    partes(campo().value).forEach(function (texto, n) {
+      const item = porCodigo[codigoDe(texto)];
+      const cant = parseFloat((/^(\d+(?:[.,]\d+)?)/.exec(texto) || [0, 1])[1].replace(',', '.'));
+      const corto = item && cant > item.disponible;
+      const chip = document.createElement('span');
+      chip.className = 'badge border text-wrap text-start ' + (item ? (corto ? 'text-bg-warning' : 'text-bg-light') : 'text-bg-light text-muted');
+      chip.title = item ? (corto ? 'En bodega solo hay ' + item.disponible : 'En bodega hay ' + item.disponible) : 'Escrito a mano (no está en el inventario)';
+      chip.innerHTML = '';
+      chip.append(document.createTextNode(texto.replace(/\s*\[[^\]]+\]\s*$/, '') + (corto ? ' ⚠ hay ' + item.disponible : '')));
+      const quitar = document.createElement('button');
+      quitar.type = 'button'; quitar.className = 'btn-close btn-close-sm ms-1 align-middle'; quitar.style.fontSize = '.55rem';
+      quitar.setAttribute('aria-label', 'Quitar');
+      quitar.addEventListener('click', function () {
+        const lista = partes(campo().value); lista.splice(n, 1); campo().value = lista.join('\n'); pintar();
+      });
+      chip.append(quitar);
+      chips.append(chip);
+    });
+  }
+
+  buscar.addEventListener('input', function () {
+    const item = elegido();
+    aviso.className = 'small mt-1 ' + (item && item.disponible <= 0 ? 'text-danger' : 'text-muted-jn');
+    aviso.textContent = item ? (item.disponible > 0 ? 'En bodega hay ' + item.disponible + (item.unidad === 'm' ? ' m' : '') : 'Sin existencias en bodega: hay que comprarlo') : '';
+  });
+  function agregar() {
+    const texto = buscar.value.trim(), n = parseFloat(String(cantidad.value).replace(',', '.'));
+    if (!texto || !(n > 0)) { buscar.focus(); return; }
+    const item = elegido();
+    // Sin comas en la descripción: la coma separa insumos
+    const nombre = (item ? item.nombre : texto).replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+    const linea = n + ' ' + (item && item.unidad === 'm' ? 'm ' : '') + nombre + (item ? ' [' + item.codigo + ']' : '');
+    const lista = partes(campo().value);
+    const repetido = item ? lista.findIndex(t => codigoDe(t) === item.codigo.toUpperCase()) : -1;
+    if (repetido >= 0) {  // ya estaba: se suma la cantidad
+      const antes = parseFloat((/^(\d+(?:[.,]\d+)?)/.exec(lista[repetido]) || [0, 0])[1].replace(',', '.')) || 0;
+      lista[repetido] = (antes + n) + ' ' + (item.unidad === 'm' ? 'm ' : '') + nombre + ' [' + item.codigo + ']';
+    } else {
+      lista.push(linea);
+    }
+    campo().value = lista.join('\n');
+    buscar.value = ''; cantidad.value = 1; aviso.textContent = '';
+    pintar(); buscar.focus();
+  }
+  document.getElementById('inv-agregar').addEventListener('click', agregar);
+  [buscar, cantidad].forEach(el => el.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); if (el === buscar && buscar.value) cantidad.select(); else agregar(); }
+  }));
+  document.addEventListener('input', function (e) { if (e.target === campo()) pintar(); });
+  const modal = document.getElementById('modal-actividad');
+  if (modal) modal.addEventListener('shown.bs.modal', pintar); else pintar();
+})();
+</script>

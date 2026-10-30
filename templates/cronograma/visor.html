@@ -1,0 +1,42 @@
+{% extends "base.html" %}{% load static %}
+{% block titulo %}Cronograma{% if semana %} · Semana {{ semana }}{% endif %}{% endblock %}
+{% block head %}<meta name="robots" content="noindex, nofollow"><meta name="referrer" content="no-referrer">{% endblock %}
+{% block cuerpo %}
+<div class="container-xl py-4">
+  <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+    <img src="{% static 'img/marca/logo-color.webp' %}" alt="JANOTEC" style="height:44px">
+    {% if not invalido %}<h1 class="h4 page-title mb-0">Cronograma técnico semanal</h1>
+    <div class="ms-auto d-flex flex-wrap gap-2 no-imprimir">
+      {% if compartido %}<a class="btn btn-sm btn-light border" href="?d={{ anterior|date:'Y-m-d' }}" aria-label="Semana anterior"><i class="bi bi-chevron-left"></i></a>
+      <a class="btn btn-sm btn-light border" href="?">Esta semana</a>
+      <a class="btn btn-sm btn-light border" href="?d={{ siguiente|date:'Y-m-d' }}" aria-label="Semana siguiente"><i class="bi bi-chevron-right"></i></a>{% endif %}
+      <button class="btn btn-sm btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir</button>
+    </div>{% endif %}
+  </div>
+  {% if invalido %}
+    <div class="card"><div class="card-body">Este enlace venció o no es válido. Pida uno nuevo a la coordinación TIC de JANOTEC.</div></div>
+  {% else %}
+  <div id="visor-contenido">{% include "cronograma/_visor_contenido.html" %}</div>
+  {% endif %}
+  <p class="small text-muted-jn mt-4">JANOTEC S.A.S. · Villavicencio · Tel: 310 229 8160</p>
+</div>
+{% endblock %}
+{% block scripts %}{% if compartido %}
+<script>
+  // Se refresca solo: lo que programe la coordinación aparece sin recargar la página
+  (function () {
+    const caja = document.getElementById("visor-contenido");
+    const url = new URL(location.href);
+    url.searchParams.set("parcial", "1");
+    function refrescar() {
+      if (document.hidden) return;
+      fetch(url, {cache: "no-store"}).then(function (r) {
+        if (r.status === 404) { location.reload(); return null; }  // revocaron el enlace
+        return r.ok ? r.text() : null;
+      }).then(function (html) { if (html) caja.innerHTML = html; }).catch(function () {});
+    }
+    setInterval(refrescar, 30000);
+    document.addEventListener("visibilitychange", refrescar);
+  })();
+</script>
+{% endif %}{% endblock %}

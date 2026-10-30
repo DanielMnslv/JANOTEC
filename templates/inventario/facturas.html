@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Listado de compras{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Listado de compras" subtitulo="Cada factura que entró a bodega, llegue por orden de compra o como compra suelta." %}
+<form method="get" class="row g-2 align-items-end mb-3">
+  <div class="col-md-5"><label class="form-label small mb-1" for="q">Buscar</label>
+    <input id="q" name="q" value="{{ q }}" class="form-control" placeholder="Proveedor, n.º de factura o producto…"></div>
+  <div class="col-6 col-md-2"><label class="form-label small mb-1" for="desde">Desde</label><input id="desde" type="date" name="desde" value="{{ desde }}" class="form-control"></div>
+  <div class="col-6 col-md-2"><label class="form-label small mb-1" for="hasta">Hasta</label><input id="hasta" type="date" name="hasta" value="{{ hasta }}" class="form-control"></div>
+  <div class="col-md-3 d-flex gap-2"><button class="btn btn-outline-primary"><i class="bi bi-search"></i> Buscar</button>
+    {% if q or desde or hasta %}<a class="btn btn-light border" href="{% url 'inventario:facturas' %}">Limpiar</a>{% endif %}</div>
+</form>
+<div class="d-flex flex-wrap justify-content-between gap-2 small mb-2">
+  <span class="text-muted-jn">{{ cantidad }} factura{{ cantidad|pluralize }}{% if cantidad > 300 %} · se muestran las 300 más recientes{% endif %}</span>
+  <span>Total comprado: <strong>{{ total|pesos }}</strong> <span class="text-muted-jn">(IVA incluido)</span></span>
+</div>
+<div class="card"><div class="table-responsive"><table class="table table-tickets mb-0 align-middle">
+  <thead><tr><th>Fecha</th><th>Factura</th><th>Proveedor</th><th>Productos que compró</th><th class="text-end">Total</th><th>Orden</th></tr></thead>
+  <tbody>
+  {% for f in facturas %}
+    <tr>
+      <td class="text-nowrap">{{ f.fecha|date:"d/m/Y" }}</td>
+      <td class="text-nowrap fw-semibold">{{ f.factura }}</td>
+      <td>{{ f.proveedor }}</td>
+      <td class="small">{% for p in f.productos|slice:":6" %}<div>{{ p }}</div>{% endfor %}{% if f.productos|length > 6 %}<div class="text-muted-jn">y {{ f.productos|length|add:"-6" }} más</div>{% endif %}</td>
+      <td class="text-end text-nowrap">{{ f.total|pesos }}</td>
+      <td class="text-nowrap">{% if f.orden %}<a href="{{ f.orden.get_absolute_url }}">{{ f.orden.numero }}</a>{% else %}<span class="text-muted-jn">Suelta</span>{% endif %}</td>
+    </tr>
+  {% empty %}<tr><td colspan="6" class="text-center py-4 text-muted-jn">No hay compras con esos filtros.</td></tr>{% endfor %}
+  </tbody>
+</table></div></div>
+{% endblock %}

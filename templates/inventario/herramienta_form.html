@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block titulo %}{% if herramienta %}Editar herramienta{% else %}Nueva herramienta{% endif %}{% endblock %}
+{% block contenido %}
+<a href="{% if herramienta %}{{ herramienta.get_absolute_url }}{% else %}{% url 'inventario:herramientas' %}{% endif %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Volver</a>
+<h1 class="h3 page-title my-2">{% if herramienta %}Editar «{{ herramienta.nombre }}»{% else %}Nueva herramienta{% endif %}</h1>
+<p class="text-muted-jn">Si cambia el responsable, queda registrado en el historial de entregas.</p>
+<form method="post" class="card" style="max-width:820px">{% csrf_token %}
+  <div class="card-body"><div class="row g-3">
+    <div class="col-md-6">{% include "tickets/_campo.html" with campo=form.nombre %}</div>
+    <div class="col-md-3">{% include "tickets/_campo.html" with campo=form.marca %}</div>
+    <div class="col-md-3">{% include "tickets/_campo.html" with campo=form.serial %}</div>
+    <div class="col-12">{% include "tickets/_campo.html" with campo=form.descripcion %}</div>
+    <div class="col-md-2">{% include "tickets/_campo.html" with campo=form.cantidad %}</div>
+    <div class="col-md-3">{% include "tickets/_campo.html" with campo=form.estado %}</div>
+    <div class="col-md-4">{% include "tickets/_campo.html" with campo=form.tecnico %}</div>
+    <div class="col-md-3">{% include "tickets/_campo.html" with campo=form.costo_compra %}</div>
+  </div></div>
+  <div class="card-footer text-end"><button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button></div>
+</form>
+<datalist id="lista-marcas">{% for m in marcas %}<option value="{{ m }}">{% endfor %}</datalist>
+<datalist id="lista-nombres">{% for n in nombres %}<option value="{{ n }}">{% endfor %}</datalist>
+{% endblock %}

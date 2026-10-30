@@ -1,0 +1,336 @@
+:root {
+  /* Paleta corporativa JANOTEC */
+  --jn-primario: #686975;        /* gris corporativo: barra, títulos y botones principales */
+  --jn-primario-oscuro: #4e4f59; /* hover y fondos profundos */
+  --jn-verde: #acc812;           /* verde corporativo: fondos, bordes y acentos (no como color de texto) */
+  --jn-verde-oscuro: #98b10f;
+  --jn-verde-texto: #637309;     /* versión legible del verde para texto sobre blanco */
+  --jn-texto: #1f2024;
+  --jn-gris: #929291;
+  --jn-bg: #f5f5f6;
+  --jn-border: #e2e2e6;
+  --jn-muted: #5f606b;
+  --jn-tinte: #f0f1f4;           /* gris muy suave para resaltar */
+  --bs-primary: #686975;
+  --bs-primary-rgb: 104, 105, 117;
+  --bs-link-color: #555661;
+  --bs-link-color-rgb: 85, 86, 97;
+  --bs-link-hover-color: #3c3d45;
+  --bs-link-hover-color-rgb: 60, 61, 69;
+}
+
+body {
+  background: var(--jn-bg);
+  font-family: "Carlito", Calibri, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 1.03rem;
+  color: var(--jn-texto);
+}
+h1, h2, h3, h4, h5, h6, .page-title, .navbar-brand, .kpi .valor, .btn, .card-header, .paso-titulo {
+  font-family: "Montserrat", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.btn { font-size: .92rem; }
+.text-jn-verde { color: var(--jn-verde) !important; }
+
+.navbar-jn { background: var(--jn-primario); border-bottom: 3px solid var(--jn-verde); }
+.navbar-jn .navbar-brand { font-weight: 800; letter-spacing: .06em; }
+.navbar-jn .nav-link { color: rgba(255,255,255,.78); }
+.navbar-jn .nav-link:hover, .navbar-jn .nav-link.active { color: #fff; }
+@media (min-width: 992px) { .navbar-jn .navbar-nav .nav-link { white-space: nowrap; } }  /* «Asignados a mí» en una sola línea */
+.navbar-jn .badge-rol { background: var(--jn-verde); color: var(--jn-primario-oscuro); font-weight: 700; }
+
+.btn-primary { --bs-btn-bg: var(--jn-primario); --bs-btn-border-color: var(--jn-primario); --bs-btn-hover-bg: var(--jn-primario-oscuro); --bs-btn-hover-border-color: var(--jn-primario-oscuro); --bs-btn-active-bg: var(--jn-primario-oscuro); --bs-btn-active-border-color: var(--jn-primario-oscuro); --bs-btn-disabled-bg: var(--jn-primario); --bs-btn-disabled-border-color: var(--jn-primario); }
+.btn-outline-primary { --bs-btn-color: var(--jn-primario); --bs-btn-border-color: var(--jn-primario); --bs-btn-hover-bg: var(--jn-primario); --bs-btn-hover-border-color: var(--jn-primario); --bs-btn-active-bg: var(--jn-primario-oscuro); --bs-btn-active-border-color: var(--jn-primario-oscuro); }
+.text-bg-primary { background-color: var(--jn-primario) !important; }
+.form-control:focus, .form-select:focus { border-color: #b4b5bd; box-shadow: 0 0 0 .2rem rgba(104,105,117,.2); }
+.form-check-input:checked { background-color: var(--jn-primario); border-color: var(--jn-primario); }
+.btn-accent { background: var(--jn-verde); border-color: var(--jn-verde); color: #2f3036; font-weight: 700; }
+.btn-accent:hover, .btn-accent:focus-visible { background: var(--jn-verde-oscuro); border-color: var(--jn-verde-oscuro); color: #2f3036; }
+
+.card { border: 1px solid var(--jn-border); border-radius: .75rem; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+.card-header { background: #fff; border-bottom: 1px solid var(--jn-border); font-weight: 600; color: var(--jn-primario); font-size: .95rem; }
+
+.page-title { font-weight: 700; letter-spacing: -.01em; color: var(--jn-primario); }
+.text-muted-jn { color: var(--jn-muted); }
+
+/* Indicadores */
+.kpi { padding: 1rem 1.1rem; border-radius: .75rem; background: #fff; border: 1px solid var(--jn-border); border-left: 4px solid var(--jn-verde); height: 100%; text-decoration: none; color: inherit; display: block; transition: border-color .15s; }
+a.kpi:hover { border-color: var(--bs-primary); }
+.kpi .valor { font-size: 1.85rem; font-weight: 800; line-height: 1; color: var(--jn-primario); }
+.kpi .etiqueta { color: var(--jn-muted); font-size: .85rem; margin-top: .35rem; }
+.kpi.alerta .valor { color: #c0392b; }
+.kpi.aviso .valor { color: #b9770e; }
+
+/* Tablas */
+.table-tickets td, .table-tickets th { vertical-align: middle; }
+.table-tickets .celda-cliente { min-width: 170px; max-width: 240px; }
+.table-tickets .celda-cliente .fw-semibold { color: var(--jn-texto, inherit); line-height: 1.3; }
+.table-tickets .celda-solicitud { min-width: 260px; }
+.table-tickets th { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--jn-muted); font-weight: 600; }
+.radicado { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-weight: 600; font-size: .9rem; white-space: nowrap; }
+.fila-click { cursor: pointer; }
+
+/* Barra de progreso del cliente */
+.progreso { display: flex; gap: 0; margin: .5rem 0 0; padding: 0; list-style: none; }
+.progreso li { flex: 1; text-align: center; position: relative; font-size: .78rem; color: var(--jn-muted); }
+.progreso li::before { content: ""; position: absolute; top: 14px; left: -50%; width: 100%; height: 3px; background: var(--jn-border); z-index: 0; }
+.progreso li:first-child::before { display: none; }
+.progreso .punto { width: 30px; height: 30px; border-radius: 50%; background: #fff; border: 3px solid var(--jn-border); display: inline-flex; align-items: center; justify-content: center; position: relative; z-index: 1; font-weight: 700; font-size: .8rem; margin-bottom: .35rem; }
+.progreso li.hecho { color: var(--jn-texto); }
+.progreso li.hecho .punto { background: var(--jn-verde); border-color: var(--jn-verde); color: var(--jn-primario-oscuro); }
+.progreso li.hecho::before, .progreso li.actual::before { background: var(--jn-verde); }
+.progreso li.actual { color: var(--jn-texto); font-weight: 700; }
+.progreso li.actual { color: var(--jn-primario); }
+.progreso li.actual .punto { border-color: var(--jn-primario); background: var(--jn-primario); color: #fff; box-shadow: 0 0 0 5px rgba(172,200,18,.4); }
+.progreso span.txt { display: block; }
+@media (max-width: 575px) { .progreso li span.txt { display: none; } .progreso li.actual span.txt { display: block; } }
+
+/* Línea de tiempo */
+.timeline { list-style: none; padding: 0; margin: 0; position: relative; }
+.timeline::before { content: ""; position: absolute; left: 17px; top: 6px; bottom: 6px; width: 2px; background: var(--jn-border); }
+.timeline > li { position: relative; padding-left: 52px; margin-bottom: 1.1rem; }
+.timeline .icono { position: absolute; left: 0; top: 0; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #fff; border: 2px solid var(--jn-border); font-size: 1rem; }
+.timeline .burbuja { background: #fff; border: 1px solid var(--jn-border); border-radius: .6rem; padding: .7rem .9rem; }
+.timeline .burbuja.de-cliente { background: var(--jn-tinte); border-color: #dcdde3; }
+.timeline .burbuja.interna { background: #fff8e6; border-color: #f2d48a; border-style: dashed; }
+.timeline .meta { font-size: .8rem; color: var(--jn-muted); }
+.timeline .mensaje { white-space: pre-line; margin-top: .3rem; }
+.timeline .cambio { font-size: .9rem; }
+
+.adjunto-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .6rem; border: 1px solid var(--jn-border); border-radius: 999px; background: #fff; font-size: .82rem; text-decoration: none; margin: .2rem .25rem 0 0; color: var(--jn-texto); }
+.adjunto-chip:hover { border-color: var(--bs-primary); }
+
+.dl-ficha dt { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--jn-muted); font-weight: 600; margin-top: .6rem; }
+.dl-ficha dd { margin-bottom: 0; }
+
+/* Login */
+.login-wrap { min-height: 100vh; display: grid; grid-template-columns: 1fr; }
+@media (min-width: 992px) { .login-wrap { grid-template-columns: 1.1fr 1fr; } }
+.login-hero { background: linear-gradient(150deg, var(--jn-primario) 0%, var(--jn-primario-oscuro) 100%); border-right: 6px solid var(--jn-verde); color: #fff; padding: 3rem; display: none; flex-direction: column; justify-content: space-between; }
+@media (min-width: 992px) { .login-hero { display: flex; } }
+.login-hero h1 { font-weight: 800; font-size: 2.4rem; letter-spacing: -.02em; }
+.login-hero .acento { color: var(--jn-verde); }
+.login-hero ul { list-style: none; padding: 0; }
+.login-hero li { padding: .4rem 0; color: rgba(255,255,255,.85); }
+.login-form { display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
+.login-form .card { width: 100%; max-width: 410px; }
+
+.estrellas label { font-size: 1.15rem; color: #e0a106; }
+/* Calificación de 1 a 10 */
+.selector-estrellas { display: flex; flex-direction: row-reverse; justify-content: space-between; gap: 2px; }
+.selector-estrellas input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.selector-estrellas label { font-size: clamp(1.4rem, 7vw, 2.1rem); color: #d4d5db; cursor: pointer; line-height: 1; transition: color .1s; }
+.selector-estrellas input:checked ~ label, .selector-estrellas label:hover, .selector-estrellas label:hover ~ label { color: #f2b200; }
+.selector-estrellas input:focus-visible + label { outline: 2px solid var(--jn-primario, #acc812); outline-offset: 2px; border-radius: 4px; }
+.selector-estrellas-guia { margin-top: .25rem; }
+.estrellas-nota { color: #f2b200; letter-spacing: 1px; white-space: nowrap; }
+.estrellas-nota .apagada { color: #d4d5db; }
+.form-check-inline-list > div { display: flex; flex-wrap: wrap; gap: .25rem 1rem; }
+.form-check-inline-list > div > div { display: flex; align-items: center; gap: .35rem; }
+.vis-interno:checked + label { color: #9a6700; font-weight: 600; }
+
+footer.pie { color: var(--jn-muted); font-size: .8rem; }
+
+/* --- Formulario de radicación por secciones --- */
+.paso-form { padding-bottom: 1.25rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--jn-border); }
+.paso-form:last-of-type { border-bottom: 0; }
+.paso-titulo { display: flex; align-items: center; gap: .5rem; font-weight: 700; margin-bottom: .9rem; color: var(--jn-primario); }
+.paso-num { width: 26px; height: 26px; border-radius: 50%; background: var(--jn-primario); color: #fff; font-family: "Montserrat", sans-serif; display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; flex-shrink: 0; }
+.opcion-tipo { display: block; position: relative; padding: .75rem .9rem .75rem 2.4rem; border: 1px solid var(--jn-border); border-radius: .6rem; background: #fff; cursor: pointer; transition: border-color .15s, background .15s; }
+.opcion-tipo:hover { border-color: #b4b5bd; }
+.opcion-tipo input { position: absolute; left: .9rem; top: .95rem; }
+.opcion-tipo.activa { border-color: var(--jn-primario); background: var(--jn-tinte); box-shadow: 0 0 0 3px rgba(172,200,18,.4); }
+.pasos-despues { padding-left: 1.1rem; }
+.pasos-despues li { margin-bottom: .6rem; font-size: .92rem; }
+.badge-tipo { background: var(--jn-tinte); color: var(--jn-primario); font-weight: 600; }
+
+/* Navegación: el enlace activo se subraya en verde */
+.navbar-jn .nav-link.active { box-shadow: inset 0 -3px 0 var(--jn-verde); }
+.pasos-despues li::marker { color: var(--jn-primario); font-weight: 700; }
+
+/* Consultar radicado: no dejar que el menú lo aplaste */
+.navbar-jn .buscar-radicado { min-width: 11rem; }
+
+/* Logos de marca */
+.logo-nav { height: 34px; width: auto; display: block; }
+.navbar-jn .marca-sub { color: rgba(255,255,255,.8); font-weight: 500; font-size: .95rem; margin-left: .75rem; padding-left: .75rem; border-left: 1px solid rgba(255,255,255,.35); letter-spacing: 0; }
+.logo-hero { height: 52px; width: auto; }
+.logo-login { height: 44px; width: auto; display: block; margin-left: auto; margin-right: auto; }
+
+/* Días en que el cliente no puede atender */
+.semana-atencion { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .6rem; }
+.semana-atencion .dia { padding: .55rem .6rem; border: 1px solid var(--jn-border); border-radius: .6rem; background: #fff; }
+.semana-atencion .dia.restringido { border-color: #e0a39a; background: #fdf1ef; }
+.semana-atencion .form-select { font-size: .85rem; }
+/* Semana de atención (vista del área administrativa y del técnico) */
+.semana-mini { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; text-align: center; font-size: .7rem; }
+.semana-mini .d { border-radius: .35rem; padding: .25rem 0; background: #e9f3dc; color: #3c5a12; line-height: 1.15; }
+.semana-mini .d span { display: block; font-weight: 700; }
+.semana-mini .d.manana { background: linear-gradient(180deg, #f6c8c0 50%, #e9f3dc 50%); color: #7a271a; }
+.semana-mini .d.tarde { background: linear-gradient(180deg, #e9f3dc 50%, #f6c8c0 50%); color: #7a271a; }
+.semana-mini .d.todo { background: #f6c8c0; color: #7a271a; }
+
+/* Prioridad: Baja verde · Media naranja · Alta rojo · Crítica rojo oscuro */
+.badge.prioridad { color: #fff; font-weight: 700; min-width: 4.5rem; padding: .35em .65em; border-radius: .4rem; }
+.prioridad-baja { background: #5fae3e; }
+.prioridad-media { background: #f57c0a; }
+.prioridad-alta { background: #f2545b; }
+.prioridad-critica { background: #b3141c; }
+
+/* «¿Qué tanto le afecta?» como semáforo */
+.opcion-impacto { display: block; position: relative; padding: .7rem .9rem .7rem 2.3rem; border: 1px solid var(--jn-border); border-radius: .6rem; background: #fff; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.opcion-impacto input { position: absolute; left: .85rem; top: .95rem; }
+.opcion-impacto.impacto-baja.activa { border-color: #5fae3e; box-shadow: 0 0 0 3px rgba(95,174,62,.25); background: #f3faef; }
+.opcion-impacto.impacto-media.activa { border-color: #f57c0a; box-shadow: 0 0 0 3px rgba(245,124,10,.25); background: #fff6ee; }
+.opcion-impacto.impacto-alta.activa { border-color: #f2545b; box-shadow: 0 0 0 3px rgba(242,84,91,.25); background: #fff1f1; }
+
+/* Acta de soporte: equipos, firmas e impresión */
+.equipo-acta { border: 1px solid var(--jn-border); border-radius: .6rem; padding: .9rem .9rem .2rem; margin-bottom: .8rem; background: #fcfcfd; }
+.firma-bloque { border: 1px solid var(--jn-border); border-radius: .6rem; padding: .9rem; height: 100%; background: #fff; }
+.firma-pad canvas { width: 100%; height: 150px; border: 1px dashed #c4c5cc; border-radius: .5rem; background: #fff; touch-action: none; cursor: crosshair; display: block; }
+.firma-pad.con-firma canvas { border-style: solid; border-color: var(--jn-primario); }
+.firma-img { max-height: 90px; max-width: 100%; border-bottom: 1px solid #999; display: block; margin-bottom: .25rem; }
+.fotos-equipo img { width: 110px; height: 110px; object-fit: cover; border-radius: .4rem; border: 1px solid var(--jn-border); }
+.solo-impresion { display: none; }
+@media print {
+  .navbar-jn, footer.pie, .no-imprimir, .alert { display: none !important; }
+  .solo-impresion { display: block !important; }
+  body { background: #fff; font-size: 11pt; }
+  main.container-xl { max-width: 100%; padding: 0; }
+  .card { box-shadow: none; break-inside: avoid; }
+  .col-lg-8, .col-lg-4 { width: 100%; }
+  a[href]::after { content: none; }
+}
+
+/* Bandejas al estilo correo: lo nuevo en negrita */
+.table-tickets .fila-nueva td { font-weight: 700; }
+.table-tickets .fila-nueva td .small, .table-tickets .fila-nueva td .badge { font-weight: 600; }
+.table-tickets .fila-nueva td:first-child { box-shadow: inset 3px 0 0 var(--jn-primario); }
+.table-tickets .fecha-correo { color: var(--jn-muted); }
+.table-tickets .fila-nueva .fecha-correo { color: var(--jn-texto); }
+
+/* Oportunidad comercial en el acta */
+.oportunidad-acta { background: #f8fbe8; border: 1px solid #dfeaa6; border-radius: .6rem; padding: 1rem 1rem .2rem; }
+.opciones-servicio { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .4rem; }
+.opcion-servicio { display: flex; align-items: center; gap: .45rem; padding: .45rem .6rem; border: 1px solid var(--jn-border); border-radius: .5rem; background: #fff; cursor: pointer; font-size: .9rem; font-weight: 600; }
+.opcion-servicio:has(input:checked) { border-color: var(--jn-verde-oscuro); background: #f2f8d6; }
+
+/* Cita de la visita técnica */
+.visita-cita { display: flex; gap: .8rem; align-items: center; padding: .75rem 1rem; border-radius: .6rem; background: var(--jn-tinte); border-left: 4px solid var(--jn-primario); color: var(--jn-primario-oscuro); }
+.visita-cita > .bi { font-size: 1.6rem; color: var(--jn-primario); }
+
+/* Cronograma técnico semanal */
+.cronograma-semana { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: .6rem; }
+.dia-cronograma { background: #fff; border: 1px solid var(--jn-border); border-radius: .7rem; min-height: 320px; display: flex; flex-direction: column; transition: border-color .15s, background .15s; }
+.dia-cronograma.hoy { border-color: var(--jn-verde); box-shadow: inset 0 3px 0 var(--jn-verde); }
+.dia-cronograma.sobre { border-color: var(--jn-primario); background: var(--jn-tinte); }
+.dia-titulo { padding: .5rem .7rem; border-bottom: 1px solid var(--jn-border); font-family: "Montserrat", sans-serif; font-weight: 700; color: var(--jn-primario-oscuro); display: flex; justify-content: space-between; }
+.dia-actividades { padding: .45rem; display: flex; flex-direction: column; gap: .45rem; flex: 1; }
+.actividad { border: 1px solid var(--jn-border); border-left: 4px solid var(--jn-primario); border-radius: .5rem; padding: .45rem .55rem; background: #fcfcfd; font-size: .88rem; cursor: grab; }
+.actividad.tipo-mantenimiento { border-left-color: #5fae3e; }
+.actividad.tipo-soporte { border-left-color: #f57c0a; }
+.actividad.tipo-instalacion { border-left-color: var(--jn-primario); }
+.actividad.tipo-visita { border-left-color: #2b8fd6; }
+.actividad.tipo-interna { border-left-color: #4e4f59; border-style: dashed; border-left-style: solid; background: #f4f4f6; }
+tr.fila-interna > td { background: #f4f4f6; }
+.actividad.en-rojo { border-color: #e4a29b; border-left-color: #c62828; background: #fdecea; }
+.actividad .hora { font-weight: 700; font-size: .8rem; color: var(--jn-primario-oscuro); }
+.actividad .pill-tipo { display: inline-block; font-size: .7rem; font-weight: 700; padding: .05rem .45rem; border-radius: 999px; background: var(--jn-tinte); }
+.arrastrando { opacity: .45; }
+.soltar-aqui { margin-top: auto; border: 1px dashed var(--jn-border); border-radius: .5rem; text-align: center; font-size: .75rem; color: var(--jn-muted); padding: .5rem; }
+.dia-cronograma.sobre .soltar-aqui { border-color: var(--jn-primario); color: var(--jn-primario); }
+.cronograma-pendientes .card-body { max-height: 75vh; overflow-y: auto; }
+.ticket-arrastrable { border: 1px solid var(--jn-border); border-left: 4px solid var(--jn-verde); border-radius: .5rem; padding: .5rem .6rem; margin-bottom: .5rem; background: #fff; cursor: grab; }
+.ticket-arrastrable:hover { border-color: var(--jn-verde-oscuro); }
+.lista-tecnicos { max-height: 160px; overflow-y: auto; border: 1px solid var(--jn-border); border-radius: .5rem; padding: .35rem .6rem; }
+.doc-estado { font-size: .8rem; }
+@media print {
+  .cronograma-semana { grid-template-columns: repeat(3, 1fr); }
+  .actividad { break-inside: avoid; }
+  .col-xl-9 { width: 100%; }
+}
+
+/* Indicadores del cronograma */
+.barra-fila { display: grid; grid-template-columns: minmax(0, 38%) 1fr 2.2rem; align-items: center; gap: .5rem; margin-bottom: .4rem; }
+.barra-etiqueta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.barra-pista { background: var(--jn-tinte); border-radius: 999px; height: .7rem; overflow: hidden; }
+.barra { background: var(--jn-verde); height: 100%; border-radius: 999px; }
+.barra.barra-alerta { background: #e57373; }
+.barra-n { text-align: right; }
+
+/* Color por día (como la plataforma anterior) */
+.badge.dia-1 { background: #3e7bd6; } .badge.dia-2 { background: #8e5bd6; } .badge.dia-3 { background: #d68b1f; }
+.badge.dia-4 { background: #1f9d8b; } .badge.dia-5 { background: #c2477d; } .badge.dia-6 { background: #6b7280; } .badge.dia-0 { background: #9ca3af; }
+.tabla-cronograma td { font-size: .86rem; }
+.tabla-cronograma th:nth-child(5), .tabla-cronograma td:nth-child(5) { min-width: 150px; }
+.tabla-cronograma th:nth-child(6), .tabla-cronograma td:nth-child(6) { min-width: 130px; }
+.tabla-cronograma th:nth-child(7), .tabla-cronograma td:nth-child(7) { min-width: 260px; }
+.tabla-cronograma th:nth-child(9), .tabla-cronograma td:nth-child(9),
+.tabla-cronograma th:nth-child(10), .tabla-cronograma td:nth-child(10) { min-width: 150px; }
+.tabla-cronograma th:nth-child(11), .tabla-cronograma td:nth-child(11) { min-width: 170px; }
+.order-last .cronograma-pendientes .card-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .5rem; max-height: none; }
+.order-last .ticket-arrastrable { margin-bottom: 0; }
+
+/* Destinatarios (Correos y envío) */
+.destinatario { display: flex; align-items: center; gap: .6rem; padding: .55rem .65rem; border: 1px solid var(--jn-border); border-radius: .6rem; margin-bottom: .45rem; text-decoration: none; color: inherit; background: #fff; }
+.destinatario:hover { border-color: var(--jn-primario); }
+.destinatario.activo { border-color: var(--jn-verde-oscuro); background: #f6fae3; box-shadow: 0 0 0 2px rgba(172,200,18,.25); }
+.destinatario .avatar { width: 34px; height: 34px; border-radius: .45rem; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: .78rem; background: var(--jn-primario-oscuro); color: #fff; flex-shrink: 0; }
+.destinatario .avatar-administrativa { background: #e0a106; color: #2f3036; }
+.destinatario .avatar-sst { background: #fde8e8; color: #c23b3b; }
+.destinatario .avatar-contacto { background: var(--jn-tinte); color: var(--jn-primario-oscuro); }
+.min-w-0 { min-width: 0; }
+.semana-mini .d.horas { background: linear-gradient(180deg, #f6c8c0 40%, #e9f3dc 40%); color: #7a271a; }
+.semana-atencion .horas-dia input { min-width: 0; }
+
+/* Etapas del servicio (portal del cliente y consulta sin usuario) */
+.etapas-servicio { list-style: none; margin: 0; padding: 0; }
+.etapas-servicio .etapa { display: flex; gap: .85rem; position: relative; padding-bottom: 1.1rem; }
+.etapas-servicio .etapa:not(:last-child)::before { content: ""; position: absolute; left: 15px; top: 32px; bottom: 0; width: 2px; background: var(--jn-border); }
+.etapas-servicio .etapa.hecha:not(:last-child)::before { background: #ACC812; }
+.etapas-servicio .nodo { flex: 0 0 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: .85rem; background: #fff; border: 2px solid var(--jn-border); color: var(--jn-muted); z-index: 1; }
+.etapas-servicio .hecha .nodo { background: #ACC812; border-color: #ACC812; color: #fff; }
+.etapas-servicio .actual .nodo { border-color: #ACC812; color: #686975; box-shadow: 0 0 0 4px rgba(172, 200, 18, .2); }
+.etapas-servicio .nombre { font-weight: 600; }
+.etapas-servicio .pendiente .nombre { color: var(--jn-muted); font-weight: 500; }
+.etapas-servicio .cuando { font-size: .8rem; color: var(--jn-muted); }
+.etapas-servicio .nota { font-size: .85rem; margin-top: .25rem; padding: .35rem .6rem; background: rgba(172, 200, 18, .1); border-left: 3px solid #ACC812; border-radius: 4px; }
+
+/* Menú del personal con todas las áreas: más compacto en pantallas medianas para que quepa en una línea */
+@media (min-width: 992px) and (max-width: 1399.98px) {
+  .navbar-jn .navbar-nav .nav-link { padding-left: .4rem; padding-right: .4rem; font-size: .88rem; }
+  .navbar-jn .buscar-radicado { min-width: 8.5rem; }
+  .navbar-jn .marca-sub { display: none !important; }
+}
+
+/* Tickets aplazados: no son nuevos, ya se programaron y se devolvieron */
+.badge-aplazado { background: #fff1e0; color: #8a3b00; border: 1px solid #f0a35e; font-weight: 600; }
+.timeline .burbuja.aplazamiento { border-left: 4px solid var(--bs-danger); background: #fff5f5; }
+.card-aplazamientos { border-color: #f0a35e; }
+.card-aplazamientos > .card-header { background: #fff1e0; color: #8a3b00; font-weight: 600; }
+
+/* Las tablas con muchas columnas (cronograma, inventario) salen del ancho de la página para que se vean todas */
+@media (min-width: 1200px) {
+  .tabla-ancha { width: calc(100vw - 48px); max-width: 1900px; position: relative; left: 50%; transform: translateX(-50%); }
+}
+@media print { .tabla-ancha { width: auto; left: auto; transform: none; } }
+
+/* Con muchas opciones (administrador) el menú baja a una segunda línea en vez de salirse de la pantalla */
+@media (min-width: 992px) {
+  .navbar-expand-lg .navbar-collapse, .navbar-expand-lg .navbar-nav { flex-wrap: wrap; }
+}
+
+/* Indicadores de gestión */
+.indicador { border-top: 4px solid var(--bs-border-color); }
+.indicador-cumple { border-top-color: #4f9a2f; }
+.indicador-no-cumple { border-top-color: #d6453d; }
+.indicador-valor { font-size: 2rem; font-weight: 700; line-height: 1.1; margin: .5rem 0 .25rem; }
+.indicador-valor small { font-size: .95rem; font-weight: 600; margin-left: .15rem; color: var(--jn-muted); }
+.barra-fondo { background: #eef0f3; border-radius: 4px; height: .7rem; overflow: hidden; }
+.barra { height: 100%; border-radius: 4px; }
+.barra-buena { background: #6aa84f; } .barra-media { background: #f2b200; } .barra-mala { background: #d6453d; }
+@media print {
+  .navbar, .d-print-none, footer { display: none !important; }
+  .card, .kpi { break-inside: avoid; }
+  body { background: #fff !important; }
+  .indicador-formula { color: #444 !important; }
+}

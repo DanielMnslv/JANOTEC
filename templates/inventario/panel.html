@@ -1,0 +1,124 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Inventario{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Inventario" subtitulo="Lo que hay en bodega, lo que lleva cada técnico y lo que quedó en cada cliente, en tiempo real." sin_panel=True %}
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg"><a class="kpi" href="?estado=disponible"><div class="valor">{{ kpi.disponibles }}</div><div class="etiqueta">Activos disponibles en bodega</div><div class="small text-muted-jn">{{ kpi.valor_activos|pesos }}</div></a></div>
+  <div class="col-6 col-lg"><a class="kpi" href="?ver=tecnicos"><div class="valor">{{ kpi.en_tecnicos }}</div><div class="etiqueta">Activos con los técnicos</div></a></div>
+  <div class="col-6 col-lg"><a class="kpi" href="?estado=alquilado"><div class="valor">{{ kpi.en_clientes }}</div><div class="etiqueta">Instalados en clientes</div><div class="small text-muted-jn">{{ conteo.alquilado|default:0 }} alquilados · {{ conteo.vendido|default:0 }} vendidos</div></a></div>
+  <div class="col-6 col-lg"><a class="kpi" href="?ver=insumos&stock=1"><div class="valor">{{ kpi.insumos_con_stock }}</div><div class="etiqueta">Insumos con stock</div><div class="small text-muted-jn">{{ kpi.valor_insumos|pesos }}</div></a></div>
+  {% if kpi.alertas %}<div class="col-6 col-lg"><a class="kpi border-danger" style="border-left-color:var(--bs-danger)" href="?ver=insumos"><div class="valor text-danger">{{ kpi.alertas }}</div><div class="etiqueta">Insumos por revisar (negativos o bajo el mínimo)</div></a></div>{% endif %}
+</div>
+
+<ul class="nav nav-tabs mb-3">
+  <li class="nav-item"><a class="nav-link {% if ver == 'activos' %}active{% endif %}" href="?ver=activos"><i class="bi bi-upc-scan"></i> Activos (placa)</a></li>
+  <li class="nav-item"><a class="nav-link {% if ver == 'insumos' %}active{% endif %}" href="?ver=insumos"><i class="bi bi-box-seam"></i> Insumos (cantidad)</a></li>
+  <li class="nav-item"><a class="nav-link {% if ver == 'tecnicos' %}active{% endif %}" href="?ver=tecnicos"><i class="bi bi-person-badge"></i> Material con los técnicos</a></li>
+  <li class="nav-item"><a class="nav-link {% if ver == 'entregas' %}active{% endif %}" href="?ver=entregas"><i class="bi bi-truck"></i> Por entregar{% if por_entregar %} <span class="badge text-bg-danger">{{ por_entregar }}</span>{% endif %}</a></li>
+</ul>
+
+{% if ver == 'activos' %}
+<form class="row g-2 mb-3" method="get">
+  <input type="hidden" name="ver" value="activos">
+  <div class="col-md-5"><input class="form-control" name="q" value="{{ q }}" placeholder="Placa, serial, referencia, cliente o técnico…" autofocus></div>
+  <div class="col-6 col-md-3"><select name="estado" class="form-select" onchange="this.form.submit()"><option value="">Todos los estados</option>{% for v, n, c in estados %}<option value="{{ v }}" {% if v == estado %}selected{% endif %}>{{ n }} ({{ c }})</option>{% endfor %}</select></div>
+  <div class="col-6 col-md-2"><select name="categoria" class="form-select" onchange="this.form.submit()"><option value="">Categoría</option>{% for c in categorias %}<option {% if c == categoria %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
+  <div class="col-md-2"><button class="btn btn-primary w-100"><i class="bi bi-search"></i> Buscar</button></div>
+</form>
+{% if fuera_de_servicio and not estado and not q %}<p class="small text-muted-jn mb-2"><i class="bi bi-archive"></i> No se muestran {{ fuera_de_servicio }} equipos dados de baja o no encontrados:
+  <a href="?ver=activos&amp;estado=baja">ver dados de baja</a> · <a href="?ver=activos&amp;estado=no_encontrado">ver no encontrados</a>.</p>{% endif %}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle small">
+      <thead><tr><th>Placa</th><th>Equipo</th><th>Estado</th><th>Dónde está</th><th class="text-nowrap">Último mov.</th></tr></thead>
+      <tbody>
+      {% for a in activos %}
+        <tr>
+          <td><a class="radicado text-nowrap" href="{{ a.get_absolute_url }}">{{ a.placa }}</a>{% if a.serial %}<div class="text-muted-jn">S/N {{ a.serial }}</div>{% endif %}</td>
+          <td><div class="fw-semibold">{{ a.descripcion_corta }}</div><div class="text-muted-jn text-truncate" style="max-width:380px">{{ a.descripcion }}</div></td>
+          <td><span class="badge text-bg-{{ a.color_estado }}">{{ a.get_estado_display }}</span>{% if a.modalidad and a.estado == 'en_tecnico' %}<div class="text-muted-jn">{{ a.get_modalidad_display }}</div>{% endif %}</td>
+          <td>{{ a.ubicacion }}</td>
+          <td class="text-nowrap text-muted-jn">{{ a.fecha_ultimo_movimiento|date:"d/m/Y" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="text-center py-4 text-muted-jn">No hay activos con esos filtros.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer small text-muted-jn">{{ activos|length }} activo(s)</div>
+</div>
+
+{% elif ver == 'insumos' %}
+<form class="row g-2 mb-3" method="get">
+  <input type="hidden" name="ver" value="insumos">
+  <div class="col-md-6"><input class="form-control" name="q" value="{{ q }}" placeholder="Código o descripción…"></div>
+  <div class="col-md-3 d-flex align-items-center"><div class="form-check"><input class="form-check-input" type="checkbox" name="stock" value="1" id="solo-stock" {% if request.GET.stock == '1' %}checked{% endif %} onchange="this.form.submit()"><label class="form-check-label" for="solo-stock">Solo con existencias</label></div></div>
+  <div class="col-md-3"><button class="btn btn-primary w-100"><i class="bi bi-search"></i> Buscar</button></div>
+</form>
+{% if inactivos %}<p class="small text-muted-jn mb-2"><i class="bi bi-archive"></i> {% if request.GET.inactivos == '1' %}Se muestran los {{ inactivos }} insumos inactivos · <a href="?ver=insumos">volver a los activos</a>{% else %}No se muestran {{ inactivos }} insumos inactivos (ya no se usan): <a href="?ver=insumos&amp;inactivos=1">verlos</a>{% endif %}.</p>{% endif %}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle small">
+      <caption class="caption-top small"><a href="{% url 'inventario:stock_minimo' %}"><i class="bi bi-sliders"></i> Stock mínimo y alerta de reposición</a></caption>
+      <thead><tr><th>Código</th><th>Descripción</th><th class="text-end">En bodega</th><th class="text-end">Con técnicos</th><th class="text-end">Costo unit.</th><th class="text-end">Valor en bodega</th></tr></thead>
+      <tbody>
+      {% for f in filas %}
+        <tr class="{% if f.alerta %}table-danger{% endif %}">
+          <td><a class="radicado text-nowrap" href="{{ f.insumo.get_absolute_url }}">{{ f.insumo.codigo }}</a></td>
+          <td>{{ f.insumo.descripcion }}</td>
+          <td class="text-end fw-bold text-nowrap">{% if f.bodega > 0 %}{{ f.bodega|cant }}{% elif f.bodega < 0 %}<span class="text-danger" title="Salió más de lo que se registró que entró: revise compras o salidas">{{ f.bodega|cant }} <i class="bi bi-exclamation-triangle"></i></span>{% else %}<span class="text-muted-jn">Sin stock</span>{% endif %} <span class="fw-normal text-muted-jn">{{ f.insumo.get_unidad_display|lower }}</span>{% if f.apartado %}<div class="small fw-normal text-warning" title="Validado por bodega para un ticket y todavía sin entregar">{{ f.apartado|cant }} apartado</div>{% endif %}</td>
+          <td class="text-end">{% if f.en_tecnicos %}{{ f.en_tecnicos|cant }}{% else %}<span class="text-muted-jn">—</span>{% endif %}</td>
+          <td class="text-end text-nowrap">{{ f.costo|pesos }}</td>
+          <td class="text-end text-nowrap">{{ f.valor|pesos }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="text-center py-4 text-muted-jn">No hay insumos con esos filtros.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% elif ver == 'entregas' %}
+<p class="text-muted-jn small">Visitas de las próximas dos semanas en las que el coordinador planeó insumos y equipos en el cronograma. Al guardar la visita, el material planeado se pide a bodega como <a href="{% url 'inventario:solicitudes' %}">solicitud de material</a> (validación, compra si falta y firmas); cuando esté aprobada se entrega desde aquí.</p>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle small">
+      <thead><tr><th>Visita</th><th>Cliente</th><th>Técnico(s)</th><th>Material planeado</th><th></th></tr></thead>
+      <tbody>
+      {% for a in proximas %}
+        <tr class="{% if not a.entregado %}fila-nueva{% endif %}">
+          <td class="text-nowrap"><strong>{{ a.fecha|date:"D j M" }}</strong><div class="text-muted-jn">{{ a.hora_inicio|time:"g:i a" }}</div>{% if a.ticket %}<a class="radicado" href="{{ a.ticket.get_absolute_url }}">{{ a.ticket.radicado }}</a>{% endif %}</td>
+          <td>{{ a.cliente }}{% if a.sede %}<div class="text-muted-jn">{{ a.sede }}</div>{% endif %}</td>
+          <td>{% for t in a.tecnicos %}{{ t.get_full_name|default:t.username }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="text-danger">Sin técnico</span>{% endfor %}</td>
+          <td style="white-space:pre-line;max-width:420px">{{ a.insumos|truncatechars:220 }}</td>
+          <td class="text-end text-nowrap">{% if a.entregado %}<span class="badge text-bg-success mb-1"><i class="bi bi-check2"></i> Entregado {{ a.entregado|date:"d/m" }}</span><br>{% endif %}
+            {% if gestiona %}<a class="btn btn-sm {% if a.entregado %}btn-light border{% else %}btn-accent{% endif %}" href="{% url 'inventario:entrega' %}?actividad={{ a.pk }}"><i class="bi bi-clipboard-check"></i> {% if a.entregado %}Ver solicitud{% else %}Solicitud / entrega{% endif %}</a>{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="text-center py-4 text-muted-jn">No hay visitas próximas con material planeado en el cronograma.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% else %}
+<div class="row g-3">
+  {% for nombre, d in tecnicos %}
+    <div class="col-md-6 col-lg-4">
+      <div class="card h-100"><div class="card-body">
+        <div class="fw-bold"><i class="bi bi-person-badge"></i> {{ nombre }}</div>
+        <div class="small text-muted-jn mb-2">{{ d.activos }} activo(s) · {{ d.insumos }} insumo(s) distintos</div>
+        {% if d.usuario %}<a class="btn btn-sm btn-outline-primary" href="{% url 'inventario:tecnico' d.usuario.pk %}">Ver lo que tiene</a>
+        {% else %}<span class="small text-muted-jn">Del inventario anterior: se asocia solo cuando se cree su usuario con la cédula.</span>{% endif %}
+      </div></div>
+    </div>
+  {% empty %}
+    <div class="col"><div class="card card-body text-center text-muted-jn">Ningún técnico tiene material en este momento.</div></div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

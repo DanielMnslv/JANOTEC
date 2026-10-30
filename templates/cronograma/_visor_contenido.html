@@ -1,0 +1,29 @@
+{# Lo que ve quien abre el cronograma sin usuario. Solo lo necesario: sin correos del cliente ni enlaces a los tickets #}
+<div class="text-muted-jn mb-3">Semana del {{ lunes|date:"j \d\e F" }} al {{ domingo|date:"j \d\e F \d\e Y" }} · solo lectura{% if actualizado %} · actualizado a las {{ actualizado|time:"g:i:s a" }}{% endif %}</div>
+<div class="card mb-4"><div class="table-responsive">
+  <table class="table table-sm mb-0 align-top">
+    <thead><tr><th>Fecha</th><th>Hora</th><th>Cliente / sede</th><th>Actividad</th><th>Tipo</th><th>Encargado(s)</th><th>Insumos y equipos</th>{% if compartido %}<th>Autorización</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for a in actividades %}
+      <tr>
+        <td class="text-nowrap"><strong>{{ a.fecha|date:"D j" }}</strong></td>
+        <td class="text-nowrap small">{{ a.hora_inicio|time:"H:i" }}–{{ a.hora_fin|time:"H:i" }}</td>
+        <td><strong>{{ a.cliente }}</strong><div class="small text-muted-jn">{{ a.sede }}</div></td>
+        <td class="small">{{ a.actividad }}{% if a.trabajo_alturas or a.sst or a.vehiculo or a.viaticos %}<div>{% if a.trabajo_alturas %}<span class="badge text-bg-danger">Alturas</span> {% endif %}{% if a.sst %}<span class="badge text-bg-warning">SST</span>{% endif %}{% if a.vehiculo %} <span class="badge text-bg-light border">Vehículo</span>{% endif %}{% if a.viaticos %} <span class="badge text-bg-light border">Viáticos</span>{% endif %}</div>{% endif %}</td>
+        <td class="small">{{ a.get_tipo_display }}</td>
+        <td class="small">{% for u in a.tecnicos %}{{ u.get_full_name|default:u.username }}<br>{% endfor %}</td>
+        <td class="small">{{ a.insumos|default:"—" }}</td>
+        {% if compartido %}<td class="small">{% if a.es_interna %}<span class="badge text-bg-dark">Actividad interna</span>{% else %}<span class="badge text-bg-{{ a.color_autorizacion }}">{{ a.get_autorizacion_display }}</span>{% endif %}</td>{% endif %}
+      </tr>
+    {% empty %}
+      <tr><td colspan="8" class="text-center py-4 text-muted-jn">No hay actividades programadas esta semana.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div></div>
+{% if insumos %}
+<h2 class="h6">Insumos consolidados</h2>
+<div class="card"><ul class="list-group list-group-flush small">
+  {% for i in insumos %}<li class="list-group-item"><strong>{{ i.cantidad_texto }}{% if i.unidad == 'm' %} m{% endif %}</strong> · {{ i.descripcion }} <span class="text-muted-jn">· {{ i.sedes|join:", " }}</span></li>{% endfor %}
+</ul></div>
+{% endif %}

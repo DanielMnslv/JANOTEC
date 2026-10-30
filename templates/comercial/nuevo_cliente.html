@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block titulo %}Solicitar cotización{% endblock %}
+{% block contenido %}
+<a href="{% url 'mis_tickets' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Mis solicitudes</a>
+<h1 class="h3 page-title mt-2 mb-1">Solicitar una cotización</h1>
+<p class="text-muted-jn mb-4">¿Quiere ampliar o instalar un sistema nuevo? Cuéntenos qué necesita: un técnico visitará el lugar y le enviaremos la propuesta económica.</p>
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card"><div class="card-body p-4">
+      <form method="post" enctype="multipart/form-data" novalidate>{% csrf_token %}
+        {% if form.errors %}<div class="alert alert-warning small">Revise los campos marcados en rojo.</div>{% endif %}
+        <section class="paso-form">
+          <h2 class="h6 paso-titulo"><span class="paso-num">1</span> ¿Qué necesita?</h2>
+          {% include "tickets/_campo.html" with campo=form.sede_nombre %}
+          {% include "tickets/_campo.html" with campo=form.asunto %}
+          {% include "tickets/_campo.html" with campo=form.descripcion %}
+          <label class="form-label fw-medium">{{ form.servicios.label }}</label>
+          <div class="opciones-servicio mb-3">{% for op in form.servicios %}<label class="opcion-servicio" for="{{ op.id_for_label }}">{{ op.tag }} {{ op.choice_label }}</label>{% endfor %}</div>
+          <div class="row">
+            {% include "tickets/_campo.html" with campo=form.sistema_actual clase="col-md-6" %}
+            {% include "tickets/_campo.html" with campo=form.tamano clase="col-md-6" %}
+            {% include "tickets/_campo.html" with campo=form.fecha_max_propuesta clase="col-md-6" %}
+          </div>
+        </section>
+        <section class="paso-form">
+          <h2 class="h6 paso-titulo"><span class="paso-num">2</span> ¿A quién contactamos?</h2>
+          <div class="row">
+            {% include "tickets/_campo.html" with campo=form.contacto_nombre clase="col-md-6" %}
+            {% include "tickets/_campo.html" with campo=form.contacto_cargo clase="col-md-6" %}
+            {% include "tickets/_campo.html" with campo=form.contacto_telefono clase="col-md-6" %}
+            {% include "tickets/_campo.html" with campo=form.contacto_email clase="col-md-6" %}
+          </div>
+        </section>
+        <section class="paso-form">
+          <h2 class="h6 paso-titulo"><span class="paso-num">3</span> ¿Cuándo NO puede atendernos?</h2>
+          <p class="small text-muted-jn mt-n1">Nosotros programamos la visita; indíquenos solo cuándo no puede recibir a nuestro personal.</p>
+          {% include "comercial/_dias.html" %}
+        </section>
+        <section class="paso-form">
+          <h2 class="h6 paso-titulo"><span class="paso-num">4</span> Fotos y documentos <span class="small fw-normal text-muted-jn">(opcional)</span></h2>
+          {% include "tickets/_campo.html" with campo=form.fotos %}
+          {% include "tickets/_campo.html" with campo=form.anexos %}
+        </section>
+        <div class="d-flex justify-content-end gap-2">
+          <a href="{% url 'mis_tickets' %}" class="btn btn-light">Cancelar</a>
+          <button class="btn btn-accent"><i class="bi bi-send"></i> Solicitar cotización</button>
+        </div>
+      </form>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card"><div class="card-header"><i class="bi bi-signpost-split"></i> ¿Qué pasa después?</div><div class="card-body">
+      <ol class="pasos-despues mb-0">
+        <li><strong>Recibe su número de radicado</strong>: con ese mismo número la sigue en <em>Mis solicitudes</em> hasta la instalación.</li>
+        <li><strong>Un técnico visita el lugar</strong> para medir y definir lo necesario.</li>
+        <li><strong>Le enviamos la propuesta económica</strong>: la ve y la descarga en su solicitud.</li>
+        <li><strong>Usted la aprueba</strong> desde la plataforma y programamos la instalación.</li>
+      </ol>
+    </div></div>
+  </div>
+</div>
+{% endblock %}

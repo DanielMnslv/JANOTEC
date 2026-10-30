@@ -1,0 +1,21 @@
+{# Pestañas del cronograma (las mismas de la plataforma anterior) y semana que se está viendo #}
+<ul class="nav nav-tabs mb-3 no-imprimir">
+  <li class="nav-item"><a class="nav-link {% if pestana == 'cronograma' %}active{% endif %}" href="{% url 'cronograma:semana' %}?d={{ lunes|date:'Y-m-d' }}"><i class="bi bi-calendar-week"></i> Cronograma</a></li>
+  <li class="nav-item"><a class="nav-link {% if pestana == 'correos' %}active{% endif %}" href="{% url 'cronograma:correos' %}?d={{ lunes|date:'Y-m-d' }}"><i class="bi bi-envelope"></i> Correos y envío</a></li>
+  <li class="nav-item"><a class="nav-link {% if pestana == 'insumos' %}active{% endif %}" href="{% url 'cronograma:insumos' %}?d={{ lunes|date:'Y-m-d' }}"><i class="bi bi-box-seam"></i> Insumos de la semana</a></li>
+  <li class="nav-item"><a class="nav-link {% if pestana == 'indicadores' %}active{% endif %}" href="{% url 'cronograma:indicadores' %}?d={{ lunes|date:'Y-m-d' }}"><i class="bi bi-bar-chart"></i> Indicadores</a></li>
+  <li class="nav-item"><a class="nav-link {% if pestana == 'historial' %}active{% endif %}" href="{% url 'cronograma:historial' %}"><i class="bi bi-clock-history"></i> Historial</a></li>
+  <li class="nav-item"><a class="nav-link {% if pestana == 'directorio' %}active{% endif %}" href="{% url 'cronograma:directorio' %}"><i class="bi bi-journal-bookmark"></i> Directorio</a></li>
+  <li class="nav-item"><a class="nav-link {% if pestana == 'compartir' %}active{% endif %}" href="{% url 'cronograma:compartir' %}"><i class="bi bi-share"></i> Compartir</a></li>
+  <li class="nav-item"><a class="nav-link" href="{% url 'cronograma:documentos' %}"><i class="bi bi-person-vcard"></i> Documentos</a></li>
+  <li class="nav-item"><a class="nav-link {% if pestana == 'configuracion' %}active{% endif %}" href="{% url 'cronograma:configuracion' %}"><i class="bi bi-gear"></i> Configuración del envío</a></li>
+</ul>
+{% if pestana != 'cronograma' and pestana != 'historial' and pestana != 'directorio' and pestana != 'configuracion' and pestana != 'compartir' %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+  <a class="btn btn-sm btn-light border no-imprimir" href="?d={{ anterior|date:'Y-m-d' }}"><i class="bi bi-chevron-left"></i></a>
+  <div class="fw-bold">Semana del {{ lunes|date:"j \d\e F" }} al {{ domingo|date:"j \d\e F \d\e Y" }}</div>
+  <a class="btn btn-sm btn-light border no-imprimir" href="?d={{ siguiente|date:'Y-m-d' }}"><i class="bi bi-chevron-right"></i></a>
+  <a class="btn btn-sm btn-link no-imprimir" href="?">Esta semana</a>
+  <button type="button" class="btn btn-sm btn-outline-secondary ms-auto no-imprimir" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir / PDF</button>
+</div>
+{% endif %}

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block titulo %}Borrador del informe · {{ ticket.radicado }}{% endblock %}
+{% block contenido %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div>
+    <a href="{{ ticket.get_absolute_url }}" class="small"><i class="bi bi-arrow-left"></i> Volver al ticket {{ ticket.radicado }}</a>
+    <h1 class="h4 mb-0 mt-1">Informe técnico · {{ ticket.empresa }}</h1>
+    <div class="small text-muted-jn">{{ ticket.asunto }}</div>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    {% if borrador.aprobado %}<span class="badge text-bg-success">Aprobado · pasado a limpio</span>{% else %}<span class="badge text-bg-warning">Borrador</span>{% endif %}
+    <a class="btn btn-outline-primary btn-sm" href="{% url 'informe_borrador_pdf' ticket.radicado %}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> {% if borrador.aprobado %}Ver informe aprobado{% else %}Ver PDF borrador{% endif %}</a>
+  </div>
+</div>
+
+{% if borrador.aprobado %}
+  <div class="alert alert-success small">
+    Aprobado por {{ borrador.aprobado_por.get_full_name|default:borrador.aprobado_por.username }} el {{ borrador.aprobado_en|date:"d/m/Y H:i" }}. Es el informe oficial del ticket: al entregarlo se adjunta este PDF.
+    {% if puede_aprobar and en_informe %}
+      <form method="post" class="d-inline">{% csrf_token %}<button class="btn btn-link btn-sm p-0 ms-2 align-baseline" name="accion" value="reabrir" onclick="return confirm('El informe vuelve a borrador para corregirlo y habrá que aprobarlo de nuevo. ¿Continuar?')">Devolver a borrador para corregir</button></form>
+    {% endif %}
+  </div>
+{% else %}
+  <div class="alert alert-info small mb-3">
+    <i class="bi bi-info-circle"></i> La plataforma redactó este borrador con los datos del acta. Las <b>tablas de equipos</b> (con referencia, marca y serial) y el <b>anexo de fotos</b> salen del acta en el PDF; aquí se corrige el texto.
+    {% if puede_aprobar %}Cuando quede bien, oprima <b>Aprobar y pasar a limpio</b>.{% else %}Coordinación lo revisa y lo aprueba para pasarlo a limpio.{% endif %}
+  </div>
+{% endif %}
+
+<form method="post" class="card" enctype="multipart/form-data">{% csrf_token %}
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <span><i class="bi bi-file-earmark-text"></i> {{ borrador.get_tipo_display }}</span>
+    {% if not borrador.aprobado and en_informe %}
+      {% if borrador.es_estudio %}
+        <button class="btn btn-link btn-sm p-0" name="accion" value="redactar" formnovalidate onclick="this.form.tipo.value='visita'; return confirm('Se redacta como informe de visita (soporte, instalación o desmonte). ¿Continuar?')">Cambiar a informe de visita</button>
+      {% else %}
+        <button class="btn btn-link btn-sm p-0" name="accion" value="redactar" formnovalidate onclick="this.form.tipo.value='estudio'; return confirm('Se redacta como informe de estudio (zonas con fotos y equipos a suministrar). ¿Continuar?')">Cambiar a informe de estudio</button>
+      {% endif %}
+    {% endif %}
+  </div>
+  <input type="hidden" name="tipo" value="">
+  <fieldset class="card-body" {% if borrador.aprobado or not en_informe %}disabled{% endif %}>
+    {% for e in form.non_field_errors %}<div class="alert alert-danger small">{{ e }}</div>{% endfor %}
+    <div class="row">
+      {% include "tickets/_campo.html" with campo=form.destinatario clase="col-md-5" %}
+      {% include "tickets/_campo.html" with campo=form.asunto clase="col-md-7" %}
+    </div>
+    {% include "tickets/_campo.html" with campo=form.introduccion %}
+    {% include "tickets/_campo.html" with campo=form.actividades %}
+
+    {% if borrador.es_estudio %}
+      <h2 class="h6 mt-4 mb-1"><i class="bi bi-camera"></i> Resultados del trabajo: zonas</h2>
+      <p class="small text-muted-jn mb-2">Cada zona o punto (Parqueadero, Báscula, Bodega…) con la foto de lo que verá la cámara y qué se hará ahí.</p>
+      {% for z in zonas %}
+        <div class="border rounded p-2 mb-2">
+          <div class="row g-2">
+            <div class="col-2 col-md-1"><label class="form-label small" for="zona-{{ z.pk }}-orden">Orden</label>
+              <input type="number" min="0" class="form-control form-control-sm" name="zona-{{ z.pk }}-orden" id="zona-{{ z.pk }}-orden" value="{{ z.orden }}"></div>
+            <div class="col-10 col-md-4"><label class="form-label small" for="zona-{{ z.pk }}-nombre">Zona o punto</label>
+              <input class="form-control form-control-sm" name="zona-{{ z.pk }}-nombre" id="zona-{{ z.pk }}-nombre" value="{{ z.nombre }}" maxlength="150"></div>
+            <div class="col-md-7"><label class="form-label small" for="zona-{{ z.pk }}-descripcion">Qué se hará</label>
+              <textarea class="form-control form-control-sm" rows="2" name="zona-{{ z.pk }}-descripcion" id="zona-{{ z.pk }}-descripcion">{{ z.descripcion }}</textarea></div>
+          </div>
+          <div class="d-flex flex-wrap gap-2 mt-2 fotos-equipo">
+            {% for f in z.fotos.all %}
+              <label class="text-center small"><img src="{% url 'foto_zona' f.pk %}" alt="Visual de {{ z.nombre }}" loading="lazy"><br>
+                <input type="checkbox" name="foto-{{ f.pk }}-borrar" value="1"> Quitar</label>
+            {% endfor %}
+          </div>
+          <div class="d-flex flex-wrap gap-3 align-items-center mt-2">
+            <input type="file" class="form-control form-control-sm w-auto" name="zona-{{ z.pk }}-fotos" accept="image/*" multiple aria-label="Agregar fotos a {{ z.nombre }}">
+            <label class="small text-danger"><input type="checkbox" name="zona-{{ z.pk }}-borrar" value="1"> Quitar zona</label>
+          </div>
+        </div>
+      {% endfor %}
+      <div class="border rounded p-2 mb-3 border-primary-subtle">
+        <div class="small fw-semibold mb-1"><i class="bi bi-plus-lg"></i> Agregar zona</div>
+        <div class="row g-2">
+          <div class="col-md-4"><input class="form-control form-control-sm" name="zona-nueva-nombre" placeholder="Ej.: Parqueadero" maxlength="150" aria-label="Nombre de la zona nueva"></div>
+          <div class="col-md-8"><textarea class="form-control form-control-sm" rows="1" name="zona-nueva-descripcion" placeholder="Ej.: 1 cámara bala en el poste del lindero norte" aria-label="Qué se hará en la zona nueva"></textarea></div>
+          <div class="col-12"><input type="file" class="form-control form-control-sm" name="zona-nueva-fotos" accept="image/*" multiple aria-label="Fotos de la zona nueva"></div>
+        </div>
+        <div class="form-text">Al guardar se agrega; luego puede agregar otra.</div>
+      </div>
+      {% include "tickets/_campo.html" with campo=form.suministros %}
+      {% include "tickets/_campo.html" with campo=form.servicios %}
+      {% include "tickets/_campo.html" with campo=form.garantia %}
+    {% else %}
+      {% include "tickets/_campo.html" with campo=form.justificacion %}
+    {% endif %}
+    {% include "tickets/_campo.html" with campo=form.conclusiones %}
+    {% include "tickets/_campo.html" with campo=form.recomendaciones %}
+  </fieldset>
+  {% if not borrador.aprobado and en_informe %}
+  <div class="card-footer d-flex flex-wrap justify-content-between gap-2">
+    <button class="btn btn-outline-secondary btn-sm" name="accion" value="redactar" formnovalidate onclick="return confirm('Se reemplaza el texto por uno nuevo con los datos actuales del acta y se pierden las correcciones del texto{% if borrador.es_estudio %} (las zonas, fotos y equipos se conservan){% endif %}. ¿Continuar?')"><i class="bi bi-arrow-clockwise"></i> Volver a redactar desde el acta</button>
+    <div class="d-flex flex-wrap gap-2">
+      <button class="btn btn-outline-primary" name="accion" value="guardar"><i class="bi bi-save"></i> Guardar cambios</button>
+      {% if puede_aprobar %}<button class="btn btn-accent" name="accion" value="aprobar" onclick="return confirm('Se genera el PDF definitivo y queda como informe oficial del ticket. ¿Aprobar?')"><i class="bi bi-check2-circle"></i> Aprobar y pasar a limpio</button>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</form>
+{% endblock %}

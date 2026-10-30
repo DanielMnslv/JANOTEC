@@ -1,0 +1,23 @@
+{# Editor de etapas (área técnica): fecha estimada y nota visible al cliente de cada etapa #}
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-signpost-2"></i> Seguimiento que ve el cliente</span>
+    <span class="small text-muted-jn">La etapa actual se calcula sola</span>
+  </div>
+  <form method="post" action="{% url 'guardar_etapas' ticket.radicado %}">{% csrf_token %}
+    <ul class="list-group list-group-flush">
+      {% for e in etapas %}
+        <li class="list-group-item">
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <span class="badge {% if e.estado == 'hecha' %}text-bg-success{% elif e.estado == 'actual' %}text-bg-warning{% else %}text-bg-light border{% endif %}">{% if e.estado == 'hecha' %}Hecha{% elif e.estado == 'actual' %}Actual{% else %}Pendiente{% endif %}</span>
+            <strong class="small flex-grow-1">{{ e.nombre }}</strong>
+            {% if e.fecha and not e.estimada %}<span class="small text-muted-jn">{{ e.fecha|date:"d/m/Y" }}</span>
+            {% else %}<input type="date" name="fecha_{{ e.clave }}" class="form-control form-control-sm" style="max-width:160px" value="{{ e.fecha|date:'Y-m-d' }}" title="Fecha estimada">{% endif %}
+          </div>
+          <input type="text" name="nota_{{ e.clave }}" class="form-control form-control-sm mt-2" maxlength="300" value="{{ e.nota }}" placeholder="Nota visible al cliente (opcional)">
+        </li>
+      {% endfor %}
+    </ul>
+    <div class="card-body pt-2 text-end"><button class="btn btn-sm btn-primary"><i class="bi bi-check2"></i> Guardar etapas</button></div>
+  </form>
+</div>

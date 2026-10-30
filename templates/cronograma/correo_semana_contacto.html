@@ -1,0 +1,17 @@
+{% extends "cronograma/_correo_marco.html" %}
+{% block cuerpo %}
+<p style="margin:0 0 10px;">Cordial saludo, <b>{{ destinatario }}</b>.</p>
+<p style="margin:0 0 14px;color:#3a4a56;">Le informamos las visitas de nuestro personal técnico programadas para la {{ semana|lower }}:</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:12px;">
+  <tr style="background:#686975;color:#ffffff;"><th align="left" style="padding:7px 8px;">Fecha y hora</th><th align="left" style="padding:7px 8px;">Sede</th><th align="left" style="padding:7px 8px;">Actividad</th><th align="left" style="padding:7px 8px;">Técnicos</th></tr>
+  {% for a in visitas %}
+  <tr style="{% cycle '' 'background:#f7f8fa;' %}">
+    <td valign="top" style="padding:7px 8px;border-bottom:1px solid #e2e2e6;"><b>{{ a.fecha|date:"l j \d\e F"|capfirst }}</b><br>{{ a.hora_inicio|time:"g:i a" }} – {{ a.hora_fin|time:"g:i a" }}</td>
+    <td valign="top" style="padding:7px 8px;border-bottom:1px solid #e2e2e6;">{{ a.cliente }}<br><span style="color:#5f606b;">{{ a.sede }}</span></td>
+    <td valign="top" style="padding:7px 8px;border-bottom:1px solid #e2e2e6;">{{ a.get_tipo_display }}<br>{{ a.actividad|linebreaksbr }}</td>
+    <td valign="top" style="padding:7px 8px;border-bottom:1px solid #e2e2e6;">{% for u in a.tecnicos %}{{ u.get_full_name|default:u.username }}<br>{% endfor %}</td>
+  </tr>
+  {% endfor %}
+</table>
+<p style="margin:14px 0 0;color:#5f606b;font-size:12px;">Si necesita cambiar alguna fecha, responda este correo o comuníquese al 310 229 8160.</p>
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "base.html" %}{% load tickets_extras %}
+{% block titulo %}Tickets en bodega{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Tickets en bodega" subtitulo="Cada ticket que necesita material, en el paso en que va: revisar la lista, comprar, autorizar la salida, alistar y entregar, y la confirmación del técnico. Al terminar pasa solo a técnica." %}
+{% include "tickets/_casos_area.html" with area_1="Bodega" %}
+
+<div class="row g-3 mb-4">
+  {% for clave, nombre, n in pasos %}
+  <div class="col-6 col-md">
+    <a class="kpi {% if paso == clave %}border border-primary{% endif %} {% if n and clave == 'recibido' %}alerta{% elif n and clave == 'autorizacion' %}aviso{% endif %}" href="?ver={{ ver }}&paso={{ clave }}">
+      <div class="valor">{{ n }}</div><div class="etiqueta">{{ forloop.counter }}. {{ nombre }}</div></a>
+  </div>
+  {% endfor %}
+</div>
+{% if propuesta %}<div class="alert alert-warning small"><i class="bi bi-briefcase"></i> {{ propuesta }} ticket{{ propuesta|pluralize }} con material a cargo del cliente esperan que apruebe la propuesta (no se entrega nada antes).</div>{% endif %}
+{% if atrasados %}<div class="alert alert-danger small"><i class="bi bi-alarm"></i> {{ atrasados }} ticket{{ atrasados|pluralize }} lleva{{ atrasados|pluralize:"n" }} más de 3 días en bodega sin entregarse (meta de alistamiento).</div>{% endif %}
+
+<div class="card">
+  <div class="card-body border-bottom">
+    <form class="row g-2" method="get">
+      <div class="col-md-5"><input name="q" value="{{ q }}" class="form-control" placeholder="Radicado, empresa o asunto…" aria-label="Buscar"></div>
+      <div class="col-md-4"><select name="ver" class="form-select" aria-label="Qué ver">
+        <option value="abiertos" {% if ver != 'terminados' %}selected{% endif %}>En gestión</option>
+        <option value="terminados" {% if ver == 'terminados' %}selected{% endif %}>Entregados (últimos 30 días)</option>
+      </select></div>
+      <input type="hidden" name="paso" value="{{ paso }}">
+      <div class="col-md-3 d-grid d-md-flex gap-2"><button class="btn btn-outline-primary flex-fill"><i class="bi bi-funnel"></i> Filtrar</button>
+        {% if paso or q %}<a class="btn btn-light border" href="?ver={{ ver }}">Quitar filtros</a>{% endif %}</div>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover table-tickets mb-0 align-middle">
+      <thead><tr><th>Radicado</th><th>Empresa / para qué</th><th>Paso</th><th>Lo que sigue</th><th class="d-none d-md-table-cell">Técnico</th><th class="text-end">En bodega</th></tr></thead>
+      <tbody>
+      {% for f in filas %}
+        {% with s=f.solicitudes.0 %}
+        <tr class="fila-click{% if f.paso == 'recibido' %} fila-nueva{% endif %}" data-href="{% if s %}{{ s.get_absolute_url }}{% else %}{{ f.ticket.get_absolute_url }}{% endif %}">
+          <td><a class="radicado" href="{% if s %}{{ s.get_absolute_url }}{% else %}{{ f.ticket.get_absolute_url }}{% endif %}">{{ f.ticket.radicado }}</a>
+            <div class="small text-muted-jn">{% for x in f.solicitudes %}{{ x.numero }}{% if not forloop.last %} · {% endif %}{% empty %}Sin solicitud aún{% endfor %}</div></td>
+          <td>{{ f.ticket.asunto|truncatechars:60 }}
+            <div class="small text-muted-jn">{{ f.ticket.empresa.razon_social }}{% if s %} · {{ s.get_origen_display }}{% endif %}{% if f.items %} · {{ f.items }} ítem{{ f.items|pluralize:"s" }}{% endif %}</div></td>
+          <td>{% include "inventario/_pasos_bodega.html" with compacto=True %}
+            <div class="small mt-1">{% if f.numero %}{{ f.numero }}. {% endif %}{{ f.nombre }}</div></td>
+          <td class="small">{{ f.sigue }}{% if f.quien %} <span class="badge text-bg-light border">{{ f.quien }}</span>{% endif %}</td>
+          <td class="d-none d-md-table-cell small">{{ s.tecnico|default:f.ticket.asignado_a|default:"—" }}</td>
+          <td class="text-end small text-nowrap {% if f.atrasado %}text-danger fw-semibold{% endif %}">{% if f.dias %}{{ f.dias }} día{{ f.dias|pluralize }}{% else %}Hoy{% endif %}{% if f.atrasado %} <i class="bi bi-alarm"></i>{% endif %}</td>
+        </tr>
+        {% endwith %}
+      {% empty %}
+        <tr><td colspan="6" class="text-center py-5 text-muted-jn"><i class="bi bi-box-seam fs-2 d-block mb-2"></i>No hay tickets con estos filtros.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

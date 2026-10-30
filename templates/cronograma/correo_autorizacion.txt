@@ -1,0 +1,21 @@
+{% autoescape off %}Cordial saludo.
+
+JANOTEC S.A.S. solicita su autorización de ingreso para la siguiente visita técnica{% if ticket %} (solicitud {{ ticket.radicado }}){% endif %}:
+
+Fecha y hora: {{ cuando }}
+Cliente: {{ a.cliente }}{% if a.sede %} · Sede: {{ a.sede }}{% endif %}
+Tipo: {{ a.get_tipo_display }}
+Actividad: {{ a.actividad }}
+{% if a.trabajo_alturas %}Incluye trabajo en alturas (más de 2 metros).
+{% endif %}
+Personal técnico:{% for t in tecnicos %}
+- {{ t.get_full_name|default:t.username }}{% if t.cargo %} · {{ t.cargo }}{% endif %}{% endfor %}
+
+Adjuntamos {{ adjuntos|length }} documento{{ adjuntos|length|pluralize }}: identificación y aportes a seguridad social de cada técnico{% if a.trabajo_alturas %} y certificados de trabajo seguro en alturas{% endif %}.
+
+Por favor responda:
+ACEPTAR: {{ aceptar }}
+RECHAZAR: {{ rechazar }}
+
+— Coordinación TIC · JANOTEC S.A.S.
+{% endautoescape %}

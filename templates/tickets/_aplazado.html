@@ -1,0 +1,2 @@
+{# Distintivo: no es un ticket nuevo, ya se programó y se aplazó (t = el ticket) #}
+{% if t.veces_aplazado %}<span class="badge badge-aplazado" title="Ya estuvo programado y se aplazó {{ t.veces_aplazado }} {{ t.veces_aplazado|pluralize:'vez,veces' }}: vea el motivo en el historial del ticket"><i class="bi bi-arrow-counterclockwise"></i> Aplazado{% if t.veces_aplazado > 1 %} ×{{ t.veces_aplazado }}{% endif %}</span>{% endif %}

@@ -1,0 +1,13 @@
+{# Etapas del servicio para el cliente (portal y consulta sin usuario), como en janotecsas.netlify.app #}
+<ol class="etapas-servicio">
+  {% for e in etapas %}
+    <li class="etapa {{ e.estado }}">
+      <span class="nodo">{% if e.estado == 'hecha' %}<i class="bi bi-check-lg"></i>{% else %}{{ forloop.counter }}{% endif %}</span>
+      <div class="cuerpo">
+        <div class="nombre">{{ e.nombre }}{% if e.estado == 'actual' %} <span class="badge text-bg-warning">En proceso</span>{% elif e.estado == 'hecha' and forloop.last %} <span class="badge text-bg-success">Completado</span>{% endif %}</div>
+        <div class="cuando">{% if e.fecha %}{% if e.estimada %}Fecha estimada: {% endif %}{{ e.fecha|date:"j M Y" }}{% elif e.estado == 'pendiente' %}Fecha estimada: por definir{% elif e.estado == 'actual' %}En curso{% endif %}</div>
+        {% if e.nota %}<div class="nota">{{ e.nota }}</div>{% endif %}
+      </div>
+    </li>
+  {% endfor %}
+</ol>
