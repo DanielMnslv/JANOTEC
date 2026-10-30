@@ -1,0 +1,45 @@
+{% extends "base.html" %}{% load static %}
+{% block titulo %}Servicio {{ ticket.radicado }}{% endblock %}
+{% block cuerpo %}
+<div class="container py-4" style="max-width:760px">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <img src="{% static 'img/marca/logo-color.webp' %}" alt="JANOTEC" class="logo-login" style="max-height:44px">
+    <a class="small" href="{% url 'consulta' %}"><i class="bi bi-search"></i> Consultar otro radicado</a>
+  </div>
+  <div class="card mb-4"><div class="card-body">
+    <div class="d-flex flex-wrap justify-content-between gap-2">
+      <div>
+        <div class="radicado fs-5">{{ ticket.radicado }}</div>
+        <h1 class="h5 mb-1">{{ ticket.asunto }}</h1>
+        <div class="small text-muted-jn">{{ ticket.empresa }}{% if ticket.sede %} · {{ ticket.sede }}{% endif %}{% if ticket.municipio %} · {{ ticket.municipio }}{% endif %}</div>
+      </div>
+      <div class="text-end small">{% include "tickets/_tipo.html" with t=ticket %} {% include "tickets/_estado.html" with t=ticket %}
+        <div class="text-muted-jn mt-1">Sistema: {{ ticket.sistema_display }}</div>
+        <div class="text-muted-jn">Registrado el {{ ticket.creado|date:"d/m/Y" }}</div></div>
+    </div>
+  </div></div>
+
+  {% if ticket.visita_programada and ticket.abierto %}<div class="mb-4">{% include "tickets/_visita.html" %}</div>{% endif %}
+
+  <div class="card mb-4">
+    <div class="card-header"><i class="bi bi-signpost-2"></i> Etapas del servicio</div>
+    <div class="card-body">
+      {% if ticket.estado == 'cancelado' %}<div class="text-danger"><i class="bi bi-x-circle"></i> Esta solicitud fue cancelada.</div>
+      {% else %}{% include "tickets/_etapas.html" %}{% endif %}
+    </div>
+  </div>
+
+  {% if visibles %}
+  <div class="card mb-4">
+    <div class="card-header"><i class="bi bi-chat-left-text"></i> Últimas novedades</div>
+    <ul class="list-group list-group-flush">
+      {% for s in visibles %}
+        <li class="list-group-item small"><span class="text-muted-jn">{{ s.creado|date:"d/m/Y h:i a" }}</span>{% if s.estado_nuevo %} · <strong>{{ s.estado_nuevo_display }}</strong>{% endif %}
+          {% if s.mensaje %}<div class="mt-1" style="white-space:pre-line">{{ s.mensaje }}</div>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  <p class="small text-muted-jn text-center">Para responder, adjuntar archivos o descargar informes, <a href="{% url 'login' %}">ingrese al portal</a> o escríbanos respondiendo el correo de su solicitud.</p>
+</div>
+{% endblock %}

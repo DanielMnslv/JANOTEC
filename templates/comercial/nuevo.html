@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block titulo %}Nuevo requerimiento comercial{% endblock %}
+{% block contenido %}
+<a href="{% url 'comercial:bandeja' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Requerimientos</a>
+<h1 class="h3 page-title mt-2 mb-1">Captura la <span style="color:var(--jn-verde-texto)">oportunidad</span>, no solo la necesidad.</h1>
+<p class="text-muted-jn mb-4">Diligencie los datos del cliente. Al radicar, el cliente recibe un correo con el número de requerimiento y el área administrativa asigna el levantamiento técnico.</p>
+{% if oportunidad %}<div class="alert alert-success small"><i class="bi bi-graph-up-arrow"></i> Viene de una oportunidad detectada por {{ oportunidad.detectada_por }}{% if oportunidad.acta %} en el acta {{ oportunidad.acta.numero }}{% endif %}.</div>{% endif %}
+
+<form method="post" enctype="multipart/form-data" novalidate>{% csrf_token %}
+  {% if oportunidad %}<input type="hidden" name="oportunidad" value="{{ oportunidad.pk }}">{% endif %}
+  {% if form.errors %}<div class="alert alert-warning small"><i class="bi bi-exclamation-circle"></i> Revise los campos marcados en rojo.{% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}</div>{% endif %}
+  <div class="card mb-4"><div class="card-body p-4">
+    <section class="paso-form">
+      <h2 class="h6 paso-titulo"><span class="paso-num">1</span> Contacto y horario de atención</h2>
+      <div class="row">
+        {{ form.empresa }}{{ form.nueva_empresa }}{{ form.sede }}
+        {% include "tickets/_campo.html" with campo=form.empresa_nombre clase="col-md-6" %}
+        <div class="col-md-6" id="bloque-nit" hidden>{% include "tickets/_campo.html" with campo=form.nuevo_nit %}<div class="small text-warning-emphasis mt-n2 mb-3"><i class="bi bi-person-plus"></i> No es cliente: se registrará como <strong>prospecto</strong>.</div></div>
+        {% include "tickets/_campo.html" with campo=form.sede_nombre clase="col-md-6" %}
+        {% include "tickets/_campo.html" with campo=form.comercial clase="col-md-6" %}
+        {% include "tickets/_campo.html" with campo=form.contacto_nombre clase="col-md-4" %}
+        {% include "tickets/_campo.html" with campo=form.contacto_cargo clase="col-md-4" %}
+        {% include "tickets/_campo.html" with campo=form.contacto_telefono clase="col-md-4" %}
+        {% include "tickets/_campo.html" with campo=form.contacto_email clase="col-md-4" %}
+        {% include "tickets/_campo.html" with campo=form.municipio clase="col-md-4" %}
+        {% include "tickets/_campo.html" with campo=form.direccion clase="col-md-4" %}
+      </div>
+      <label class="form-label fw-medium">¿Cuándo NO puede atender llamadas o visitas?</label>
+      {% include "comercial/_dias.html" %}
+    </section>
+
+    <section class="paso-form">
+      <h2 class="h6 paso-titulo"><span class="paso-num">2</span> Necesidad</h2>
+      {% include "tickets/_campo.html" with campo=form.asunto %}
+      {% include "tickets/_campo.html" with campo=form.descripcion %}
+      <div class="row">
+        {% include "tickets/_campo.html" with campo=form.impacto clase="col-md-4" %}
+        {% include "tickets/_campo.html" with campo=form.fecha_max_propuesta clase="col-md-4" %}
+      </div>
+    </section>
+
+    <section class="paso-form">
+      <h2 class="h6 paso-titulo"><span class="paso-num">3</span> Calificación técnica preliminar</h2>
+      <div class="row">
+        {% include "tickets/_campo.html" with campo=form.sistema_actual clase="col-md-4" %}
+        {% include "tickets/_campo.html" with campo=form.energia clase="col-md-4" %}
+        {% include "tickets/_campo.html" with campo=form.internet clase="col-md-4" %}
+        {% include "tickets/_campo.html" with campo=form.tamano clase="col-md-6" %}
+      </div>
+    </section>
+
+    <section class="paso-form oportunidad-acta">
+      <h2 class="h6 paso-titulo"><span class="paso-num">4</span> Oportunidad de negocio · no venda solo lo que pidió <span class="small fw-normal text-muted-jn">(interno)</span></h2>
+      <label class="form-label fw-medium">{{ form.servicios.label }}</label>
+      <div class="opciones-servicio mb-3">{% for op in form.servicios %}<label class="opcion-servicio" for="{{ op.id_for_label }}">{{ op.tag }} {{ op.choice_label }}</label>{% endfor %}</div>
+      {% include "tickets/_campo.html" with campo=form.otras_necesidades %}
+      <div class="row">
+        {% include "tickets/_campo.html" with campo=form.nivel_decision clase="col-md-4" %}
+        <div class="col-md-4 d-flex align-items-end">{% include "tickets/_campo.html" with campo=form.otras_sedes %}</div>
+        {% include "tickets/_campo.html" with campo=form.presupuesto clase="col-md-4" %}
+      </div>
+      {% include "tickets/_campo.html" with campo=form.observaciones %}
+    </section>
+
+    <section class="paso-form">
+      <h2 class="h6 paso-titulo"><span class="paso-num">5</span> Fotos y anexos <span class="small fw-normal text-muted-jn">(opcional)</span></h2>
+      {% include "tickets/_campo.html" with campo=form.fotos %}
+      {% include "tickets/_campo.html" with campo=form.anexos %}
+    </section>
+    <div class="d-flex justify-content-end gap-2">
+      <a href="{% url 'comercial:bandeja' %}" class="btn btn-light">Cancelar</a>
+      <button class="btn btn-accent"><i class="bi bi-send"></i> Radicar requerimiento</button>
+    </div>
+  </div></div>
+</form>
+{{ form.sedes_por_empresa|json_script:"sedes-por-empresa" }}
+{% endblock %}
+{% block scripts %}
+<script>
+// Empresa y sede para escribir: se sugieren los clientes y sus sedes; si la empresa no existe, es un prospecto
+(function () {
+  const sedes = JSON.parse(document.getElementById('sedes-por-empresa').textContent);
+  const empresa = document.getElementById('id_empresa_nombre'), sede = document.getElementById('id_sede_nombre');
+  const nit = document.getElementById('bloque-nit');
+  const norm = function (t) { return (t || '').trim().replace(/\s+/g, ' ').toLowerCase(); };
+  const conocidas = Array.from(document.getElementById(empresa.getAttribute('list')).options).map(function (o) { return norm(o.value); });
+  function actualizar() {
+    const dl = document.getElementById(sede.getAttribute('list'));
+    dl.innerHTML = '';
+    (sedes[norm(empresa.value)] || []).forEach(function (s) { const o = document.createElement('option'); o.value = s; dl.appendChild(o); });
+    nit.hidden = !empresa.value.trim() || conocidas.includes(norm(empresa.value));
+  }
+  ['input', 'change'].forEach(function (ev) { empresa.addEventListener(ev, actualizar); });
+  actualizar();
+})();
+</script>
+{% endblock %}

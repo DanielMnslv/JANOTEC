@@ -1,0 +1,33 @@
+{# Vista en tabla: las mismas columnas de cronogramajanotec #}
+<div class="card mb-3 tabla-ancha">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-top tabla-cronograma">
+      <thead><tr><th>#</th><th>Fecha</th><th>Inicio</th><th>Fin</th><th>Cliente</th><th>Sede</th><th>Actividad</th><th>Tipo</th><th>Encargado(s)</th><th>Insumos y equipos</th><th>Notificar a</th>{% if editable %}<th class="no-imprimir"></th>{% endif %}</tr></thead>
+      <tbody>
+      {% for a in todas %}
+        <tr class="{% if a.en_rojo %}table-danger{% elif a.es_interna %}fila-interna{% endif %}">
+          <td class="text-muted-jn">{{ forloop.counter }}</td>
+          <td class="text-nowrap"><span class="badge dia-{{ a.fecha|date:'w' }}">{{ a.fecha|date:"D"|upper }}</span> {{ a.fecha|date:"d/m" }}</td>
+          <td class="text-nowrap">{{ a.hora_inicio|time:"H:i" }}</td>
+          <td class="text-nowrap">{{ a.hora_fin|time:"H:i" }}</td>
+          <td><strong>{{ a.cliente }}</strong>{% if a.ticket %}<div><a class="radicado small" href="{{ a.ticket.get_absolute_url }}">{{ a.ticket.radicado }}</a></div>{% endif %}</td>
+          <td class="small">{{ a.sede }}</td>
+          <td class="small">{{ a.actividad }}{% if a.en_rojo %}<div class="text-danger fw-semibold"><i class="bi bi-exclamation-triangle"></i> {{ a.motivo_rojo }}</div>{% endif %}</td>
+          <td class="small"><span class="pill-tipo">{{ a.get_tipo_display }}</span>
+            <div class="mt-1">{% if a.trabajo_alturas %}<span class="badge text-bg-danger">Alturas</span> {% endif %}{% if a.sst %}<span class="badge text-bg-warning">SST</span> {% endif %}{% if a.vehiculo %}<span class="badge text-bg-light border">Vehículo</span> {% endif %}{% if a.viaticos %}<span class="badge text-bg-light border">Viáticos</span>{% endif %}</div></td>
+          <td class="small">{% for u in a.encargados.all %}{{ u.get_full_name|default:u.username }}<br>{% endfor %}{% for u in a.acompanantes.all %}<span class="text-muted-jn">+ {{ u.get_full_name|default:u.username }}</span><br>{% endfor %}</td>
+          <td class="small">{{ a.insumos|default:"—" }}</td>
+          <td class="small">{% if a.es_interna %}<span class="badge text-bg-dark"><i class="bi bi-building"></i> Actividad interna</span><div class="text-muted-jn">Sin autorización del cliente</div>
+            {% else %}{% for c in a.correos %}<div>{{ c }}</div>{% empty %}<span class="text-danger">Sin correo</span>{% endfor %}
+            <span class="badge text-bg-{{ a.color_autorizacion }} mt-1">{{ a.get_autorizacion_display }}</span>{% endif %}</td>
+          {% if editable %}<td class="text-nowrap no-imprimir">{% include "cronograma/_acciones.html" %}
+            {% if a.autorizacion != 'aceptada' and not a.es_interna %}<form method="post" action="{% url 'cronograma:enviar_autorizacion' a.pk %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-outline-success py-0" title="Enviar autorización al cliente"><i class="bi bi-send"></i></button></form>{% endif %}
+            <form method="post" action="{% url 'cronograma:eliminar' a.pk %}" class="d-inline" onsubmit="return confirm('¿Retirar esta actividad del cronograma?')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger py-0" title="Retirar"><i class="bi bi-x-lg"></i></button></form></td>{% endif %}
+        </tr>
+      {% empty %}
+        <tr><td colspan="12" class="text-center py-4 text-muted-jn">Sin actividades. Presione «Agregar actividad» o arrastre un ticket.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

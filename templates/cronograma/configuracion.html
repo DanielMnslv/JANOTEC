@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block titulo %}Configuración del envío{% endblock %}
+{% block contenido %}
+<h1 class="h3 page-title mb-1">Configuración del envío</h1>
+<p class="text-muted-jn mb-3">Lo que antes se configuraba con clave en la plataforma anterior (webhook de n8n y Supabase ya no hacen falta: la plataforma envía y guarda todo).</p>
+{% include "cronograma/_pestanas.html" %}
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card"><div class="card-body">
+      <form method="post">{% csrf_token %}
+        <div class="p-3 rounded mb-3" style="background:#fff8e6;border:1px solid #f0dca0">
+          <div class="form-check form-switch">{{ form.envio_automatico }} <label class="form-check-label fw-semibold" for="{{ form.envio_automatico.id_for_label }}">{{ form.envio_automatico.label|capfirst }}</label></div>
+          <div class="small text-muted-jn mt-1">Activado: la tarea programada envía sola la semana cada jueves. Apagado: no envía nada.</div>
+        </div>
+        {% include "tickets/_campo.html" with campo=form.hora %}
+        {% include "tickets/_campo.html" with campo=form.semana_objetivo %}
+        {% include "tickets/_campo.html" with campo=form.remitente %}
+        {% include "tickets/_campo.html" with campo=form.avisar_contactos %}
+        <button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button>
+      </form>
+    </div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card mb-3"><div class="card-body small"><i class="bi bi-share"></i> Para que otras áreas vean el cronograma en vivo, use la pestaña <a href="{% url 'cronograma:compartir' %}">Compartir</a>.</div></div>
+    <div class="card"><div class="card-header"><i class="bi bi-calendar-check"></i> Automatización del jueves</div><div class="card-body small">
+      <ol class="mb-0">
+        <li>Se arma el cronograma de la semana y se revisa en <em>Correos y envío</em>.</li>
+        <li>El jueves a la hora programada, el servidor ejecuta <code>python manage.py enviar_cronograma</code>: envía la semana a cada técnico y a la administrativa.</li>
+        <li>Si la semana ya se había enviado y cambió algo, envía solo el aviso de cambios; si no hay nada nuevo, no envía nada.</li>
+        <li>Programarlo: en Windows con el <strong>Programador de tareas</strong> (jueves, {{ config.get_hora_display }}); en Linux con cron (ver README).</li>
+      </ol>
+    </div></div>
+  </div>
+</div>
+{% endblock %}

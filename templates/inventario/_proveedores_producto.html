@@ -1,0 +1,14 @@
+{# Quién nos ha vendido este producto y a quién llamar para pedirlo otra vez #}
+<div class="card {{ clase }}"><div class="card-header"><i class="bi bi-shop"></i> ¿Quién lo vende?</div>
+  <ul class="list-group list-group-flush small">
+    {% for v in vendedores %}
+      <li class="list-group-item">
+        {% if v.proveedor %}<a class="fw-semibold" href="{% url 'inventario:proveedor' v.proveedor.pk %}">{{ v.nombre }}</a>{% else %}<strong>{{ v.nombre }}</strong>{% endif %}
+        {% if v.ultima %}<span class="text-muted-jn"> · {{ v.ultima|date:"d/m/Y" }}</span>{% endif %}
+        {% with a=v.proveedor.asesor %}{% if a %}<div><i class="bi bi-person-badge"></i> {{ a.nombre }}{% if a.celular %} · <a href="tel:{{ a.celular }}">{{ a.celular }}</a>{% endif %}</div>{% endif %}{% endwith %}
+      </li>
+    {% empty %}
+      <li class="list-group-item text-muted-jn">No hay compras registradas con proveedor.</li>
+    {% endfor %}
+  </ul>
+</div>

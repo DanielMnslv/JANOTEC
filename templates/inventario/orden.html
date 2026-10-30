@@ -1,0 +1,53 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}{{ orden.numero }}{% endblock %}
+{% block contenido %}
+<a href="{% url 'inventario:ordenes' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Órdenes de compra</a>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mt-2 mb-3">
+  <div><div class="radicado text-muted-jn">{{ orden.numero }}</div>
+    <h1 class="h4 page-title mb-1">Orden de compra {% if orden.proveedor %}· {{ orden.proveedor }}{% endif %}</h1>
+    <span class="badge text-bg-{{ orden.color_estado }}">{{ orden.get_estado_display }}</span>{% if orden.atrasada %} <span class="badge text-bg-danger">Atrasada</span>{% endif %}
+    {% if orden.solicitud %}<span class="small ms-2">Para <a href="{{ orden.solicitud.get_absolute_url }}">{{ orden.solicitud.numero }}</a> · {{ orden.solicitud.ticket.radicado }} · {{ orden.solicitud.ticket.empresa }}</span>{% endif %}
+    {% if orden.cotizacion %}<span class="small ms-2">De la cotización <a href="{{ orden.cotizacion.solicitud.get_absolute_url }}">{{ orden.cotizacion.solicitud.numero }}</a>{% if orden.cotizacion.referencia %} · {{ orden.cotizacion.referencia }}{% endif %}</span>{% endif %}
+  </div>
+  <div class="d-flex gap-2"><a class="btn btn-outline-primary btn-sm" href="{% url 'inventario:orden_archivo' orden.pk 'pdf' %}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> PDF para el proveedor</a>
+    {% if orden.soporte %}<a class="btn btn-light border btn-sm" href="{% url 'inventario:orden_archivo' orden.pk 'soporte' %}" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i> Soporte</a>{% endif %}</div>
+</div>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
+  <div class="row g-4">
+    <div class="col-lg-4"><div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="alert alert-danger py-2 small">{{ e }}</div>{% endfor %}
+      {% include "tickets/_campo.html" with campo=form.proveedor %}
+      {% if orden.proveedor %}<div class="small mb-3 mt-n2">{% with a=orden.proveedor.asesor %}{% if a %}<i class="bi bi-person-badge"></i> {{ a.nombre }}{% if a.celular %} · <a href="tel:{{ a.celular }}">{{ a.celular }}</a>{% endif %}{% else %}<span class="text-muted-jn">Sin asesor registrado.</span>{% endif %}{% endwith %} · <a href="{% url 'inventario:proveedor' orden.proveedor.pk %}">Ver ficha</a></div>{% endif %}
+      {% include "tickets/_campo.html" with campo=form.fecha_estimada %}
+      {% include "tickets/_campo.html" with campo=form.notas %}
+      {% include "tickets/_campo.html" with campo=form.soporte %}
+    </div></div></div>
+    <div class="col-lg-8"><div class="card">
+      {{ lineas.management_form }}
+      <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
+        <thead><tr><th>Descripción</th>
+          {% if orden.solicitud %}<th style="width:7rem" title="Lo que falta para la propuesta aprobada del ticket">Para el ticket</th><th style="width:7rem" title="Lo que se compra de más para tener en bodega">Adicional para bodega</th>
+          {% else %}<th style="width:7rem">Cantidad</th>{% endif %}
+          <th style="width:9rem">Valor unit.</th><th style="width:5rem">IVA %</th>{% if orden.recibida_en or orden.estado == 'enviada' %}<th style="width:6rem">Recibido</th>{% endif %}<th style="width:4rem">Quitar</th></tr></thead>
+        <tbody>{% for f in lineas %}<tr>{{ f.id }}
+          <td>{{ f.descripcion }}{% for e in f.descripcion.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</td>
+          {% if orden.solicitud %}<td>{{ f.cantidad }}</td>{% else %}<td class="d-none">{{ f.cantidad }}</td>{% endif %}
+          <td>{{ f.adicional }}{% for e in f.adicional.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</td>
+          <td>{{ f.valor_unitario }}</td><td>{{ f.iva }}</td>
+          {% if orden.recibida_en or orden.estado == 'enviada' %}<td class="small">{% if f.instance.pk %}{{ f.instance.recibido|floatformat:"-2" }} de {{ f.instance.total|floatformat:"-2" }}{% endif %}</td>{% endif %}
+          <td class="text-center">{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      {% if orden.solicitud %}<div class="card-body border-top small text-muted-jn py-2"><i class="bi bi-info-circle"></i> «Para el ticket» queda apartado para {{ orden.solicitud.numero }} al recibir; lo adicional queda libre en bodega para después.</div>{% endif %}
+      {% if orden.factura %}<div class="card-body border-top small py-2"><i class="bi bi-receipt"></i> Factura <strong>{{ orden.factura }}</strong> del {{ orden.fecha_factura|date:"d/m/Y" }}{% if orden.recibida_por %} · recibida por {{ orden.recibida_por.get_full_name|default:orden.recibida_por.username }} el {{ orden.recibida_en|date:"d/m/Y h:i a" }}{% endif %}
+        · <a href="{% url 'inventario:etiquetas' %}?factura={{ orden.factura|urlencode }}"><i class="bi bi-qr-code"></i> Etiquetas de los equipos de esta factura</a></div>{% endif %}
+      <div class="card-body border-top small d-flex justify-content-end gap-4"><span>Subtotal <b>{{ totales.base|pesos }}</b></span><span>IVA <b>{{ totales.iva|pesos }}</b></span><span>Total <b>{{ totales.total|pesos }}</b></span></div>
+      {% if editable %}<div class="card-footer d-flex flex-wrap justify-content-end gap-2">
+        {% if orden.estado == 'enviada' %}<button class="btn btn-outline-danger" name="accion" value="cancelar" formnovalidate>Cancelar orden</button>
+          <a class="btn btn-success" href="{% url 'inventario:orden_recibir' orden.pk %}"><i class="bi bi-receipt"></i> Llegó: recibir factura</a>{% endif %}
+        <button class="btn btn-outline-primary" name="accion" value="guardar"><i class="bi bi-check2"></i> Guardar</button>
+        {% if orden.estado == 'borrador' %}<button class="btn btn-accent" name="accion" value="enviar"><i class="bi bi-send"></i> Marcar enviada al proveedor</button>{% endif %}
+      </div>{% endif %}
+    </div></div>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block titulo %}Auditar a {{ tecnico }}{% endblock %}
+{% block contenido %}
+<a href="{% url 'inventario:herramientas' %}?tecnico={{ tecnico.pk }}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Herramientas de {{ tecnico }}</a>
+<h1 class="h3 page-title my-2">Auditoría de herramientas · {{ tecnico }}</h1>
+<p class="text-muted-jn">Revise en físico <strong>todas</strong> sus herramientas. Si algo no coincide (cantidad o estado) explique qué pasó en la nota. Solo una herramienta dañada se puede dar de baja. La auditoría queda como registro permanente: no se edita ni se borra.</p>
+{% for e in errores %}<div class="alert alert-danger py-2 small mb-2">{{ e }}</div>{% endfor %}
+{% if filas %}
+<form method="post">{% csrf_token %}
+  <div class="card mb-3">
+    <div class="table-responsive">
+      <table class="table mb-0 align-middle small">
+        <thead><tr><th>Herramienta</th><th class="text-end">Registrado</th><th style="width:110px">Encontrado</th><th style="width:170px">Estado encontrado</th><th>Nota</th><th class="text-center">Dar de baja</th></tr></thead>
+        <tbody>
+        {% for f in filas %}
+          <tr class="fila-auditoria">
+            <td><div class="fw-semibold">{{ f.h.nombre }}</div><div class="text-muted-jn">{{ f.h.marca }}{% if f.h.serial %} · S/N {{ f.h.serial }}{% endif %}</div></td>
+            <td class="text-end text-nowrap">{{ f.h.cantidad }} · {{ f.h.get_estado_display }}</td>
+            <td><input type="number" min="0" step="1" name="cantidad_{{ f.h.pk }}" value="{{ f.cantidad }}" class="form-control form-control-sm" data-registrado="{{ f.h.cantidad }}" aria-label="Cantidad encontrada de {{ f.h.nombre }}"></td>
+            <td><select name="estado_{{ f.h.pk }}" class="form-select form-select-sm" aria-label="Estado encontrado de {{ f.h.nombre }}">{% for v, n in estados %}<option value="{{ v }}" {% if v == f.estado %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></td>
+            <td><input type="text" name="nota_{{ f.h.pk }}" value="{{ f.nota }}" maxlength="500" class="form-control form-control-sm" placeholder="Obligatoria si hay novedad" aria-label="Nota de {{ f.h.nombre }}"></td>
+            <td class="text-center"><input type="checkbox" class="form-check-input" name="baja_{{ f.h.pk }}" {% if f.baja %}checked{% endif %} aria-label="Dar de baja {{ f.h.nombre }}" title="Solo si está dañada"></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card mb-3"><div class="card-body">
+    <label class="form-label fw-medium" for="nota_general">Nota general (opcional)</label>
+    <textarea name="nota_general" id="nota_general" class="form-control" rows="2" maxlength="1000">{{ nota_general }}</textarea>
+  </div></div>
+  <button class="btn btn-accent" onclick="return confirm('¿Registrar la auditoría? Queda como registro permanente.')"><i class="bi bi-clipboard2-check"></i> Registrar auditoría</button>
+</form>
+<script>
+  // Resalta la fila cuando lo encontrado no coincide con lo registrado (necesita nota)
+  document.querySelectorAll('.fila-auditoria').forEach(function (fila) {
+    const cant = fila.querySelector('input[type=number]'), est = fila.querySelector('select'), registrado = est.value;
+    function marcar() {
+      const novedad = String(cant.value) !== cant.dataset.registrado || est.value !== registrado;
+      fila.classList.toggle('table-warning', novedad);
+      fila.querySelector('input[type=text]').required = novedad;
+    }
+    cant.addEventListener('input', marcar); est.addEventListener('change', marcar); marcar();
+  });
+</script>
+{% else %}
+<div class="card card-body text-muted-jn">{{ tecnico }} no tiene herramientas asignadas para auditar.</div>
+{% endif %}
+{% endblock %}

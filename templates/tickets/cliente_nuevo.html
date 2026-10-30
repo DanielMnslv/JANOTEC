@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block titulo %}Registrar solicitud{% endblock %}
+{% block contenido %}
+<a href="{% if user.es_personal %}{% url 'panel' %}{% else %}{% url 'mis_tickets' %}{% endif %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Volver</a>
+<h1 class="h3 page-title mt-2 mb-1">Registrar una solicitud</h1>
+<p class="text-muted-jn mb-4">Soporte técnico, mantenimiento o toma de requerimientos. Al enviarla se genera un número de radicado.</p>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="alert alert-danger small"><i class="bi bi-telephone-fill"></i> <strong>¿Es una emergencia en curso</strong> (intrusión, alarma activa, riesgo para personas)? No espere: llame de inmediato a la central de monitoreo 24/7.</div>
+    <div class="card">
+      <div class="card-body p-4">
+        <form method="post" enctype="multipart/form-data" novalidate>{% csrf_token %}
+          {% for e in form.non_field_errors %}<div class="alert alert-danger">{{ e }}</div>{% endfor %}
+          {% if form.errors %}<div class="alert alert-warning small"><i class="bi bi-exclamation-circle"></i> Revise los campos marcados en rojo.</div>{% endif %}
+          {% include "tickets/_radicacion.html" %}
+          <div class="d-flex justify-content-end gap-2 mt-2">
+            <a href="{% if user.es_personal %}{% url 'panel' %}{% else %}{% url 'mis_tickets' %}{% endif %}" class="btn btn-light">Cancelar</a>
+            <button class="btn btn-accent"><i class="bi bi-send"></i> Registrar solicitud</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-signpost-split"></i> ¿Qué pasa después?</div>
+      <div class="card-body">
+        <ol class="pasos-despues mb-0">
+          <li><strong>Generado:</strong> recibe el número de radicado en pantalla y en los correos indicados.</li>
+          <li><strong>Recepcionado:</strong> el área técnica valida el requerimiento.</li>
+          <li><strong>En cronograma:</strong> se programa la visita y llega al correo la <strong>autorización de ingreso</strong> para aceptarla o rechazarla.</li>
+          <li><strong>Visita ejecutada:</strong> el técnico diligencia el acta y usted confirma si quedó solucionado.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="small text-muted-jn mt-3 px-1"><i class="bi bi-person-badge"></i>
+      {% if user.es_cliente %}Registrando a nombre de <strong>{{ user.empresa }}</strong> como {{ user.get_full_name|default:user.username }}.
+      {% else %}Registrando a nombre del cliente como <strong>{{ user.get_full_name|default:user.username }}</strong> ({{ user.rol_corto }}).{% endif %}</div>
+  </div>
+</div>
+{% endblock %}

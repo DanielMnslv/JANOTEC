@@ -1,0 +1,9 @@
+<form method="post" action="{% url 'comercial:informe' ticket.radicado %}" enctype="multipart/form-data" class="mt-2">{% csrf_token %}
+  {% include "tickets/_campo.html" with campo=form_informe.necesidad %}
+  {% include "tickets/_campo.html" with campo=form_informe.solucion %}
+  {% include "tickets/_campo.html" with campo=form_informe.servicios %}
+  {% include "tickets/_campo.html" with campo=form_informe.materiales %}
+  {% include "tickets/_campo.html" with campo=form_informe.observaciones %}
+  {% include "tickets/_campo.html" with campo=form_informe.archivos %}
+  <div class="text-end"><button class="btn btn-primary"><i class="bi bi-check2"></i> {{ boton }}</button></div>
+</form>

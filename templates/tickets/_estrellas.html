@@ -1,0 +1,1 @@
+{# Muestra una calificación de 1 a 10: ★★★★★★★★☆☆ 8/10 #}<span class="estrellas-nota" title="{{ valor }} de 10">{% for i in "0123456789"|make_list %}{% if forloop.counter <= valor %}★{% else %}<span class="apagada">★</span>{% endif %}{% endfor %}</span> <span class="small fw-semibold">{{ valor }}/10</span>

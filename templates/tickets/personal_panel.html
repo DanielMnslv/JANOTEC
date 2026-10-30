@@ -1,0 +1,82 @@
+{% extends "base.html" %}{% load tickets_extras %}
+{% block titulo %}{% if user.es_supervisor %}Recepción de tickets{% else %}Mis tickets asignados{% endif %}{% endblock %}
+{% block contenido %}
+<div class="mb-4">
+  {% if user.es_supervisor %}
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <h1 class="h3 page-title mb-1">Recepción y verificación de tickets</h1>
+        <p class="text-muted-jn mb-0">Revise cada solicitud, corrija lo que haga falta y márquela como <strong>recepcionada</strong>: queda lista para arrastrarla al cronograma.</p>
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-primary" href="{% url 'nuevo_ticket' %}"><i class="bi bi-plus-lg"></i> Registrar solicitud</a>
+        <a class="btn btn-accent" href="{% url 'cronograma:semana' %}"><i class="bi bi-calendar-week"></i> Cronograma</a>
+      </div>
+    </div>
+  {% else %}
+    <h1 class="h3 page-title mb-1">Mis tickets asignados</h1>
+    <p class="text-muted-jn mb-0">Solicitudes de las visitas que le programaron en el cronograma. Diligencie el acta al terminar cada visita.</p>
+  {% endif %}
+</div>
+
+{% if user.es_supervisor %}{% include "tickets/_casos_area.html" with area_1="Coordinación" area_2="Técnicos" %}{% endif %}
+
+<div class="row g-3 mb-4">
+  {% if not user.es_supervisor %}<div class="col-6 col-md-4 col-xl"><a class="kpi {% if ind.por_atender %}alerta{% endif %}" href="?estado=por_atender"><div class="valor">{{ ind.por_atender }}</div><div class="etiqueta">Programados por atender</div></a></div>{% endif %}
+  <div class="col-6 col-md-4 col-xl"><a class="kpi" href="?estado=abiertos"><div class="valor">{{ ind.abiertos }}</div><div class="etiqueta">Abiertos</div></a></div>
+  {% if user.es_supervisor %}<div class="col-6 col-md-4 col-xl"><a class="kpi {% if ind.generados %}alerta{% endif %}" href="?estado=generado"><div class="valor">{{ ind.generados }}</div><div class="etiqueta">Generados por recepcionar</div></a></div>{% endif %}
+  <div class="col-6 col-md-4 col-xl"><a class="kpi aviso" href="?estado=recepcionado"><div class="valor">{{ ind.por_programar }}</div><div class="etiqueta">Por programar en cronograma</div></a></div>
+  <div class="col-6 col-md-4 col-xl"><a class="kpi" href="?estado=en_cronograma"><div class="valor">{{ ind.programados }}</div><div class="etiqueta">En cronograma / autorizados</div></a></div>
+  <div class="col-6 col-md-4 col-xl"><a class="kpi {% if ind.criticos %}alerta{% endif %}" href="?estado=abiertos&orden=prioridad"><div class="valor">{{ ind.criticos }}</div><div class="etiqueta">Alta / crítica</div></a></div>
+  <div class="col-6 col-md-4 col-xl"><a class="kpi {% if ind.aplazados %}aviso{% endif %}" href="?aplazados=1"><div class="valor">{{ ind.aplazados }}</div><div class="etiqueta">Aplazados por recepcionar / reprogramar</div></a></div>
+  <div class="col-6 col-md-4 col-xl"><div class="kpi"><div class="valor">{{ ind.hoy }}</div><div class="etiqueta">Radicados hoy</div></div></div>
+</div>
+
+<div class="card">
+  <div class="card-body border-bottom">
+    <form class="row g-2" method="get">
+      <div class="col-lg-3">{{ form.q }}</div>
+      <div class="col-6 col-lg-2">{{ form.tipo }}</div>
+      <div class="col-6 col-lg-2">{{ form.estado }}</div>
+      <div class="col-6 col-lg-2">{{ form.prioridad }}</div>
+      <div class="col-6 col-lg-3">{{ form.empresa }}</div>
+      {% if form.asignado %}<div class="col-6 col-lg-3">{{ form.asignado }}</div>{% endif %}
+      <input type="hidden" name="orden" value="{{ orden }}">
+      <div class="col-lg-2 d-grid"><button class="btn btn-outline-primary"><i class="bi bi-funnel"></i> Filtrar</button></div>
+    </form>
+    <div class="small mt-2 text-muted-jn">Ordenar:
+      <a href="?{{ params }}&orden=-creado" class="{% if orden == '-creado' %}fw-bold{% endif %}">más recientes</a> ·
+      <a href="?{{ params }}&orden=creado" class="{% if orden == 'creado' %}fw-bold{% endif %}">más antiguos</a> ·
+      <a href="?{{ params }}&orden=-actualizado" class="{% if orden == '-actualizado' %}fw-bold{% endif %}">última actividad</a> ·
+      <a href="?{{ params }}&orden=prioridad" class="{% if orden == 'prioridad' %}fw-bold{% endif %}">prioridad</a> ·
+      <a href="?{{ params }}&orden=visita" class="{% if orden == 'visita' %}fw-bold{% endif %}">fecha de visita</a>
+      · {{ pagina.paginator.count }} resultado{{ pagina.paginator.count|pluralize }}
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover table-tickets mb-0">
+      <thead><tr><th>Radicado</th><th>Cliente</th><th>Solicitud</th><th>Prioridad</th><th>Estado</th><th class="d-none d-md-table-cell">Responsable</th><th class="text-end">Recibido</th></tr></thead>
+      <tbody>
+      {% for t in pagina %}
+        <tr class="fila-click{% if user.es_supervisor and t.estado == 'generado' or not user.es_supervisor and t.estado == 'autorizado' %} fila-nueva{% endif %}" data-href="{{ t.get_absolute_url }}">
+          <td><a class="radicado" href="{{ t.get_absolute_url }}">{{ t.radicado }}</a>{% if t.veces_aplazado %}<div class="mt-1">{% include "tickets/_aplazado.html" %}</div>{% endif %}<div class="mt-1">{% include "tickets/_levantamiento.html" %}</div></td>
+          <td class="celda-cliente"><div class="fw-semibold">{{ t.empresa.razon_social }}</div>
+            {% if t.sede or t.municipio %}<div class="small text-muted-jn"><i class="bi bi-geo-alt"></i> {% if t.sede %}{{ t.sede.nombre }}{% endif %}{% if t.municipio and t.municipio|lower != t.sede.nombre|lower %}{% if t.sede %} · {% endif %}{{ t.municipio }}{% endif %}</div>{% endif %}</td>
+          <td class="celda-solicitud"><div title="{{ t.descripcion }}">{{ t.asunto|truncatechars:90 }}{% if t.tiene_restricciones %} <i class="bi bi-calendar-x text-danger" title="No puede atender: {{ t.resumen_no_disponible }} {{ t.restricciones }}"></i>{% endif %}</div>
+            <div class="small text-muted-jn"><i class="bi {{ t.icono_tipo }}"></i> {{ t.get_tipo_display }}{% if t.sistema_display %} · {{ t.sistema_display }}{% endif %}</div></td>
+          <td>{% include "tickets/_prioridad.html" %}</td>
+          <td>{% include "tickets/_estado.html" %}{% if t.visita_programada and t.abierto %}<div class="small text-nowrap mt-1" title="Visita programada"><i class="bi bi-calendar-event"></i> {{ t.visita_programada|date:"j M · g:i a" }}</div>{% endif %}
+            {% if t.por_confirmar %}<div class="small text-warning-emphasis mt-1"><i class="bi bi-question-circle"></i> Por confirmar: {{ t.por_confirmar_display|join:", " }}</div>{% endif %}
+            {% if user.es_supervisor and t.estado == 'generado' %}<form method="post" action="{% url 'recepcionar' t.radicado %}" class="mt-1">{% csrf_token %}<input type="hidden" name="volver" value="{{ request.get_full_path }}"><button class="btn btn-sm btn-outline-primary py-0" data-confirmar-recepcion="{{ t.radicado }}" data-correos="{{ t.correos_respuesta|join:', ' }}"><i class="bi bi-inbox"></i> Recepcionar</button></form>{% endif %}</td>
+          <td class="d-none d-md-table-cell small">{% if t.asignado_a %}<div><i class="bi bi-person-gear"></i> {{ t.asignado_a.get_full_name|default:t.asignado_a.username }}</div>{% elif t.abierto %}<div class="text-muted-jn">Sin asignar</div>{% endif %}</td>
+          <td class="small text-end text-nowrap fecha-correo" title="{{ t.creado|date:'l j \d\e F \d\e Y, h:i a' }}">{{ t.creado|fecha_correo }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="text-center py-5 text-muted-jn"><i class="bi bi-check2-all fs-2 d-block mb-2"></i>No hay tickets con estos filtros.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "tickets/_paginacion.html" %}
+{% endblock %}

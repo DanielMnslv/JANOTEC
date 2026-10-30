@@ -1,0 +1,65 @@
+{% extends "base.html" %}{% load static %}
+{% block titulo %}Propuesta económica{% if ticket %} · {{ ticket.radicado }}{% endif %}{% endblock %}
+{% block cuerpo %}
+<div class="container py-4" style="max-width:680px">
+  <div class="text-center mb-4"><img src="{% static 'img/marca/logo-color.webp' %}" alt="JANOTEC" class="logo-login" style="max-height:48px"></div>
+  <div class="card"><div class="card-body p-4">
+    {% if no_disponible %}
+    <h1 class="h5">Esta propuesta ya no está disponible</h1>
+    <p class="mb-0 text-muted-jn">Es posible que su asesor la haya reemplazado por una nueva versión. Responda desde el último correo que le enviamos o comuníquese con su asesor comercial.</p>
+    {% else %}
+    <div class="radicado text-muted-jn">{{ ticket.radicado }} · Propuesta {% if version.codigo %}{{ version.codigo }}{% else %}versión {{ version.numero }}{% endif %}</div>
+    <h1 class="h5 mb-1">{{ ticket.asunto }}</h1>
+    <div class="small text-muted-jn mb-3">{{ ticket.empresa }}{% if ficha.comercial %} · Asesor: {{ ficha.comercial }}{% endif %}</div>
+    <dl class="dl-ficha mb-3">
+      {% if version.valor %}<dt>Valor</dt><dd><b>${{ version.valor|floatformat:"0g" }}</b> antes de IVA</dd>{% endif %}
+      {% if version.archivo %}<dt>Documento</dt><dd>{{ version.archivo.nombre_original }} <span class="small text-muted-jn">(adjunto en el correo)</span></dd>{% endif %}
+    </dl>
+
+    {% if version.estado == 'aprobada' %}
+      <div class="alert alert-success mb-0"><i class="bi bi-check2-circle"></i> <b>¡Gracias! Aprobó esta propuesta.</b> Su asesor coordinará con el área técnica la instalación.</div>
+    {% elif version.estado == 'rechazada' %}
+      <div class="alert alert-secondary mb-0"><i class="bi bi-x-circle"></i> Registramos que no aprueba esta propuesta{% if version.motivo %}: «{{ version.motivo }}»{% endif %}. Gracias por avisarnos.</div>
+    {% elif version.estado == 'cambios' %}
+      <div class="alert alert-info mb-0"><i class="bi bi-pencil-square"></i> Recibimos los cambios que pidió: «{{ version.cambios }}». Su asesor le enviará una nueva versión.</div>
+    {% elif aprobar_ya %}
+      <form method="post" id="aprobar-ya" class="text-center py-3">{% csrf_token %}
+        <input type="hidden" name="accion" value="aprobar">
+        <p class="mb-0"><span class="spinner-border spinner-border-sm text-secondary"></span> Registrando su aprobación…</p>
+        <noscript><button class="btn btn-accent mt-2">Confirmar que apruebo la propuesta</button></noscript>
+      </form>
+      <script>document.getElementById('aprobar-ya').submit();</script>
+    {% elif not vigente %}
+      <div class="alert alert-warning mb-0"><i class="bi bi-info-circle"></i> {% if actual and actual.numero > version.numero %}Hay una versión más reciente de esta propuesta (versión {{ actual.numero }}): responda desde el último correo que le enviamos.{% else %}Esta propuesta ya no está esperando respuesta.{% endif %}</div>
+    {% else %}
+      <h2 class="h6 mb-2">¿Qué decide sobre esta propuesta?</h2>
+      {% if error %}<div class="alert alert-warning py-2">{{ error }}</div>{% endif %}
+      <form method="post" novalidate>{% csrf_token %}
+        <div class="d-grid gap-2 mb-3">
+          <label class="btn btn-outline-success text-start {% if accion == 'aprobar' %}active{% endif %}"><input class="form-check-input me-2" type="radio" name="accion" value="aprobar" {% if accion == 'aprobar' %}checked{% endif %}> <b>Apruebo la propuesta</b></label>
+          <label class="btn btn-outline-primary text-start {% if accion == 'cambios' %}active{% endif %}"><input class="form-check-input me-2" type="radio" name="accion" value="cambios" {% if accion == 'cambios' %}checked{% endif %}> <b>La apruebo, pero con cambios</b> <span class="small">(otra marca, otro alcance…)</span></label>
+          <label class="btn btn-outline-danger text-start {% if accion == 'rechazar' %}active{% endif %}"><input class="form-check-input me-2" type="radio" name="accion" value="rechazar" {% if accion == 'rechazar' %}checked{% endif %}> <b>No la apruebo</b></label>
+        </div>
+        <label class="form-label small" for="texto" id="etiqueta-texto">Comentario (opcional)</label>
+        <textarea class="form-control mb-3" name="texto" id="texto" rows="3" maxlength="2000" placeholder="Ej.: prefiero cámaras marca Hikvision, que es la que siempre hemos usado"></textarea>
+        <button class="btn btn-accent w-100"><i class="bi bi-send"></i> Enviar mi respuesta</button>
+      </form>
+      <script>
+        (function () {
+          const etiqueta = document.getElementById('etiqueta-texto');
+          const textos = {aprobar: 'Comentario (opcional)', cambios: '¿Qué cambios necesita? (obligatorio)', rechazar: '¿Por qué no la aprueba? (opcional, nos ayuda a mejorar)'};
+          function actualizar() {
+            const elegido = document.querySelector('input[name=accion]:checked');
+            document.querySelectorAll('input[name=accion]').forEach(function (r) { r.closest('label').classList.toggle('active', r.checked); });
+            etiqueta.textContent = textos[elegido ? elegido.value : 'aprobar'];
+          }
+          document.querySelectorAll('input[name=accion]').forEach(function (r) { r.addEventListener('change', actualizar); });
+          actualizar();
+        })();
+      </script>
+    {% endif %}
+    {% endif %}
+  </div></div>
+  <p class="small text-muted-jn text-center mt-3">¿Dudas? Responda el correo o comuníquese con su asesor comercial. — JANOTEC S.A.S.</p>
+</div>
+{% endblock %}

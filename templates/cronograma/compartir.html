@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block titulo %}Compartir el cronograma{% endblock %}
+{% block contenido %}
+<h1 class="h3 page-title mb-1">Compartir el cronograma</h1>
+<p class="text-muted-jn mb-3">Quien abra el enlace ve el cronograma de la semana en vivo, sin usuario ni clave. Se actualiza solo y nadie puede cambiar nada.</p>
+{% include "cronograma/_pestanas.html" %}
+<div class="card"><div class="card-body">
+  {% if enlace %}
+    <div class="input-group">
+      <input class="form-control" id="enlace-cronograma" value="{{ enlace.url }}" readonly aria-label="Enlace del cronograma">
+      <button class="btn btn-outline-primary" type="button" onclick="navigator.clipboard.writeText(document.getElementById('enlace-cronograma').value).then(()=>this.innerHTML='<i class=\'bi bi-check2\'></i> Copiado')"><i class="bi bi-clipboard"></i> Copiar</button>
+      <a class="btn btn-outline-secondary" href="{{ enlace.url }}" target="_blank" rel="noopener">Abrir</a>
+    </div>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+      <div class="small text-muted-jn">Quien lo tenga ve clientes, sedes, técnicos e insumos. {% if enlace.ultimo_acceso %}Última vista: {{ enlace.ultimo_acceso|date:"d/m/Y g:i a" }}.{% else %}Aún nadie lo ha abierto.{% endif %}</div>
+      <form method="post" onsubmit="return confirm('¿Revocar el enlace? Dejará de abrir de inmediato para todos.')">{% csrf_token %}<input type="hidden" name="accion" value="revocar"><button class="btn btn-sm btn-outline-danger">Revocar</button></form>
+    </div>
+  {% else %}
+    <form method="post">{% csrf_token %}<button class="btn btn-primary"><i class="bi bi-link-45deg"></i> Crear enlace</button></form>
+  {% endif %}
+</div></div>
+{% endblock %}

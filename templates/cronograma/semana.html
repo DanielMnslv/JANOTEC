@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% block titulo %}Cronograma semanal{% endblock %}
+{% block contenido %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 no-imprimir">
+  <div>
+    <h1 class="h3 page-title mb-1">Cronograma técnico semanal</h1>
+    <p class="text-muted-jn mb-0">{% if editable %}Arrastre los tickets recepcionados a un día: se llenan cliente, sede, actividad, tipo y correos. Lo que cruza con la disponibilidad del cliente queda en <span class="text-danger fw-semibold">rojo</span>.{% else %}Sus visitas de la semana.{% endif %}</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    {% if editable %}
+      <button type="button" class="btn btn-accent" id="btn-nueva"><i class="bi bi-plus-lg"></i> Agregar actividad interna</button>
+    {% else %}
+      <a class="btn btn-outline-primary" href="{% url 'cronograma:mis_documentos' %}"><i class="bi bi-person-vcard"></i> Mis documentos</a>
+    {% endif %}
+    {% url 'cronograma:pdf' as url_pdf %}
+    <button type="button" class="btn btn-outline-success" id="btn-pdf" data-pdf="{{ url_pdf }}?d={{ lunes|date:'Y-m-d' }}" data-archivo="Cronograma-JANOTEC-{{ lunes|date:'Y-m-d' }}.pdf" title="En el celular lo comparte por WhatsApp; en el computador lo descarga"><i class="bi bi-whatsapp"></i> Exportar PDF (WhatsApp)</button>
+    {% if editable %}
+      <form method="post" action="{% url 'cronograma:importar' %}" enctype="multipart/form-data" id="form-importar" class="d-inline">{% csrf_token %}
+        <input type="file" name="archivo" accept="application/json,.json" id="archivo-importar" hidden>
+        <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('archivo-importar').click()" title="Respaldo .json de cronogramajanotec o de esta plataforma"><i class="bi bi-upload"></i> Importar</button>
+      </form>
+      <a class="btn btn-outline-secondary" href="{% url 'cronograma:respaldo' %}?d={{ lunes|date:'Y-m-d' }}"><i class="bi bi-download"></i> Respaldo</a>
+      {% if total %}<form method="post" action="{% url 'cronograma:vaciar' %}?d={{ lunes|date:'Y-m-d' }}" class="d-inline" onsubmit="return confirm('¿Vaciar todo el cronograma de esta semana? Los tickets vuelven a «Recepcionado».')">{% csrf_token %}<button class="btn btn-outline-danger"><i class="bi bi-trash"></i> Vaciar</button></form>{% endif %}
+    {% endif %}
+  </div>
+</div>
+
+{% if editable %}{% include "cronograma/_pestanas.html" %}
+{% if cambios_pendientes %}<div class="alert alert-danger d-flex flex-wrap align-items-center gap-2 no-imprimir"><i class="bi bi-exclamation-triangle"></i> <span>El cronograma de esta semana cambió después de enviarlo a los técnicos.</span> <a class="btn btn-sm btn-danger ms-auto" href="{% url 'cronograma:correos' %}?d={{ lunes|date:'Y-m-d' }}">Revisar y notificar cambios</a></div>
+{% elif publicada %}<div class="small text-success mb-2 no-imprimir"><i class="bi bi-check2-circle"></i> Enviado a los técnicos el {{ publicada.enviada_en|date:"d/m/Y h:i a" }}.</div>{% endif %}{% endif %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+  <a class="btn btn-sm btn-light border no-imprimir" href="?d={{ anterior|date:'Y-m-d' }}&vista={{ vista }}"><i class="bi bi-chevron-left"></i></a>
+  <div class="fw-bold">Semana del {{ lunes|date:"j \d\e F" }} al {{ domingo|date:"j \d\e F \d\e Y" }}</div>
+  <a class="btn btn-sm btn-light border no-imprimir" href="?d={{ siguiente|date:'Y-m-d' }}&vista={{ vista }}"><i class="bi bi-chevron-right"></i></a>
+  <a class="btn btn-sm btn-link no-imprimir" href="?vista={{ vista }}">Esta semana</a>
+  <div class="btn-group btn-group-sm no-imprimir ms-2">
+    <a class="btn {% if vista != 'tabla' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?d={{ lunes|date:'Y-m-d' }}&vista=tablero"><i class="bi bi-kanban"></i> Tablero</a>
+    <a class="btn {% if vista == 'tabla' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?d={{ lunes|date:'Y-m-d' }}&vista=tabla"><i class="bi bi-table"></i> Tabla</a>
+  </div>
+  <span class="ms-auto small text-muted-jn">{{ total }} actividad{{ total|pluralize:"es" }}{% if en_rojo %} · <span class="text-danger fw-semibold">{{ en_rojo }} en rojo</span>{% endif %}</span>
+</div>
+
+<div class="row g-3">
+  {% if editable %}
+  <div class="{% if vista == 'tabla' %}col-12 order-last{% else %}col-xl-3{% endif %} no-imprimir">
+    <div class="card cronograma-pendientes">
+      <div class="card-header d-flex justify-content-between"><span><i class="bi bi-inbox"></i> Tickets por programar</span><span class="badge text-bg-light border">{{ programables|length }}</span></div>
+      <div class="card-body p-2">
+        {% for t in programables %}
+          <div class="ticket-arrastrable" draggable="true" data-ticket="{{ t.pk }}">
+            <div class="d-flex justify-content-between"><a class="radicado small" href="{{ t.get_absolute_url }}" target="_blank">{{ t.radicado }}</a>{% include "tickets/_prioridad.html" %}</div>
+            <div class="fw-semibold small">{{ t.empresa }}{% if t.sede %} · {{ t.sede.nombre }}{% endif %}</div>
+            <div class="small text-muted-jn">{{ t.get_tipo_display }} · {{ t.sistema_display }}{% if t.falla_display %} · {{ t.falla_display }}{% endif %}</div>
+            <div class="small text-truncate" title="{{ t.descripcion }}">{{ t.descripcion }}</div>
+            <div class="mt-1">
+              {% if t.estado == 'pendiente_visita' %}<span class="badge text-bg-warning">Nueva visita</span>{% endif %}
+              {% include "tickets/_aplazado.html" %}
+              {% include "tickets/_levantamiento.html" %}
+              {% if t.trabajo_alturas %}<span class="badge text-bg-danger">Alturas</span>{% endif %}
+              {% if t.acompanamiento_sst %}<span class="badge text-bg-warning">SST</span>{% endif %}
+              {% if t.jornada %}<span class="badge text-bg-light border"><i class="bi {% if t.jornada == 'manana' %}bi-sunrise{% else %}bi-sunset{% endif %}"></i> {{ t.get_jornada_display }}</span>{% endif %}
+              {% if t.tiene_restricciones %}<span class="badge text-bg-light border text-danger" title="{{ t.resumen_no_disponible }} {{ t.restricciones }}"><i class="bi bi-calendar-x"></i> No puede: {{ t.resumen_no_disponible|truncatechars:40 }}</span>{% endif %}
+            </div>
+            {% if t.veces_aplazado %}{% with ultimo=t.aplazamientos.first %}<div class="small text-danger-emphasis mt-1" title="{{ ultimo.detalle }}"><i class="bi bi-arrow-counterclockwise"></i> {{ ultimo.get_motivo_display }}: {{ ultimo.detalle|truncatechars:70 }}</div>{% endwith %}{% endif %}
+            <button type="button" class="btn btn-sm btn-link p-0 mt-1 btn-programar" data-ticket="{{ t.pk }}">Programar…</button>
+          </div>
+        {% empty %}
+          <div class="text-center small text-muted-jn py-4"><i class="bi bi-check2-all fs-3 d-block"></i>No hay tickets recepcionados por programar.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="{% if editable and vista != 'tabla' %}col-xl-9{% else %}col-12{% endif %}">
+    {% if vista == 'tabla' %}{% include "cronograma/_tabla.html" %}{% endif %}
+    <div class="cronograma-semana"{% if vista == 'tabla' %} hidden{% endif %}>
+      {% for d in dias %}
+        <div class="dia-cronograma{% if d.hoy %} hoy{% endif %}" data-fecha="{{ d.fecha|date:'Y-m-d' }}">
+          <div class="dia-titulo"><span>{{ d.nombre }}</span> <span class="text-muted-jn">{{ d.fecha|date:"j/m" }}</span></div>
+          <div class="dia-actividades">
+            {% for a in d.actividades %}
+              <div class="actividad tipo-{{ a.tipo }}{% if a.en_rojo %} en-rojo{% endif %}"{% if editable %} draggable="true" data-actividad="{{ a.pk }}"{% endif %}>
+                <div class="d-flex justify-content-between align-items-start gap-1">
+                  <span class="hora">{{ a.hora_inicio|time:"g:i a" }} – {{ a.hora_fin|time:"g:i a" }}</span>
+                  {% if a.es_interna %}<span class="badge text-bg-dark" title="Sin ticket: no lleva autorización del cliente"><i class="bi bi-building"></i> Interna</span>{% else %}
+                  <span class="badge text-bg-{{ a.color_autorizacion }}" title="{{ a.get_autorizacion_display }}">{% if a.autorizacion == 'aceptada' %}<i class="bi bi-check2"></i>{% elif a.autorizacion == 'rechazada' %}<i class="bi bi-x-lg"></i>{% elif a.autorizacion == 'enviada' %}<i class="bi bi-envelope"></i>{% else %}<i class="bi bi-envelope-dash"></i>{% endif %}</span>{% endif %}
+                </div>
+                <div class="fw-semibold">{{ a.cliente }}</div>
+                {% if a.sede %}<div class="small text-muted-jn">{{ a.sede }}{% if a.ticket.enlace_mapa %} · <a href="{{ a.ticket.enlace_mapa }}" target="_blank" rel="noopener" title="Cómo llegar"><i class="bi bi-geo-alt"></i></a>{% endif %}</div>{% endif %}
+                <div class="small"><span class="pill-tipo">{{ a.get_tipo_display }}</span> {% if a.ticket %}<a class="radicado small" href="{{ a.ticket.get_absolute_url }}">{{ a.ticket.radicado }}</a>{% endif %}</div>
+                <div class="small mt-1">{{ a.actividad|truncatechars:90 }}</div>
+                <div class="small mt-1"><i class="bi bi-person-gear"></i> {% for u in a.encargados.all %}{{ u.first_name|default:u.username }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}{% if a.acompanantes.all %} <span class="text-muted-jn">+ {% for u in a.acompanantes.all %}{{ u.first_name|default:u.username }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</div>
+                {% if a.insumos %}<div class="small text-muted-jn mt-1"><i class="bi bi-box-seam"></i> {{ a.insumos|truncatechars:70 }}</div>{% endif %}
+                <div class="mt-1">
+                  {% if a.trabajo_alturas %}<span class="badge text-bg-danger">Alturas</span>{% endif %}
+                  {% if a.sst %}<span class="badge text-bg-warning">SST</span>{% endif %}
+                  {% if a.vehiculo %}<span class="badge text-bg-light border">Vehículo</span>{% endif %}
+                  {% if a.viaticos %}<span class="badge text-bg-light border">Viáticos</span>{% endif %}
+                </div>
+                {% if a.en_rojo %}<div class="small text-danger fw-semibold mt-1"><i class="bi bi-exclamation-triangle"></i> {{ a.motivo_rojo }}</div>{% endif %}
+                {% if editable %}
+                <div class="d-flex flex-wrap gap-1 mt-2 no-imprimir">
+                  {% include "cronograma/_acciones.html" %}
+                  {% if a.insumos and user.gestiona_inventario %}<a class="btn btn-sm btn-outline-secondary py-0" href="{% url 'inventario:entrega' %}?actividad={{ a.pk }}" title="Preparar en bodega la entrega al técnico con lo planeado"><i class="bi bi-box-arrow-right"></i> Entrega</a>{% endif %}
+                  {% if a.autorizacion != 'aceptada' and not a.es_interna %}
+                  <form method="post" action="{% url 'cronograma:enviar_autorizacion' a.pk %}" class="d-inline">{% csrf_token %}
+                    {% if forzar == a.pk|stringformat:"s" %}<input type="hidden" name="forzar" value="1"><button class="btn btn-sm btn-danger py-0"><i class="bi bi-send-exclamation"></i> Enviar de todas formas</button>
+                    {% else %}<button class="btn btn-sm btn-outline-success py-0"><i class="bi bi-send"></i> {% if a.autorizacion == 'sin_enviar' %}Enviar autorización{% else %}Reenviar{% endif %}</button>{% endif %}
+                  </form>
+                  {% endif %}
+                  <form method="post" action="{% url 'cronograma:eliminar' a.pk %}" class="d-inline" onsubmit="return confirm('¿Retirar esta actividad del cronograma?')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger py-0" title="Retirar"><i class="bi bi-trash"></i></button></form>
+                </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+            {% if editable %}<div class="soltar-aqui no-imprimir">Soltar aquí</div>{% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% if editable %}
+{# --- Formulario de la actividad (crear al soltar un ticket / editar) --- #}
+<div class="modal fade" id="modal-actividad" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <form class="modal-content" method="post" id="form-actividad" action="{% url 'cronograma:crear' %}">{% csrf_token %}
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="titulo-actividad">Nueva actividad</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        {{ form.ticket }}
+        <div class="alert alert-danger small py-2" id="aviso-restricciones" hidden></div>
+        <div class="row g-2">
+          <div class="col-md-4"><label class="form-label small mb-1">Fecha</label>{{ form.fecha }}</div>
+          <div class="col-6 col-md-4"><label class="form-label small mb-1">Inicio</label>{{ form.hora_inicio }}</div>
+          <div class="col-6 col-md-4"><label class="form-label small mb-1">Fin</label>{{ form.hora_fin }}</div>
+          <div class="col-md-6"><label class="form-label small mb-1">Cliente</label>{{ form.cliente }}</div>
+          <div class="col-md-6"><label class="form-label small mb-1">Sede</label>{{ form.sede }}</div>
+          <div class="col-12"><label class="form-label small mb-1">Actividad</label>{{ form.actividad }}</div>
+          <div class="col-md-6" id="bloque-tipo"><label class="form-label small mb-1">Tipo</label>{{ form.tipo }}</div>
+          <div class="col-md-6"><label class="form-label small mb-1">Línea / solución</label>{{ form.linea }}</div>
+          <div class="col-md-6"><label class="form-label small mb-1">Encargado(s)</label><div class="lista-tecnicos" id="lista-encargados">{% for op in form.encargados %}<div class="form-check">{{ op.tag }} <label class="form-check-label small" for="{{ op.id_for_label }}">{{ op.choice_label }}</label></div>{% endfor %}</div></div>
+          <div class="col-md-6"><label class="form-label small mb-1">Acompañante(s)</label><div class="lista-tecnicos" id="lista-acompanantes">{% for op in form.acompanantes %}<div class="form-check">{{ op.tag }} <label class="form-check-label small" for="{{ op.id_for_label }}">{{ op.choice_label }}</label></div>{% endfor %}</div></div>
+          <div class="col-12"><label class="form-label small mb-1">Insumos y equipos</label>
+            {% include "cronograma/_selector_inventario.html" %}{{ form.insumos }}</div>
+          <div class="col-12" id="aviso-interna" hidden><div class="alert alert-secondary small py-2 mb-0"><i class="bi bi-building"></i> <b>Actividad interna</b> (sin ticket): se le avisa al técnico, pero no lleva autorización ni se le envía nada a ningún cliente.</div></div>
+          <div class="col-12" id="bloque-notificar"><label class="form-label small mb-1">Notificar a</label>{{ form.notificar_a }}<div class="form-text">{{ form.notificar_a.help_text }}</div>
+            {% if contactos_dir %}<div class="d-flex flex-wrap gap-1 mt-1">{% for c in contactos_dir %}<button type="button" class="btn btn-sm btn-light border py-0 agregar-destino" data-email="{{ c.email }}" title="{{ c.email }}">+ {{ c.nombre }}</button>{% endfor %}</div>{% endif %}</div>
+          <div class="col-12 d-flex flex-wrap gap-3">
+            <div class="form-check">{{ form.trabajo_alturas }} <label class="form-check-label" for="{{ form.trabajo_alturas.id_for_label }}">Trabajo en alturas</label></div>
+            <div class="form-check">{{ form.sst }} <label class="form-check-label" for="{{ form.sst.id_for_label }}">Acompañamiento SST (HSE)</label></div>
+            <div class="form-check">{{ form.vehiculo }} <label class="form-check-label" for="{{ form.vehiculo.id_for_label }}">Requiere vehículo</label></div>
+            <div class="form-check">{{ form.viaticos }} <label class="form-check-label" for="{{ form.viaticos.id_for_label }}">Requiere viáticos</label></div>
+          </div>
+          <div class="col-12" id="bloque-sst">
+            <div class="row g-2 p-2 rounded" style="background:#fff8e6">
+              <div class="col-md-4"><label class="form-label small mb-1">Persona HSE solicitada</label>{{ form.sst_persona }}</div>
+              <div class="col-md-4"><label class="form-label small mb-1">Tipo de trabajo (justificación)</label>{{ form.sst_trabajo }}</div>
+              <div class="col-md-4"><label class="form-label small mb-1">Duración prevista</label>{{ form.sst_duracion }}</div>
+              <div class="col-12 small text-muted-jn">Cuando el cliente acepte la autorización, se enviará la solicitud al área SST.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar en el cronograma</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{ valores_tickets|json_script:"valores-tickets" }}
+{{ valores_actividades|json_script:"valores-actividades" }}
+{{ lunes|date:"Y-m-d"|json_script:"lunes" }}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// PDF de la semana: en el celular se comparte como archivo (WhatsApp); en el computador se descarga
+(function () {
+  const b = document.getElementById('btn-pdf');
+  if (!b) return;
+  b.addEventListener('click', async function () {
+    const r = await fetch(b.dataset.pdf, {credentials: 'same-origin'});
+    if (!r.ok) return;
+    const archivo = new File([await r.blob()], b.dataset.archivo, {type: 'application/pdf'});
+    if (navigator.canShare && navigator.canShare({files: [archivo]})) {
+      try { await navigator.share({files: [archivo], title: 'Cronograma JANOTEC'}); return; }
+      catch (e) { if (e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(archivo); a.download = b.dataset.archivo;
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+})();
+</script>
+{% if editable %}
+<script>
+(function () {
+  const tickets = JSON.parse(document.getElementById('valores-tickets').textContent);
+  const actividades = JSON.parse(document.getElementById('valores-actividades').textContent);
+  const lunes = JSON.parse(document.getElementById('lunes').textContent);
+  const modal = new bootstrap.Modal(document.getElementById('modal-actividad'));
+  const form = document.getElementById('form-actividad');
+  const urlCrear = "{% url 'cronograma:crear' %}";
+  const urlEditar = "{% url 'cronograma:editar' 0 %}";
+  const urlMover = "{% url 'cronograma:mover' 0 %}";
+  const csrf = form.querySelector('[name=csrfmiddlewaretoken]').value;
+  const campo = function (n) { return form.querySelector('[name=' + n + ']'); };
+  const textos = ['fecha', 'hora_inicio', 'hora_fin', 'cliente', 'sede', 'actividad', 'tipo', 'linea', 'insumos', 'notificar_a',
+                  'sst_persona', 'sst_trabajo', 'sst_duracion'];
+  const casillas = ['trabajo_alturas', 'sst', 'vehiculo', 'viaticos'];
+
+  function llenar(v, titulo) {
+    form.reset();
+    campo('ticket').value = v.ticket || '';
+    textos.forEach(function (n) { if (v[n] !== undefined && campo(n)) campo(n).value = v[n]; });
+    casillas.forEach(function (n) { campo(n).checked = !!v[n]; });
+    ['encargados', 'acompanantes'].forEach(function (n) {
+      form.querySelectorAll('[name=' + n + ']').forEach(function (c) { c.checked = (v[n] || []).includes(parseInt(c.value, 10)); });
+    });
+    const aviso = document.getElementById('aviso-restricciones');
+    aviso.hidden = !v.restricciones && !v.jornada;
+    aviso.innerHTML = (v.jornada ? '<div><i class="bi bi-clock"></i> <strong>Jornada pedida:</strong> ' + v.jornada + '</div>' : '') +
+      (v.restricciones ? '<i class="bi bi-calendar-x"></i> <strong>El cliente NO puede atender:</strong> ' + v.restricciones : '');
+    document.getElementById('titulo-actividad').textContent = titulo;
+    // Sin ticket es una actividad interna: no se elige tipo de servicio ni a qué cliente notificar
+    const interna = !v.ticket;
+    document.getElementById('bloque-tipo').hidden = interna;
+    document.getElementById('bloque-notificar').hidden = interna;
+    document.getElementById('aviso-interna').hidden = !interna;
+    if (interna) campo('tipo').value = 'interna';
+    sst();
+    modal.show();
+  }
+  function nuevaDesdeTicket(id, fecha) {
+    const v = Object.assign({hora_inicio: '08:00', hora_fin: '12:00', sst_duracion: 'medio día'}, tickets[id], {ticket: id, fecha: fecha || lunes});
+    form.action = urlCrear;
+    llenar(v, 'Programar ' + v.radicado);
+  }
+  function sst() { document.getElementById('bloque-sst').hidden = !campo('sst').checked; }
+  campo('sst').addEventListener('change', sst);
+
+  document.querySelectorAll('.agregar-destino').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const caja = campo('notificar_a');
+      const lista = caja.value.split(/[;,]/).map(function (x) { return x.trim(); }).filter(Boolean);
+      if (!lista.includes(b.dataset.email)) lista.push(b.dataset.email);
+      caja.value = lista.join(' ; ');
+    });
+  });
+  const archivo = document.getElementById('archivo-importar');
+  archivo.addEventListener('change', function () { if (archivo.files.length) document.getElementById('form-importar').submit(); });
+
+  document.getElementById('btn-nueva').addEventListener('click', function () {
+    form.action = urlCrear;
+    llenar({fecha: lunes, hora_inicio: '08:00', hora_fin: '12:00', tipo: 'interna', linea: 'Otro', sst_duracion: 'medio día'}, 'Nueva actividad interna');
+  });
+  document.querySelectorAll('.btn-programar').forEach(function (b) {
+    b.addEventListener('click', function () { nuevaDesdeTicket(b.dataset.ticket); });
+  });
+  document.querySelectorAll('.btn-editar').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const v = actividades[b.dataset.actividad];
+      form.action = urlEditar.replace('/0/', '/' + b.dataset.actividad + '/');
+      llenar(v, 'Editar actividad' + (v.radicado ? ' · ' + v.radicado : ''));
+    });
+  });
+
+  // Arrastrar: tickets desde la izquierda o actividades entre días
+  document.querySelectorAll('[draggable=true]').forEach(function (el) {
+    el.addEventListener('dragstart', function (e) {
+      e.dataTransfer.setData('text/plain', JSON.stringify(el.dataset.ticket ? {ticket: el.dataset.ticket} : {actividad: el.dataset.actividad}));
+      el.classList.add('arrastrando');
+    });
+    el.addEventListener('dragend', function () { el.classList.remove('arrastrando'); });
+  });
+  document.querySelectorAll('.dia-cronograma').forEach(function (dia) {
+    dia.addEventListener('dragover', function (e) { e.preventDefault(); dia.classList.add('sobre'); });
+    dia.addEventListener('dragleave', function () { dia.classList.remove('sobre'); });
+    dia.addEventListener('drop', function (e) {
+      e.preventDefault();
+      dia.classList.remove('sobre');
+      let datos;
+      try { datos = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (err) { return; }
+      if (datos.ticket) { nuevaDesdeTicket(datos.ticket, dia.dataset.fecha); return; }
+      if (datos.actividad) {
+        fetch(urlMover.replace('/0/', '/' + datos.actividad + '/'), {
+          method: 'POST', headers: {'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+          body: JSON.stringify({fecha: dia.dataset.fecha}),
+        }).then(function (r) { return r.json(); }).then(function (r) {
+          if (r.choque) alert('¡Atención! ' + r.choque + '\nLa actividad quedará resaltada en rojo.');
+          if (r.reenviar) alert('La visita cambió de fecha: envíe de nuevo la autorización de ingreso al cliente.');
+          location.reload();
+        });
+      }
+    });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

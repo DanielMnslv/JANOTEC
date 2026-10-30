@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block titulo %}Cotizador · {{ ticket.radicado }}{% endblock %}
+{% block contenido %}
+<a href="{% url 'comercial:detalle' ticket.radicado %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ ticket.radicado }}</a>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mt-2 mb-3">
+  <div>
+    <h1 class="h3 page-title mb-1">Propuesta económica · {{ codigo }}</h1>
+    <p class="text-muted-jn mb-0">{{ ticket.empresa.razon_social }}{% if ticket.sede %} · {{ ticket.sede }}{% endif %} · versión {{ numero }}</p>
+  </div>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'comercial:catalogo' %}" target="_blank" rel="noopener"><i class="bi bi-tags"></i> Catálogo de precios</a>
+</div>
+
+<form method="post" id="form-cotizacion">{% csrf_token %}
+  {{ lineas.management_form }}
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <div class="card mb-3"><div class="card-body">
+        {% include "tickets/_campo.html" with campo=form.alcance %}
+        {% if ficha.informe_listo %}
+        {% if ficha.informe.servicios.strip %}<div class="small text-muted-jn mb-1"><i class="bi bi-tools"></i> Servicios del informe:</div>
+        <div class="small border rounded p-2 mb-2 bg-light" style="white-space:pre-line">{{ ficha.informe.servicios }}</div>{% endif %}
+        <div class="small text-muted-jn mb-1"><i class="bi bi-clipboard2-data"></i> Materiales y equipos del informe:</div>
+        <div class="small border rounded p-2 mb-2 bg-light" style="white-space:pre-line">{{ ficha.informe.materiales|default:"Ninguno: solo servicios." }}</div>
+        <button class="btn btn-sm btn-outline-primary" name="accion" value="informe"><i class="bi bi-box-arrow-in-down"></i> Traer los servicios y materiales del informe a la cotización</button>
+        {% else %}<div class="alert alert-warning small mb-0">Primero registre el informe del requerimiento en la ficha comercial: es la base de la propuesta.</div>{% endif %}
+      </div></div>
+
+      <div class="card mb-3"><div class="card-body">
+        <div class="row g-3 align-items-end">
+          <div class="col-md-5">{% include "tickets/_campo.html" with campo=form.modalidad %}</div>
+          <div class="col-md-4 solo-monitoreo">{% include "tickets/_campo.html" with campo=form.aiu_utilidad %}</div>
+          <div class="col-md-3 solo-alquiler">{% include "tickets/_campo.html" with campo=form.tasa_mensual %}</div>
+          <div class="col-md-2 solo-alquiler">{% include "tickets/_campo.html" with campo=form.plazos %}</div>
+          <div class="col-md-2 solo-alquiler">{% include "tickets/_campo.html" with campo=form.opcion_compra %}</div>
+        </div>
+        <p class="small text-muted-jn mb-0 solo-monitoreo">Los ítems son el valor <strong>mensual</strong>. El IVA del 19 % se cobra solo sobre la utilidad del AIU; la tarifa se ajusta cada año.</p>
+        <p class="small text-muted-jn mb-0 solo-alquiler">Los ítems son los bienes a rentar. El canon es una cuota fija mensual sobre el valor con IVA; al terminar, el cliente se queda con los equipos pagando la opción de compra.</p>
+      </div></div>
+
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center"><span><i class="bi bi-list-check"></i> Ítems</span>
+          <button type="button" class="btn btn-sm btn-light border" id="agregar-linea"><i class="bi bi-plus-lg"></i> Agregar ítem</button></div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0 small" id="tabla-lineas">
+            <thead><tr><th style="min-width:260px">Descripción</th><th style="width:85px">Cant.</th><th style="width:130px">Vlr. unitario</th>
+              <th style="width:80px">Desc. %</th><th style="width:70px">IVA %</th><th class="text-end" style="width:120px">Total antes IVA</th><th></th></tr></thead>
+            <tbody>
+              {% for f in lineas %}{% include "comercial/_linea_cotizacion.html" %}{% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <template id="plantilla-linea">{% with f=lineas.empty_form %}{% include "comercial/_linea_cotizacion.html" %}{% endwith %}</template>
+        {% if lineas.non_form_errors %}<div class="card-body text-danger small">{{ lineas.non_form_errors }}</div>{% endif %}
+        {% if not lineas.forms %}<div class="card-body small text-muted-jn" id="sin-lineas">Agregue ítems del catálogo o tráigalos del informe.</div>{% endif %}
+      </div>
+      <datalist id="catalogo-precios">{% for c in catalogo %}<option value="{{ c.descripcion }}">{% endfor %}</datalist>
+      {{ catalogo|json_script:"datos-catalogo" }}
+
+      <div class="card mb-3"><div class="card-body">{% include "tickets/_campo.html" with campo=form.condiciones %}
+        <div class="small text-muted-jn">{{ cotizacion.VIGENCIA }}</div></div></div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card position-sticky" style="top:1rem">
+        <div class="card-header">Resumen</div>
+        <div class="card-body">
+          <dl class="dl-ficha mb-3">
+            <dt>Subtotal</dt><dd id="t-bruto">${{ totales.bruto|floatformat:"0g" }}</dd>
+            <dt>Descuento</dt><dd id="t-descuento">${{ totales.descuento|floatformat:"0g" }}</dd>
+            <dt>Subtotal con descuento</dt><dd id="t-base">${{ totales.base|floatformat:"0g" }}</dd>
+            <dt>IVA<span class="solo-monitoreo"> (sobre la utilidad)</span></dt><dd id="t-iva">${{ totales.iva|floatformat:"0g" }}</dd>
+            <dt><span class="solo-monitoreo">Total mensual</span><span class="no-monitoreo">Total</span><span class="solo-alquiler"> de los bienes</span></dt><dd class="fs-5 fw-bold" id="t-total">${{ totales.total|floatformat:"0g" }}</dd>
+            <dt>Ahorro para el cliente</dt><dd id="t-ahorro">${{ totales.ahorro|floatformat:"0g" }}</dd>
+          </dl>
+          <div class="solo-alquiler mb-3">
+            <div class="small fw-semibold mb-1">Canon mensual</div>
+            <table class="table table-sm small mb-1"><tbody id="t-canones"></tbody></table>
+            <div class="small text-muted-jn">Opción de compra al final: <span id="t-compra"></span></div>
+          </div>
+          <div class="d-grid gap-2">
+            <button class="btn btn-outline-primary" name="accion" value="guardar"><i class="bi bi-save"></i> Guardar</button>
+            <a class="btn btn-outline-secondary" href="{% url 'comercial:cotizacion_pdf' ticket.radicado %}" target="_blank" rel="noopener" id="ver-pdf"><i class="bi bi-file-earmark-pdf"></i> Ver PDF (borrador)</a>
+            <button class="btn btn-accent" name="accion" value="enviar" id="enviar-propuesta"><i class="bi bi-send"></i> Enviar al cliente</button>
+          </div>
+          <p class="small text-muted-jn mt-2 mb-0">Al enviar se genera el PDF {{ codigo }}, queda como versión {{ numero }} y le llega al cliente con los botones para aprobar, pedir cambios o no aprobar. Guarde antes de ver el PDF.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const catalogo = {};
+  JSON.parse(document.getElementById('datos-catalogo').textContent).forEach(function (c) { catalogo[c.descripcion.toLowerCase()] = c; });
+  const tabla = document.querySelector('#tabla-lineas tbody');
+  const total = document.getElementById('id_lineas-TOTAL_FORMS');
+  const pesos = function (v) { return '$' + Math.round(v).toLocaleString('es-CO'); };
+  const num = function (el) { return parseFloat((el && el.value) || '0') || 0; };
+  const modalidad = document.getElementById('id_modalidad');
+  function recalcular() {
+    const m = modalidad.value;
+    document.querySelectorAll('.solo-monitoreo').forEach(function (el) { el.hidden = m !== 'monitoreo'; });
+    document.querySelectorAll('.no-monitoreo').forEach(function (el) { el.hidden = m === 'monitoreo'; });
+    document.querySelectorAll('.solo-alquiler').forEach(function (el) { el.hidden = m !== 'alquiler'; });
+    // Monitoreo con AIU: el IVA va solo sobre la utilidad
+    const factor = m === 'monitoreo' ? num(document.getElementById('id_aiu_utilidad')) / 100 : 1;
+    const t = {bruto: 0, descuento: 0, base: 0, iva: 0, ahorro: 0};
+    tabla.querySelectorAll('tr.linea').forEach(function (tr) {
+      const borrar = tr.querySelector('input[type=checkbox][name$=DELETE]');
+      const bruto = num(tr.querySelector('.cantidad')) * num(tr.querySelector('.valor'));
+      const tasa = num(tr.querySelector('.iva')) / 100 * factor;
+      const desc = bruto * num(tr.querySelector('.descuento')) / 100, base = bruto - desc, iva = base * tasa;
+      tr.querySelector('.subtotal').textContent = pesos(base);
+      tr.classList.toggle('text-decoration-line-through', !!(borrar && borrar.checked));
+      if (borrar && borrar.checked) return;
+      t.bruto += bruto; t.descuento += desc; t.base += base; t.iva += iva; t.ahorro += desc * (1 + tasa);
+    });
+    ['bruto', 'descuento', 'base', 'iva', 'ahorro'].forEach(function (k) { document.getElementById('t-' + k).textContent = pesos(t[k]); });
+    const valor = t.base + t.iva;
+    document.getElementById('t-total').textContent = pesos(valor);
+    if (m === 'alquiler') {  // canon: cuota fija a la tasa mensual sobre el valor con IVA
+      const r = num(document.getElementById('id_tasa_mensual')) / 100;
+      const plazos = (document.getElementById('id_plazos').value.match(/\d+/g) || []).map(Number).filter(function (n) { return n > 0 && n <= 120; });
+      document.getElementById('t-canones').innerHTML = plazos.map(function (n) {
+        const canon = r ? valor * r / (1 - Math.pow(1 + r, -n)) : valor / n;
+        return '<tr><td>' + n + ' meses</td><td class="text-end fw-semibold">' + pesos(canon) + '</td></tr>';
+      }).join('');
+      document.getElementById('t-compra').textContent = pesos(valor * num(document.getElementById('id_opcion_compra')) / 100);
+    }
+  }
+  ['id_modalidad', 'id_aiu_utilidad', 'id_tasa_mensual', 'id_plazos', 'id_opcion_compra'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) { el.addEventListener('input', recalcular); el.addEventListener('change', recalcular); }
+  });
+  function activar(tr) {
+    const desc = tr.querySelector('.descripcion');
+    desc.addEventListener('change', function () {
+      const c = catalogo[desc.value.trim().toLowerCase()];
+      if (!c) return;
+      const valor = tr.querySelector('.valor');
+      if (!num(valor)) valor.value = c.valor_unitario.toFixed(2);
+      tr.querySelector('.iva').value = c.iva;
+      recalcular();
+    });
+    tr.querySelectorAll('input').forEach(function (el) { el.addEventListener('input', recalcular); el.addEventListener('change', recalcular); });
+  }
+  tabla.querySelectorAll('tr.linea').forEach(activar);
+  document.getElementById('agregar-linea').addEventListener('click', function () {
+    const n = parseInt(total.value, 10);
+    const html = document.getElementById('plantilla-linea').innerHTML.replace(/__prefix__/g, n);
+    tabla.insertAdjacentHTML('beforeend', html);
+    total.value = n + 1;
+    const fila = tabla.lastElementChild;
+    fila.querySelector('.cantidad').value = 1;
+    fila.querySelector('.iva').value = 19;
+    fila.querySelector('.descuento').value = 0;
+    activar(fila);
+    const vacio = document.getElementById('sin-lineas');
+    if (vacio) vacio.hidden = true;
+    fila.querySelector('.descripcion').focus();
+  });
+  document.getElementById('enviar-propuesta').addEventListener('click', function (ev) {
+    if (!confirm('¿Enviar la propuesta {{ codigo|escapejs }} al cliente? Se genera el PDF y le llega por correo para que responda.')) ev.preventDefault();
+  });
+  recalcular();
+})();
+</script>
+{% endblock %}

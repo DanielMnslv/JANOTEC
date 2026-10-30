@@ -1,0 +1,6 @@
+{% for a in lista %}
+  <a class="adjunto-chip" href="{% url 'descargar_adjunto' a.pk %}{% if a.es_imagen %}?ver=1{% endif %}" target="_blank" rel="noopener">
+    <i class="bi {% if a.es_imagen %}bi-image{% else %}bi-paperclip{% endif %}"></i>{{ a.nombre_original|truncatechars:38 }}
+    <span class="text-muted">{{ a.tamano|filesizeformat }}</span>
+  </a>
+{% endfor %}

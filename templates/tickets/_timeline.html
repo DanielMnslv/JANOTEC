@@ -1,0 +1,37 @@
+{% comment %}Línea de tiempo. 'vista' = cliente | personal{% endcomment %}
+<ul class="timeline">
+{% for s in seguimientos %}
+  {% with es_cliente=s.autor.es_cliente %}
+  <li>
+    <span class="icono">
+      {% if s.tipo == 'creacion' %}<i class="bi bi-flag-fill text-primary"></i>
+      {% elif s.tipo == 'aplazamiento' %}<i class="bi bi-calendar-x-fill text-danger"></i>
+      {% elif s.tipo == 'cambio_estado' %}<i class="bi bi-arrow-repeat text-success"></i>
+      {% elif s.tipo == 'nota_interna' %}<i class="bi bi-lock-fill text-warning"></i>
+      {% elif s.tipo == 'asignacion' %}<i class="bi bi-person-check text-secondary"></i>
+      {% elif s.tipo == 'prioridad' %}<i class="bi bi-exclamation-triangle text-secondary"></i>
+      {% elif s.tipo == 'calificacion' %}<i class="bi bi-star-fill text-warning"></i>
+      {% elif es_cliente %}<i class="bi bi-person text-primary"></i>
+      {% else %}<i class="bi bi-headset text-dark"></i>{% endif %}
+    </span>
+    <div class="burbuja {% if s.tipo == 'aplazamiento' %}aplazamiento{% elif s.interno %}interna{% elif es_cliente %}de-cliente{% endif %}">
+      <div class="meta d-flex flex-wrap justify-content-between gap-2">
+        <span>
+          <strong class="text-body">{% if es_cliente %}{{ s.autor }}{% elif vista == 'cliente' %}Soporte JANOTEC{% if s.autor %} · {{ s.autor.first_name|default:s.autor.username }}{% endif %}{% else %}{{ s.autor|default:"Sistema" }}{% endif %}</strong>
+          {% if s.interno %}<span class="badge text-bg-warning ms-1"><i class="bi bi-lock"></i> Interna</span>{% endif %}
+        </span>
+        <span title="{{ s.creado|date:'d/m/Y H:i' }}">{{ s.creado|date:"d M Y, h:i a" }}</span>
+      </div>
+      {% if s.tipo == 'aplazamiento' %}<div class="mt-1"><span class="badge badge-aplazado"><i class="bi bi-arrow-counterclockwise"></i> Visita aplazada</span></div>{% endif %}
+      {% if s.tipo == 'cambio_estado' or s.tipo == 'aplazamiento' %}
+        <div class="cambio mt-1">Estado: {% if s.estado_anterior %}<span class="text-muted">{{ s.estado_anterior_display }}</span> <i class="bi bi-arrow-right"></i>{% endif %} <strong>{{ s.estado_nuevo_display }}</strong></div>
+      {% endif %}
+      {% if s.mensaje %}<div class="mensaje">{{ s.mensaje }}</div>{% endif %}
+      {% if s.adjuntos.all %}<div class="mt-2">{% include "tickets/_adjuntos.html" with lista=s.adjuntos.all %}</div>{% endif %}
+    </div>
+  </li>
+  {% endwith %}
+{% empty %}
+  <li class="text-muted-jn">Sin movimientos todavía.</li>
+{% endfor %}
+</ul>

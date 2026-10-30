@@ -1,0 +1,47 @@
+{# Paso a paso del área comercial: solo se habilita lo que toca ahora; lo demás espera a que se complete lo anterior #}
+{% if pasos_comercial %}
+<div class="card mb-4 border-primary no-imprimir" id="paso-a-paso">
+  <div class="card-header d-flex flex-wrap justify-content-between gap-2">
+    <span><i class="bi bi-signpost-split"></i> Paso a paso del área comercial</span>
+    {% if pasos_comercial.paso and not pasos_comercial.rechazada %}<span class="small text-muted-jn">Paso {{ pasos_comercial.paso.numero }} de {{ pasos_comercial.total }}</span>{% endif %}
+  </div>
+  <div class="card-body">
+    <ol class="list-unstyled d-flex flex-wrap gap-2 mb-3">
+      {% for p in pasos_comercial.pasos %}
+        <li class="badge rounded-pill fw-normal py-2 px-3 {% if p.actual and not pasos_comercial.rechazada %}text-bg-primary{% elif p.hecho %}text-bg-success{% else %}text-bg-light border text-muted-jn{% endif %}"
+            title="{% if p.bloqueado %}Se habilita cuando {{ p.cuando }}{% else %}{{ p.hacer }}{% endif %}">
+          {% if p.hecho %}<i class="bi bi-check2"></i>{% elif p.bloqueado or pasos_comercial.rechazada %}<i class="bi bi-lock"></i>{% else %}{{ p.numero }}.{% endif %} {{ p.nombre }}</li>
+      {% endfor %}
+    </ol>
+    {% with p=pasos_comercial.paso %}
+    {% if pasos_comercial.rechazada %}
+      <p class="mb-0 text-danger"><i class="bi bi-x-circle"></i> El cliente no aprobó la propuesta{% if ficha.motivo_rechazo %}: {{ ficha.motivo_rechazo }}{% endif %}.</p>
+    {% elif not en_comercial and p %}
+      <p class="mb-0"><i class="bi bi-hourglass-split"></i> Ahora: <strong>{{ p.nombre }}</strong> · el ticket está en el <strong>área técnica</strong>{% if pasos_comercial.levantamiento %} para la visita de levantamiento; vuelve aquí con el informe{% endif %}.</p>
+    {% elif p %}
+      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+        <div>
+          <div class="fw-semibold">Ahora: {{ p.nombre }} <span class="badge text-bg-light border fw-normal">{{ p.quien }}</span></div>
+          <div class="small text-muted-jn">{{ p.hacer }}</div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+          {% if p.clave == 'asesor' %}
+            <a class="btn btn-accent btn-sm" href="#gestion-comercial" onclick="setTimeout(function(){var s=document.getElementById('id_comercial'); if(s) s.focus();},300)"><i class="bi bi-person-check"></i> Elegir el asesor</a>
+          {% elif p.clave == 'informe' %}
+            <a class="btn btn-accent btn-sm" href="#informe"><i class="bi bi-file-earmark-text"></i> Ir al informe del requerimiento</a>
+          {% elif p.clave == 'propuesta' %}
+            <a class="btn btn-accent btn-sm" href="{% url 'comercial:cotizador' ticket.radicado %}"><i class="bi bi-calculator"></i> Abrir el cotizador</a>
+          {% elif p.clave == 'respuesta' %}
+            <a class="btn btn-outline-primary btn-sm" href="#gestion-comercial"><i class="bi bi-reply"></i> Registrar la respuesta del cliente</a>
+          {% elif p.clave == 'traspaso' %}
+            <span class="small">{% if material_pendiente %}<i class="bi bi-box-seam"></i> Esperando la revisión de bodega ({{ material_pendiente.numero }}).{% else %}<i class="bi bi-arrow-right-circle"></i> Ya puede traspasarlo a instalación.{% endif %}</span>
+          {% endif %}
+        </div>
+      </div>
+    {% else %}
+      <p class="mb-0 text-success"><i class="bi bi-check2-circle"></i> El área comercial completó todos los pasos: el requerimiento sigue en el área técnica para la instalación.</p>
+    {% endif %}
+    {% endwith %}
+  </div>
+</div>
+{% endif %}

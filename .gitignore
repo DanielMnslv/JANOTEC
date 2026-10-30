@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+db.sqlite3
+media/
+staticfiles/
+.venv/
+venv/
+
+# Datos reales de clientes (no se versionan)
+datos_iniciales/

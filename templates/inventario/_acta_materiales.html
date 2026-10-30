@@ -1,0 +1,24 @@
+{# Dentro del acta: el técnico marca el material del inventario que instaló o gastó (sale de su poder) #}
+{% load inventario_extras %}
+<div class="material-inventario p-3 rounded border bg-light">
+  <div class="fw-semibold"><i class="bi bi-boxes"></i> Del inventario que bodega le entregó</div>
+  {% for e in material_errores %}<div class="alert alert-danger py-1 px-2 small my-2">{{ e }}</div>{% endfor %}
+  {% if mat_activos or mat_insumos %}
+    <p class="small text-muted-jn mb-2">Es lo que bodega le entregó. Lo que marque sale de su poder y queda registrado en {{ empresa }} con esta acta.</p>
+    {% for a in mat_activos %}
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="usar_activo" value="{{ a.pk }}" id="usar-{{ a.pk }}" {% if a.pk in elegidos %}checked{% endif %}>
+        <label class="form-check-label small" for="usar-{{ a.pk }}"><span class="radicado">{{ a.placa }}</span> · {{ a.descripcion_corta }}{% if a.serial %} · S/N {{ a.serial }}{% endif %}
+          <span class="text-muted-jn">({{ a.get_modalidad_display|default:"venta" }}{% if ticket and a.ticket_destino_id == ticket.pk %} · entregado para este ticket{% endif %})</span></label>
+      </div>
+    {% endfor %}
+    {% for i, cantidad, usado in mat_insumos %}
+      <div class="row g-2 align-items-center small mt-1">
+        <div class="col-8"><span class="radicado">{{ i.codigo }}</span> · {{ i.descripcion }} <span class="text-muted-jn">(tiene {{ cantidad|cant }} {{ i.get_unidad_display|lower }})</span></div>
+        <div class="col-4"><input type="number" step="any" min="0" max="{{ cantidad }}" name="usar_insumo_{{ i.pk }}" value="{{ usado }}" class="form-control form-control-sm" placeholder="Usó"></div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p class="small text-muted-jn mb-0">No tiene material del inventario en su poder. Si usó algo que no está en el inventario, agréguelo abajo; si bodega se lo entregó, pídale que se lo registre.</p>
+  {% endif %}
+</div>

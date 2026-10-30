@@ -1,0 +1,4 @@
+{% if not doc %}<span class="badge text-bg-light border text-danger"><i class="bi bi-exclamation-circle"></i> Falta</span>
+{% elif doc.vencido %}<a class="badge text-bg-danger text-decoration-none" href="{% url 'cronograma:documento' doc.pk %}" target="_blank">Vencido {{ doc.vigente_hasta|date:"d/m/Y" }}</a>
+{% elif doc.por_vencer %}<a class="badge text-bg-warning text-decoration-none" href="{% url 'cronograma:documento' doc.pk %}" target="_blank">Vence {{ doc.vigente_hasta|date:"d/m/Y" }}</a>
+{% else %}<a class="badge text-bg-success text-decoration-none" href="{% url 'cronograma:documento' doc.pk %}" target="_blank"><i class="bi bi-check2"></i> {% if doc.vigente_hasta %}Hasta {{ doc.vigente_hasta|date:"d/m/Y" }}{% else %}Vigente{% endif %}</a>{% endif %}

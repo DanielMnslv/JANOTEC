@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Órdenes de compra{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Órdenes de compra" subtitulo="Lo que ya se decidió comprar: proveedor, costo y fecha estimada de llegada (la ve coordinación en la lista de alistamiento). Para preguntar precios use una solicitud de cotización." %}
+<div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+  <ul class="nav nav-pills small">
+    <li class="nav-item"><a class="nav-link {% if estado == 'abiertas' %}active{% endif %}" href="?estado=abiertas">Abiertas</a></li>
+    {% for v, l in estados %}<li class="nav-item"><a class="nav-link {% if estado == v %}active{% endif %}" href="?estado={{ v }}">{{ l }}</a></li>{% endfor %}
+  </ul>
+  <form method="post" action="{% url 'inventario:orden_nueva' %}">{% csrf_token %}<button class="btn btn-accent btn-sm"><i class="bi bi-plus-lg"></i> Nueva orden de compra</button></form>
+</div>
+<div class="card"><div class="table-responsive"><table class="table table-tickets mb-0">
+  <thead><tr><th>Orden</th><th>Proveedor</th><th>Para</th><th>Llega</th><th class="text-end">Total</th><th>Estado</th></tr></thead>
+  <tbody>{% for o in ordenes %}{% with t=o.totales %}
+    <tr data-href="{{ o.get_absolute_url }}"><td class="radicado"><a href="{{ o.get_absolute_url }}">{{ o.numero }}</a></td><td class="small">{{ o.proveedor|default:"—" }}</td>
+      <td class="small">{% if o.solicitud %}{{ o.solicitud.numero }} · {{ o.solicitud.ticket.radicado }}{% else %}Stock de bodega{% endif %}</td>
+      <td class="small {% if o.atrasada %}text-danger fw-semibold{% endif %}">{{ o.fecha_estimada|date:"d/m/Y"|default:"—" }}{% if o.atrasada %} · atrasada{% endif %}</td>
+      <td class="text-end">{{ t.total|pesos }}</td><td><span class="badge text-bg-{{ o.color_estado }}">{{ o.get_estado_display }}</span></td></tr>
+  {% endwith %}{% empty %}<tr><td colspan="6" class="text-muted-jn small">No hay órdenes {% if estado == 'abiertas' %}abiertas{% endif %}.</td></tr>{% endfor %}</tbody>
+</table></div></div>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block titulo %}Entregar a técnico{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Entregar material a un técnico" subtitulo="Sale de bodega y queda en poder del técnico. Él lo descuenta al diligenciar el acta, y lo que no use lo devuelve." %}
+{% if solicitud %}
+<div class="alert {% if solicitud.estado == 'aprobada' %}alert-info{% else %}alert-danger{% endif %} small">
+  <div class="fw-semibold"><i class="bi bi-clipboard-check"></i> <a href="{{ solicitud.get_absolute_url }}">{{ solicitud.numero }}</a> · {{ solicitud.ticket.empresa }} · {{ solicitud.ticket.radicado }} · {{ solicitud.get_estado_display }}</div>
+  <div>Precargado con lo aprobado (incluida la holgura de consumibles) que aún no ha salido. Revise o escanee las placas y registre la entrega.</div>
+  {% if pendiente.a_mano %}<div class="mt-1"><i class="bi bi-pencil"></i> Escrito a mano (no está en el inventario): marque lo que entrega para que quede en el acta de entrega.</div>{% endif %}
+</div>
+{% else %}
+<div class="alert alert-light border small"><i class="bi bi-info-circle"></i> El material para clientes sale desde una <a href="{% url 'inventario:solicitudes' %}?estado=aprobada">solicitud aprobada</a>. Aquí, sin solicitud, solo se entregan herramientas de uso del personal (modalidad «Uso del personal»).</div>
+{% endif %}
+<form method="post" class="row g-4">{% csrf_token %}{% if solicitud %}<input type="hidden" name="solicitud" value="{{ solicitud.pk }}">{% endif %}
+  <div class="col-lg-5">
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="alert alert-danger py-2 small">{{ e }}</div>{% endfor %}
+      {% include "tickets/_campo.html" with campo=form.tecnico %}
+      {% include "tickets/_campo.html" with campo=form.modalidad %}
+      {% include "tickets/_campo.html" with campo=form.ticket %}
+      {% include "tickets/_campo.html" with campo=form.empresa %}
+      {% include "tickets/_campo.html" with campo=form.observaciones %}
+    </div></div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card"><div class="card-body">
+      {% for e in errores %}<div class="alert alert-danger py-2 small mb-2">{{ e }}</div>{% endfor %}
+      {% include "inventario/_filas_material.html" %}
+      {% if pendiente.a_mano %}
+      <div class="border-top mt-3 pt-2 small"><div class="fw-semibold mb-1"><i class="bi bi-pencil"></i> Escrito a mano</div>
+        {% for i in pendiente.a_mano %}<div class="form-check"><input class="form-check-input" type="checkbox" name="a_mano" value="{{ i.pk }}" id="am{{ i.pk }}" {% if i.a_mano_listo %}checked{% endif %}>
+          <label class="form-check-label" for="am{{ i.pk }}">{{ i.cantidad|floatformat:"-2" }} {{ i.descripcion }}{% if i.seccion == 'adicional' %} <span class="badge text-bg-light border">adicional</span>{% endif %}{% if not i.a_mano_listo %} <span class="text-warning">(bodega no ha confirmado que lo tiene)</span>{% endif %}</label></div>{% endfor %}
+      </div>{% endif %}
+    </div>
+    {% if solicitud %}
+    <div class="card-body border-top">
+      <div class="small fw-semibold mb-2"><i class="bi bi-pen"></i> Acta de entrega: firmas</div>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="small mb-1">Entrega: <strong>{{ user.get_full_name|default:user.username }}</strong> · Bodega</div>
+          {% include "tickets/_firma.html" with campo=form.firma_entrega titulo="Firma de quien entrega" obligatoria=True %}</div>
+        <div class="col-md-6">
+          <div class="small mb-1">Recibe: <strong>el técnico</strong> elegido arriba</div>
+          {% include "tickets/_firma.html" with campo=form.firma_recibe titulo="Firma del técnico que recibe" %}
+          <div class="form-text">Si el técnico no está en bodega, déjela en blanco: él firma después desde el ticket.</div></div>
+      </div>
+    </div>
+    {% endif %}
+    <div class="card-footer text-end"><button class="btn btn-accent"><i class="bi bi-box-arrow-right"></i> Registrar entrega</button></div></div>
+  </div>
+</form>
+{% endblock %}

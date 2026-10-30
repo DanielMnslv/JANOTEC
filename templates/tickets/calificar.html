@@ -1,0 +1,49 @@
+{% extends "base.html" %}{% load static %}
+{% block titulo %}Califique nuestra atención · {{ ticket.radicado }}{% endblock %}
+{% block cuerpo %}
+<div class="container py-4" style="max-width:640px">
+  <div class="text-center mb-4"><img src="{% static 'img/marca/logo-color.webp' %}" alt="JANOTEC" class="logo-login" style="max-height:48px"></div>
+  <div class="card"><div class="card-body p-4">
+    <div class="radicado text-muted-jn">{{ ticket.radicado }}</div>
+    <h1 class="h5 mb-1">{{ ticket.asunto }}</h1>
+    <div class="small text-muted-jn mb-4">{{ ticket.empresa }}{% if ticket.sede %} · {{ ticket.sede }}{% endif %}</div>
+    {% if ticket.calificacion %}
+      <div class="text-center py-3">
+        <i class="bi bi-heart-fill text-danger fs-1"></i>
+        <h2 class="h4 mt-2">¡Gracias por calificarnos!</h2>
+        <p class="mb-2">Su calificación quedó registrada:</p>
+        <div class="fs-4">{% include "tickets/_estrellas.html" with valor=ticket.calificacion %}</div>
+        {% if ticket.comentario_calificacion %}<p class="text-muted-jn mt-3 mb-0">“{{ ticket.comentario_calificacion }}”</p>
+        {% else %}
+        <form method="post" class="text-start mt-4">{% csrf_token %}
+          <label class="form-label" for="comentario">¿Quiere contarnos algo más? <span class="text-muted-jn">(opcional)</span></label>
+          <textarea class="form-control mb-2" name="comentario" id="comentario" rows="3" maxlength="1000" placeholder="¿Qué hicimos bien o qué podemos mejorar?"></textarea>
+          <button class="btn btn-outline-primary w-100"><i class="bi bi-chat-text"></i> Enviar comentario</button>
+        </form>
+        {% endif %}
+        <p class="small text-muted-jn mt-4 mb-0">Su opinión nos ayuda a mejorar el servicio. — Equipo JANOTEC</p>
+      </div>
+    {% elif ticket.estado != 'cerrado' %}
+      <div class="alert alert-info mb-0"><i class="bi bi-info-circle"></i> Esta solicitud aún no está cerrada. Podrá calificarla cuando terminemos la atención.</div>
+    {% elif automatica %}
+      <form method="post" id="calificacion-automatica" class="text-center py-3">{% csrf_token %}
+        <input type="hidden" name="calificacion" value="{{ nota }}">
+        <div class="fs-4 mb-2">{% include "tickets/_estrellas.html" with valor=nota %}</div>
+        <p class="mb-0" id="registrando"><span class="spinner-border spinner-border-sm text-secondary"></span> Registrando su calificación…</p>
+        <noscript><button class="btn btn-accent mt-2">Confirmar mi calificación de {{ nota }}/10</button></noscript>
+      </form>
+      <script>document.getElementById('calificacion-automatica').submit();</script>
+    {% else %}
+      <form method="post" novalidate>{% csrf_token %}
+        <h2 class="h5">¿Cómo califica la atención que recibió?</h2>
+        <p class="text-muted-jn">Elija de 1 a 10 estrellas y confirme. Si quiere, cuéntenos por qué.</p>
+        {% if error %}<div class="alert alert-warning py-2">{{ error }}</div>{% endif %}
+        <div class="mb-3">{% include "tickets/_selector_estrellas.html" %}</div>
+        <label class="form-label" for="comentario">Comentario (opcional)</label>
+        <textarea class="form-control mb-3" name="comentario" id="comentario" rows="3" maxlength="1000" placeholder="¿Qué hicimos bien o qué podemos mejorar?"></textarea>
+        <button class="btn btn-accent w-100"><i class="bi bi-send"></i> Enviar calificación</button>
+      </form>
+    {% endif %}
+  </div></div>
+</div>
+{% endblock %}

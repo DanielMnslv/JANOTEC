@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block titulo %}Historial de servicio{% endblock %}
+{% block contenido %}
+<div class="mb-4 d-flex flex-wrap justify-content-between align-items-start gap-2">
+  <div>
+  <h1 class="h3 page-title mb-1">Historial de servicio</h1>
+  <p class="text-muted-jn mb-0">
+    {% if user.es_personal %}Actas de soporte, instalación y mantenimiento realizadas en campo.
+    {% else %}Visitas técnicas realizadas por JANOTEC en las sedes de {{ user.empresa }}.{% endif %}
+  </p>
+  </div>
+  {% if user.es_personal %}<a href="{% url 'acta_sin_programar' %}" class="btn btn-accent" title="Para un trabajo que no estaba en el cronograma"><i class="bi bi-plus-lg"></i> Nueva acta</a>{% endif %}
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-4"><div class="kpi"><div class="valor">{{ resumen.total }}</div><div class="etiqueta">Actas</div></div></div>
+  <div class="col-6 col-md-4"><div class="kpi"><div class="valor">{{ resumen.sedes }}</div><div class="etiqueta">Sedes atendidas</div></div></div>
+  <div class="col-12 col-md-4"><a class="kpi" href="?resultado=parcial"><div class="valor">{{ resumen.pendientes }}</div><div class="etiqueta">Parciales o con recomendaciones</div></a></div>
+</div>
+
+<div class="card">
+  <div class="card-body border-bottom">
+    <form class="row g-2" method="get">
+      <div class="col-lg-{% if form.empresa %}3{% else %}4{% endif %}">{{ form.q }}</div>
+      {% if form.empresa %}<div class="col-6 col-lg-3">{{ form.empresa }}</div>{% endif %}
+      {% if form.sede %}<div class="col-6 col-lg-2">{{ form.sede }}</div>{% else %}<div class="col-6 col-lg-2"><select class="form-select" disabled><option>Elija un cliente para ver sus sedes</option></select></div>{% endif %}
+      <div class="col-6 col-lg-1">{{ form.sistema }}</div>
+      <div class="col-6 col-lg-1">{{ form.anio }}</div>
+      <div class="col-6 col-lg-1">{{ form.resultado }}</div>
+      <div class="col-6 col-lg-1 d-grid"><button class="btn btn-outline-primary"><i class="bi bi-funnel"></i></button></div>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover table-tickets mb-0">
+      <thead><tr><th>Acta</th><th>Fecha</th>{% if user.es_personal %}<th>Cliente</th>{% endif %}<th>Sede</th><th>Trabajo</th><th>Resultado</th><th class="d-none d-lg-table-cell">Técnico</th></tr></thead>
+      <tbody>
+      {% for a in pagina %}
+        <tr class="fila-click" data-href="{{ a.get_absolute_url }}">
+          <td><a class="radicado" href="{{ a.get_absolute_url }}">{{ a.numero }}</a></td>
+          <td class="small text-nowrap">{{ a.fecha|date:"d/m/Y" }}</td>
+          {% if user.es_personal %}<td class="small">{{ a.empresa.razon_social|truncatechars:34 }}</td>{% endif %}
+          <td class="small">{{ a.lugar|truncatechars:32 }}</td>
+          <td>{{ a.diagnostico|truncatechars:70 }}<div class="small text-muted-jn">{{ a.actividad }}{% if a.sistema %} · {{ a.sistema|title }}{% endif %}{% if a.modalidad %} · {{ a.get_modalidad_display }}{% endif %}{% if a.origen == 'plataforma' and not a.ticket_id %} · <span class="badge text-bg-warning">No programado</span>{% endif %}</div></td>
+          <td>{% include "tickets/_resultado.html" %}</td>
+          <td class="d-none d-lg-table-cell small">{{ a.tecnico.get_full_name|default:a.tecnico_texto|title }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="text-center py-5 text-muted-jn"><i class="bi bi-clipboard-x fs-2 d-block mb-2"></i>No hay actas con estos filtros.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "tickets/_paginacion.html" %}
+{% endblock %}
+{% block scripts %}
+<script>
+  (function () {
+    const empresa = document.getElementById('id_empresa');
+    if (!empresa) return;
+    empresa.addEventListener('change', function () {
+      const sede = document.getElementById('id_sede');
+      if (sede) sede.value = '';
+      empresa.form.submit();
+    });
+  })();
+</script>
+{% endblock %}

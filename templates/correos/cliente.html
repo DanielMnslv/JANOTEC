@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ titulo }}</title></head>
+<body style="margin:0;padding:0;background:#f5f5f6;font-family:Arial,Helvetica,sans-serif;color:#1f2024;">
+<div style="display:none;max-height:0;overflow:hidden;">{{ resumen }}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f6;padding:24px 0;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #e2e2e6;">
+  <tr><td style="background:#4e4f59;padding:18px 24px;border-bottom:4px solid #acc812;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td valign="middle">
+        <div style="color:#ffffff;font-size:19px;font-weight:bold;letter-spacing:.5px;">JANO<span style="color:#acc812;">TEC</span> S.A.S.</div>
+        <div style="color:#d9dae0;font-size:11px;letter-spacing:.6px;text-transform:uppercase;">Seguridad electrónica y monitoreo 24/7</div>
+      </td>
+      {% if radicado %}<td valign="middle" align="right">
+        <div style="color:#d9dae0;font-size:10px;text-transform:uppercase;letter-spacing:.6px;">Radicado</div>
+        <div style="color:#acc812;font-size:14px;font-weight:bold;font-family:Consolas,monospace;">{{ radicado }}</div>
+      </td>{% endif %}
+    </tr></table>
+  </td></tr>
+  <tr><td style="padding:26px 24px 8px;">
+    <h1 style="margin:0 0 6px;font-size:20px;color:#2f3036;">{{ titulo }}</h1>
+    {% if estado %}<div style="display:inline-block;background:#f2f7d9;color:#4b5a05;border:1px solid #d8e79a;border-radius:20px;font-size:12px;font-weight:bold;padding:3px 12px;">{{ estado }}</div>{% endif %}
+  </td></tr>
+  <tr><td style="padding:12px 24px 4px;font-size:14px;line-height:1.6;">
+    <p style="margin:0 0 12px;">{{ saludo }}</p>
+    {% for p in parrafos %}<p style="margin:0 0 12px;">{{ p|linebreaksbr }}</p>{% endfor %}
+    {% if destacado %}<div style="background:#f6f7f9;border-left:4px solid #acc812;border-radius:6px;padding:12px 14px;margin:4px 0 16px;font-size:13px;line-height:1.55;">{{ destacado|linebreaksbr }}</div>{% endif %}
+    {% if datos %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;margin:4px 0 18px;">
+      {% for etiqueta, valor in datos %}<tr>
+        <td style="padding:8px 10px;background:#f0f1f4;font-weight:bold;width:170px;border:1px solid #e2e2e6;vertical-align:top;">{{ etiqueta }}</td>
+        <td style="padding:8px 10px;border:1px solid #e2e2e6;">{{ valor|linebreaksbr }}</td>
+      </tr>{% endfor %}
+    </table>
+    {% endif %}
+    {% if aviso %}<div style="background:#fff7e0;border:1px solid #f1dc9c;border-radius:8px;padding:12px 14px;margin:0 0 16px;font-size:13px;">{{ aviso|linebreaksbr }}</div>{% endif %}
+    {% if acciones %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:6px 0 16px;background:#f6f7f9;border:1px solid #e2e2e6;border-radius:10px;">
+      <tr><td style="padding:16px 14px 8px;text-align:center;">
+        <div style="font-size:16px;font-weight:bold;color:#2f3036;">¿Qué decide sobre esta propuesta?</div>
+        <div style="font-size:12px;color:#5f606b;margin-top:2px;">«Apruebo» queda registrado de inmediato. Si pide cambios o no la aprueba, cuéntenos por qué en la página que se abre.</div>
+      </td></tr>
+      <tr><td align="center" style="padding:6px 10px 16px;">
+        {% for nombre, url, tipo in acciones %}
+        <a href="{{ url }}" style="display:inline-block;margin:4px;text-decoration:none;font-weight:bold;font-size:14px;padding:12px 18px;border-radius:8px;{% if tipo == 'aprobar' %}background:#acc812;color:#2f3036;{% elif tipo == 'cambios' %}background:#ffffff;color:#2f3036;border:2px solid #4e4f59;{% else %}background:#ffffff;color:#b3261e;border:2px solid #d6453d;{% endif %}">{% if tipo == 'aprobar' %}&#10003; {% elif tipo == 'cambios' %}&#9998; {% else %}&#10007; {% endif %}{{ nombre }}</a>
+        {% endfor %}
+      </td></tr>
+    </table>
+    {% endif %}
+    {% if estrellas %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:6px 0 16px;background:#fbf8ec;border:1px solid #efe2a8;border-radius:10px;">
+      <tr><td style="padding:16px 14px 6px;text-align:center;">
+        <div style="font-size:16px;font-weight:bold;color:#2f3036;">¿Cómo califica la atención que recibió?</div>
+        <div style="font-size:12px;color:#5f606b;margin-top:2px;">Toque una estrella (1 es muy mala y 10 es excelente): su calificación queda registrada de inmediato.</div>
+      </td></tr>
+      <tr><td align="center" style="padding:8px 6px 4px;">
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+          {% for n, url in estrellas %}<td align="center" style="padding:0 1px;">
+            <a href="{{ url }}" title="{{ n }} de 10" style="display:block;text-decoration:none;color:#f2b200;font-size:30px;line-height:32px;">&#9733;</a>
+            <a href="{{ url }}" style="display:block;text-decoration:none;color:#8a8b94;font-size:11px;line-height:14px;">{{ n }}</a>
+          </td>{% endfor %}
+        </tr></table>
+      </td></tr>
+      <tr><td style="padding:2px 14px 14px;text-align:center;font-size:11px;color:#8a8b94;">Su opinión nos toma un minuto y nos ayuda a mejorar.</td></tr>
+    </table>
+    {% endif %}
+    {% if boton_url %}
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 10px;"><tr><td>
+      <a href="{{ boton_url }}" style="display:inline-block;background:#acc812;color:#2f3036;text-decoration:none;font-weight:bold;font-size:14px;padding:12px 24px;border-radius:8px;">{{ boton_texto }}</a>
+    </td></tr></table>
+    <p style="margin:0 0 16px;font-size:11px;color:#8a8b94;">Si el botón no funciona, copie este enlace en su navegador:<br><span style="word-break:break-all;">{{ boton_url }}</span></p>
+    {% endif %}
+    <p style="margin:18px 0 4px;">Cordialmente,</p>
+    <p style="margin:0 0 20px;"><b>{{ firma }}</b><br><span style="color:#5f606b;font-size:13px;">JANOTEC S.A.S.</span></p>
+  </td></tr>
+  <tr><td style="padding:14px 24px;background:#f0f1f4;font-size:11px;line-height:1.5;color:#5f606b;">
+    <b>JANOTEC S.A.S.</b> · Cra 40A N.º 16-21, Barrio Villa María · Villavicencio, Meta<br>
+    Tel: 310 229 8160 · janotec@janotec.app<br>
+    <span style="color:#8a8b94;">Este es un mensaje automático de la plataforma de soporte. Para cualquier inquietud responda a este correo o comuníquese con nosotros citando el número de radicado.</span>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>

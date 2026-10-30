@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block titulo %}Registrar compra{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Registrar compra" subtitulo="Ingreso a bodega con su factura, o sin factura (inventario inicial, devoluciones, cortesías)." %}
+<ul class="nav nav-tabs mb-3">
+  <li class="nav-item"><a class="nav-link {% if tipo == 'activo' %}active{% endif %}" href="?tipo=activo"><i class="bi bi-upc-scan"></i> Activo (lleva placa)</a></li>
+  <li class="nav-item"><a class="nav-link {% if tipo == 'insumo' %}active{% endif %}" href="?tipo=insumo"><i class="bi bi-box-seam"></i> Insumo (por cantidad)</a></li>
+</ul>
+<datalist id="lista-proveedores">{% for p in proveedores %}<option value="{{ p }}">{% endfor %}</datalist>
+
+{% if tipo == 'activo' %}
+{% with f=form_activo %}
+<form method="post" class="card" style="max-width:900px">{% csrf_token %}<input type="hidden" name="tipo" value="activo">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-5">{% include "tickets/_campo.html" with campo=f.prefijo %}<div class="small" id="placa-sugerida"></div></div>
+      <div class="col-md-3">{% include "tickets/_campo.html" with campo=f.cantidad_iguales %}</div>
+      <div class="col-md-4">{% include "tickets/_campo.html" with campo=f.seriales %}</div>
+      <div class="col-md-3">{% include "tickets/_campo.html" with campo=f.categoria %}</div>
+      <div class="col-md-3">{% include "tickets/_campo.html" with campo=f.tipo %}</div>
+      <div class="col-md-3">{% include "tickets/_campo.html" with campo=f.subtipo %}</div>
+      <div class="col-md-3">{% include "tickets/_campo.html" with campo=f.marca %}</div>
+      <div class="col-md-4">{% include "tickets/_campo.html" with campo=f.referencia %}</div>
+      <div class="col-md-8">{% include "tickets/_campo.html" with campo=f.descripcion %}</div>
+      <div class="col-12"><div class="border rounded p-2 bg-light d-flex flex-wrap gap-3 align-items-center">
+        <div class="form-check mb-0">{{ f.sin_factura }} <label class="form-check-label fw-semibold" for="{{ f.sin_factura.id_for_label }}">Ingreso sin factura</label>
+          <div class="form-text mt-0">Inventario inicial, devolución de un cliente, cortesía: no pide proveedor, factura ni valor.</div></div>
+        <div class="solo-sin-factura" style="min-width:260px">{{ f.motivo_sin_factura }}</div>
+      </div></div>
+      <div class="col-md-3 datos-compra">{% include "tickets/_campo.html" with campo=f.fecha_compra %}</div>
+      <div class="col-md-5 datos-compra">{% include "tickets/_campo.html" with campo=f.proveedor %}</div>
+      <div class="col-md-4 datos-compra">{% include "tickets/_campo.html" with campo=f.factura %}</div>
+      <div class="col-md-4 datos-compra">{% include "tickets/_campo.html" with campo=f.valor %}</div>
+      <div class="col-md-2">{% include "tickets/_campo.html" with campo=f.iva %}</div>
+      <div class="col-md-2">{% include "tickets/_campo.html" with campo=f.stock_minimo %}</div>
+      <div class="col-md-4">{% include "tickets/_campo.html" with campo=f.observaciones %}</div>
+    </div>
+  </div>
+  <div class="card-footer text-end"><button class="btn btn-primary"><i class="bi bi-cart-plus"></i> Ingresar a bodega</button></div>
+</form>
+{% endwith %}
+<datalist id="lista-codigos">{% for c in codigos %}<option value="{{ c.codigo }}">{{ c.descripcion }}</option>{% endfor %}</datalist>
+<datalist id="lista-categorias">{% for c in categorias %}<option value="{{ c }}">{% endfor %}</datalist>
+<datalist id="lista-tipos">{% for c in tipos %}<option value="{{ c }}">{% endfor %}</datalist>
+<datalist id="lista-subtipos">{% for c in subtipos %}<option value="{{ c }}">{% endfor %}</datalist>
+<datalist id="lista-marcas">{% for c in marcas %}<option value="{{ c }}">{% endfor %}</datalist>
+<script>
+  // Al escribir el código de placa: muestra la siguiente placa y llena los datos del último equipo igual
+  const prefijo = document.getElementById('id_a-prefijo'), aviso = document.getElementById('placa-sugerida');
+  let espera;
+  prefijo.addEventListener('input', function () {
+    clearTimeout(espera);
+    espera = setTimeout(function () {
+      if (!prefijo.value.trim()) { aviso.textContent = ''; return; }
+      fetch('{% url "inventario:siguiente_placa" %}?prefijo=' + encodeURIComponent(prefijo.value)).then(r => r.json()).then(function (d) {
+        aviso.innerHTML = d.placa ? 'Siguiente placa: <strong>' + d.placa + '</strong>' + (d.descripcion ? ' · ' + d.descripcion : '') : '';
+        Object.entries(d.plantilla || {}).forEach(function ([campo, valor]) {
+          const c = document.getElementById('id_a-' + campo);
+          if (c && !c.value) c.value = valor;
+        });
+      });
+    }, 300);
+  });
+</script>
+{% else %}
+{% with f=form_insumo %}
+<form method="post" class="card" style="max-width:760px">{% csrf_token %}<input type="hidden" name="tipo" value="insumo">
+  <div class="card-body"><div class="row g-3">
+    <div class="col-md-6">{% include "tickets/_campo.html" with campo=f.codigo %}</div>
+    <div class="col-md-6">{% include "tickets/_campo.html" with campo=f.descripcion %}</div>
+    <div class="col-md-3">{% include "tickets/_campo.html" with campo=f.unidad %}</div>
+    <div class="col-md-3">{% include "tickets/_campo.html" with campo=f.cantidad %}</div>
+    <div class="col-12"><div class="border rounded p-2 bg-light d-flex flex-wrap gap-3 align-items-center">
+        <div class="form-check mb-0">{{ f.sin_factura }} <label class="form-check-label fw-semibold" for="{{ f.sin_factura.id_for_label }}">Ingreso sin factura</label>
+          <div class="form-text mt-0">Inventario inicial, devolución de un cliente, cortesía: no pide proveedor, factura ni valor.</div></div>
+        <div class="solo-sin-factura" style="min-width:260px">{{ f.motivo_sin_factura }}</div>
+      </div></div>
+    <div class="col-md-4 datos-compra">{% include "tickets/_campo.html" with campo=f.valor_unitario %}</div>
+    <div class="col-md-2 datos-compra">{% include "tickets/_campo.html" with campo=f.iva %}</div>
+    <div class="col-md-6 datos-compra">{% include "tickets/_campo.html" with campo=f.proveedor %}</div>
+    <div class="col-md-3 datos-compra">{% include "tickets/_campo.html" with campo=f.factura %}</div>
+    <div class="col-md-3 datos-compra">{% include "tickets/_campo.html" with campo=f.fecha %}</div>
+    <div class="col-md-3">{% include "tickets/_campo.html" with campo=f.stock_minimo %}</div>
+  </div></div>
+  <div class="card-footer text-end"><button class="btn btn-primary"><i class="bi bi-cart-plus"></i> Ingresar a bodega</button></div>
+</form>
+{% endwith %}
+<datalist id="lista-insumos">{% for i in insumos %}<option value="{{ i.codigo }} · {{ i.descripcion }}">{% endfor %}</datalist>
+{% endif %}
+<script>
+  // «Ingreso sin factura»: oculta los datos de compra y pide de dónde sale
+  document.querySelectorAll('input[name$="sin_factura"]').forEach(function (casilla) {
+    const form = casilla.closest('form');
+    function mostrar() {
+      form.querySelectorAll('.datos-compra').forEach(function (el) { el.hidden = casilla.checked; });
+      form.querySelectorAll('.solo-sin-factura').forEach(function (el) { el.hidden = !casilla.checked; });
+    }
+    casilla.addEventListener('change', mostrar);
+    mostrar();
+  });
+</script>
+{% endblock %}

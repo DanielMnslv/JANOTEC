@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}{{ insumo.codigo }}{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo=insumo.codigo subtitulo=insumo.descripcion %}
+{% if user.gestiona_inventario %}<form method="post" class="mb-3 d-flex flex-wrap gap-2 align-items-center">{% csrf_token %}
+  <a class="btn btn-sm btn-outline-primary" href="{% url 'inventario:insumo_editar' insumo.codigo %}"><i class="bi bi-pencil"></i> Editar</a>
+  {% if insumo.activo %}<button class="btn btn-sm btn-light border" onclick="return confirm('¿Marcar {{ insumo.codigo|escapejs }} como inactivo? Deja de salir en las listas; su historial se conserva.')"><i class="bi bi-archive"></i> Ya no se usa: desactivar</button>
+  {% else %}<span class="badge text-bg-secondary me-2">Inactivo</span><button class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-counterclockwise"></i> Reactivar</button>{% endif %}
+</form>{% endif %}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3"><div class="kpi"><div class="valor {% if bodega < 0 %}text-danger{% endif %}">{{ bodega|cant }}</div><div class="etiqueta">{{ insumo.get_unidad_display }} en bodega</div></div></div>
+  <div class="col-6 col-lg-3"><div class="kpi"><div class="valor">{{ costo|pesos }}</div><div class="etiqueta">Costo promedio con IVA</div></div></div>
+  {% for persona, cantidad in en_tecnicos %}
+    <div class="col-6 col-lg-3"><div class="kpi"><div class="valor">{{ cantidad|cant }}</div><div class="etiqueta">Con {{ persona }}</div></div></div>
+  {% endfor %}
+</div>
+{% if bodega < 0 %}<div class="alert alert-danger small"><i class="bi bi-exclamation-triangle"></i> Salió más de lo que se registró que entró: falta registrar una compra o una salida está mal escrita. Corríjalo con «Registrar compra» o un ajuste.</div>{% endif %}
+{% include "inventario/_proveedores_producto.html" with clase="mb-4" %}
+<h2 class="h5 mb-3">Kardex (más reciente primero)</h2>
+<ul class="list-group">{% for m in movimientos %}{% include "inventario/_movimiento.html" %}{% empty %}<li class="list-group-item text-muted-jn">Sin movimientos.</li>{% endfor %}</ul>
+{% endblock %}

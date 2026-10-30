@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block titulo %}{% if persona %}{{ persona }}{% else %}Nuevo funcionario{% endif %}{% endblock %}
+{% block contenido %}
+<a href="{% url 'inventario:funcionarios' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Funcionarios</a>
+<h1 class="h3 page-title my-2">{% if persona %}{{ persona }}{% else %}Nuevo funcionario{% endif %}</h1>
+<p class="small text-muted-jn">{% if persona %}Usuario «{{ persona.username }}».{% else %}Se crea sin acceso a la plataforma; si va a entrar, asígnele contraseña en Configuración.{% endif %} Con la cédula se le asocian sus registros del inventario anterior.</p>
+<form method="post" class="card" style="max-width:820px">{% csrf_token %}
+  <div class="card-body"><div class="row g-3">
+    {% for campo in form %}<div class="col-md-6">{% include "tickets/_campo.html" %}</div>{% endfor %}
+  </div></div>
+  <div class="card-footer text-end"><button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button></div>
+</form>
+<datalist id="lista-areas">{% for a in areas %}<option value="{{ a }}">{% endfor %}</datalist>
+{% endblock %}

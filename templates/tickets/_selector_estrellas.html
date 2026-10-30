@@ -1,0 +1,14 @@
+{# 10 estrellas para elegir (en el HTML van de 10 a 1; la fila invertida las muestra de 1 a 10) #}
+<div class="selector-estrellas" role="radiogroup" aria-label="Calificación de 1 a 10">
+  {% for i in escala %}
+    <input type="radio" name="calificacion" value="{{ i }}" id="estrella-{{ i }}" {% if nota == i %}checked{% endif %}>
+    <label for="estrella-{{ i }}" title="{{ i }} de 10"><span class="visually-hidden">{{ i }} de 10</span><i class="bi bi-star-fill" aria-hidden="true"></i></label>
+  {% endfor %}
+</div>
+<div class="d-flex justify-content-between small text-muted-jn selector-estrellas-guia"><span>1 · Muy mala</span><span class="fw-semibold text-body" data-nota-elegida>{% if nota %}{{ nota }} de 10{% endif %}</span><span>10 · Excelente</span></div>
+<script>
+  document.querySelectorAll('.selector-estrellas').forEach(function (grupo) {
+    const salida = grupo.nextElementSibling.querySelector('[data-nota-elegida]');
+    grupo.addEventListener('change', function (e) { salida.textContent = e.target.value + ' de 10'; });
+  });
+</script>

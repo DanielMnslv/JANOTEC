@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block titulo %}Directorio del cronograma{% endblock %}
+{% block contenido %}
+<h1 class="h3 page-title mb-1">Directorio</h1>
+<p class="text-muted-jn mb-3">Sin correo = marcado rojo en el cronograma. <strong>Técnico</strong> recibe su cronograma con insumos por sede · <strong>Administrativa</strong> el consolidado de todas las sedes · <strong>SST</strong> las solicitudes de acompañamiento HSE · <strong>Contacto</strong> (cliente o almacén) el aviso de sus visitas.</p>
+{% include "cronograma/_pestanas.html" %}
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-journal-bookmark"></i> Contactos ({{ contactos|length }})</div>
+      <div class="table-responsive">
+        <table class="table mb-0 align-middle">
+          <thead><tr><th>Nombre / referencia</th><th>Correo electrónico</th><th>Tipo</th><th></th></tr></thead>
+          <tbody>
+          {% for c in contactos %}
+            <tr>
+              <td colspan="4" class="p-0">
+                <form method="post" class="d-flex flex-wrap gap-2 align-items-center p-2">{% csrf_token %}<input type="hidden" name="pk" value="{{ c.pk }}">
+                  <span class="rounded-circle d-inline-block" style="width:10px;height:10px;background:{% if c.email %}#5fae3e{% else %}#c62828{% endif %}" title="{% if c.email %}Con correo{% else %}Sin correo{% endif %}"></span>
+                  <input name="nombre" value="{{ c.nombre }}" class="form-control form-control-sm" style="max-width:200px" required>
+                  <input name="email" type="email" value="{{ c.email }}" placeholder="nombre@correo.com" class="form-control form-control-sm" style="max-width:230px">
+                  <select name="tipo" class="form-select form-select-sm" style="max-width:150px">{% for v, n in tipos %}<option value="{{ v }}" {% if c.tipo == v %}selected{% endif %}>{{ n }}</option>{% endfor %}</select>
+                  <button class="btn btn-sm btn-outline-primary" title="Guardar"><i class="bi bi-check2"></i></button>
+                  <button class="btn btn-sm btn-outline-danger" name="eliminar" value="{{ c.pk }}" formnovalidate onclick="return confirm('¿Eliminar {{ c.nombre|escapejs }} del directorio?')" title="Eliminar"><i class="bi bi-x-lg"></i></button>
+                </form>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-center py-4 text-muted-jn">Aún no hay contactos. Agregue la administrativa y el área SST.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body border-top">
+        <form method="post" class="d-flex flex-wrap gap-2 align-items-end">{% csrf_token %}
+          <div><label class="form-label small mb-1">Nombre / referencia</label>{{ form.nombre }}</div>
+          <div><label class="form-label small mb-1">Correo</label>{{ form.email }}</div>
+          <div><label class="form-label small mb-1">Tipo</label>{{ form.tipo }}</div>
+          <button class="btn btn-accent"><i class="bi bi-plus-lg"></i> Agregar contacto</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-person-gear"></i> Técnicos (usuarios de la plataforma)</div>
+      <ul class="list-group list-group-flush">
+        {% for t in tecnicos %}
+          <li class="list-group-item small d-flex justify-content-between align-items-center">
+            <span><span class="rounded-circle d-inline-block me-1" style="width:9px;height:9px;background:{% if t.email %}#5fae3e{% else %}#c62828{% endif %}"></span>{{ t.get_full_name|default:t.username }}</span>
+            <span class="{% if not t.email %}text-danger{% else %}text-muted-jn{% endif %}">{{ t.email|default:"sin correo" }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+      <div class="card-body small text-muted-jn">El correo de cada técnico se cambia en <a href="{% url 'admin:accounts_usuario_changelist' %}">Configuración → Usuarios</a>.</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

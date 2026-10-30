@@ -1,0 +1,111 @@
+{% load static inventario_extras %}<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Soporte{% endblock %} · {{ MARCA.nombre }}</title>
+  <link rel="icon" href="{% static 'img/marca/favicon.ico' %}" sizes="48x48">
+  <link rel="icon" type="image/webp" href="{% static 'img/marca/favicon.webp' %}">
+  <link rel="apple-touch-icon" href="{% static 'img/marca/apple-touch-icon.png' %}">
+  <meta name="theme-color" content="#686975">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Carlito:wght@400;700&display=swap" rel="stylesheet">
+  <link href="{% static 'vendor/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
+  <link href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}" rel="stylesheet">
+  <link href="{% static 'css/janotec.css' %}?v=20261030a" rel="stylesheet">
+  {% block head %}{% endblock %}
+</head>
+<body>
+{% block cuerpo %}
+<nav class="navbar navbar-expand-lg navbar-dark navbar-jn">
+  <div class="container-xl">
+    <a class="navbar-brand d-flex align-items-center" href="{% url 'inicio' %}">
+      <img src="{% static 'img/marca/logo-blanco.webp' %}" alt="JANOTEC" class="logo-nav">
+      <span class="marca-sub d-none d-sm-inline">Soporte</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav" aria-label="Menú"><span class="navbar-toggler-icon"></span></button>
+    <div class="collapse navbar-collapse" id="nav">
+      <ul class="navbar-nav me-auto">
+        {% if user.es_personal %}
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'panel' %}active{% endif %}" href="{% url 'panel' %}"><i class="bi bi-kanban"></i> {% if user.es_supervisor %}Recepción{% else %}Mis tickets{% endif %}</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'cronograma' %}active{% endif %}" href="{% url 'cronograma:semana' %}"><i class="bi bi-calendar-week"></i> Cronograma</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'actas_lista' or request.resolver_match.url_name == 'acta_detalle' %}active{% endif %}" href="{% url 'actas_lista' %}"><i class="bi bi-clipboard-check"></i> Actas</a></li>
+          {% if user.ve_inventario %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'inventario' %}active{% endif %}" href="{% if user.gestiona_inventario %}{% url 'inventario:productos' %}{% else %}{% url 'inventario:mi_material' %}{% endif %}"><i class="bi bi-boxes"></i> {% if user.gestiona_inventario %}Inventario{% else %}Mi material{% endif %}</a></li>
+          {% elif user.es_coordinador %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'inventario' %}active{% endif %}" href="{% url 'inventario:funcionarios' %}"><i class="bi bi-people"></i> Funcionarios</a></li>{% endif %}
+          {% if user.ve_comercial %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'comercial' %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Comercial</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'oportunidades' %}active{% endif %}" href="{% url 'oportunidades' %}"><i class="bi bi-graph-up-arrow"></i> Oportunidades</a></li>{% endif %}
+          {% if user.es_supervisor %}<li class="nav-item"><a class="nav-link {% if 'cliente' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'clientes' %}"><i class="bi bi-building"></i> Clientes</a></li>{% endif %}
+          {% if user.es_supervisor %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'reportes' %}active{% endif %}" href="{% url 'reportes' %}"><i class="bi bi-bar-chart"></i> Reportes</a></li>{% endif %}
+          {% if user.is_superuser %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'salud_procesos' %}active{% endif %}" href="{% url 'salud_procesos' %}"><i class="bi bi-heart-pulse"></i> Salud</a></li>{% endif %}
+          {% if user.es_supervisor %}<li class="nav-item"><a class="nav-link" href="{% url 'admin:index' %}"><i class="bi bi-gear"></i> Configuración</a></li>{% endif %}
+        {% elif user.es_bodega %}
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
+          {# Bodega: todo el inventario en un solo menú desplegable, con los mismos nombres de siempre #}
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle {% if request.resolver_match.namespace == 'inventario' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-boxes"></i> Inventario</a>
+            <ul class="dropdown-menu menu-bodega">{% menu_bodega as grupos %}
+              {% for g in grupos %}{% if not forloop.first %}<li><hr class="dropdown-divider"></li>{% endif %}
+              <li><h6 class="dropdown-header"><i class="bi {{ g.icono }}"></i> {{ g.titulo }}</h6></li>
+              {% for o in g.opciones %}<li><a class="dropdown-item ps-4" href="{{ o.url }}"><i class="bi {{ o.icono }}"></i> {{ o.nombre }}</a></li>{% endfor %}
+              {% endfor %}
+            </ul>
+          </li>
+          {% if user.es_comercial %}{# bodega que también atiende lo comercial #}
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'comercial' %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Comercial</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'oportunidades' %}active{% endif %}" href="{% url 'oportunidades' %}"><i class="bi bi-graph-up-arrow"></i> Oportunidades</a></li>
+          {% endif %}
+        {% elif user.es_comercial %}
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'bandeja' %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Requerimientos</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'nuevo' %}active{% endif %}" href="{% url 'comercial:nuevo' %}"><i class="bi bi-plus-circle"></i> Nuevo requerimiento</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'oportunidades' %}active{% endif %}" href="{% url 'oportunidades' %}"><i class="bi bi-graph-up-arrow"></i> Oportunidades</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'nuevo_ticket' or request.resolver_match.url_name == 'mis_tickets' %}active{% endif %}" href="{% url 'mis_tickets' %}"><i class="bi bi-tools"></i> Solicitudes técnicas</a></li>
+        {% elif user.es_central %}
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'nuevo_ticket' %}active{% endif %}" href="{% url 'nuevo_ticket' %}"><i class="bi bi-plus-circle"></i> Registrar solicitud</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'mis_tickets' %}active{% endif %}" href="{% url 'mis_tickets' %}"><i class="bi bi-list-check"></i> Solicitudes registradas</a></li>
+        {% else %}
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'mis_tickets' %}active{% endif %}" href="{% url 'mis_tickets' %}"><i class="bi bi-list-check"></i> Mis solicitudes</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'nuevo_ticket' %}active{% endif %}" href="{% url 'nuevo_ticket' %}"><i class="bi bi-plus-circle"></i> Radicar solicitud</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'actas_lista' or request.resolver_match.url_name == 'acta_detalle' %}active{% endif %}" href="{% url 'actas_lista' %}"><i class="bi bi-clock-history"></i> Historial de servicio</a></li>
+        {% endif %}
+      </ul>
+      <form class="d-flex me-lg-3 my-2 my-lg-0" action="{% url 'buscar_radicado' %}" method="get" role="search">
+        <input class="form-control form-control-sm buscar-radicado" name="radicado" placeholder="Consultar radicado…" aria-label="Número de radicado">
+      </form>
+      <div class="dropdown">
+        <a class="nav-link dropdown-toggle text-white" href="#" data-bs-toggle="dropdown">
+          <i class="bi bi-person-circle"></i> <span title="{{ user.get_full_name }}">{{ user.first_name|default:user.username }}</span>
+          <span class="badge badge-rol ms-1" title="{{ user.get_rol_display }}">{{ user.rol_corto }}</span>
+        </a>
+        <ul class="dropdown-menu dropdown-menu-end">
+          {% if user.empresa %}<li><span class="dropdown-item-text small text-muted">{{ user.empresa }}</span></li><li><hr class="dropdown-divider"></li>{% endif %}
+          <li><a class="dropdown-item" href="{% url 'password_change' %}"><i class="bi bi-key"></i> Cambiar contraseña</a></li>
+          <li><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="dropdown-item"><i class="bi bi-box-arrow-right"></i> Salir</button></form></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="container-xl py-4">
+  {% for m in messages %}
+    <div class="alert alert-{% if m.tags == 'error' %}danger{% else %}{{ m.tags }}{% endif %} alert-dismissible fade show" role="alert">
+      {{ m }}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+    </div>
+  {% endfor %}
+  {% block contenido %}{% endblock %}
+</main>
+<footer class="pie container-xl pb-4">Jano Tec S.A.S. · {{ MARCA.lema }}</footer>
+{% endblock %}
+<script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+<script>
+  document.querySelectorAll('[data-href]').forEach(function (fila) {
+    fila.addEventListener('click', function (e) { if (!e.target.closest('a,button')) location.href = fila.dataset.href; });
+  });
+</script>
+{% if user.is_authenticated and user.es_supervisor %}{% include "tickets/_confirmar_recepcion.html" %}{% endif %}
+<script src="{% static 'js/firmas.js' %}?v=20261029"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

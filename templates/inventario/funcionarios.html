@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block titulo %}Funcionarios{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Funcionarios" subtitulo="El personal de JANOTEC. Con la cédula, la plataforma le asocia lo que el inventario anterior tenía a su nombre." %}
+{% if user.ve_inventario %}<ul class="nav nav-pills mb-3 small">
+  <li class="nav-item"><a class="nav-link" href="{% url 'inventario:catalogo' 'marcas' %}">Marcas</a></li>
+  <li class="nav-item"><a class="nav-link" href="{% url 'inventario:catalogo' 'categorias' %}">Categorías</a></li>
+  <li class="nav-item"><a class="nav-link" href="{% url 'inventario:contactos' %}">Clientes y proveedores</a></li>
+  <li class="nav-item"><a class="nav-link active" href="{% url 'inventario:funcionarios' %}">Funcionarios</a></li>
+</ul>{% endif %}
+{% if sin_cedula %}<div class="alert alert-warning small"><i class="bi bi-person-vcard"></i> {{ sin_cedula }} funcionario{{ sin_cedula|pluralize }} activo{{ sin_cedula|pluralize }} sin cédula. Escríbala para que se le asocie su material y su historial del inventario anterior.</div>{% endif %}
+
+{% if pendientes %}
+<div class="card mb-4 border-warning">
+  <div class="card-header small"><i class="bi bi-person-exclamation text-warning"></i> Personas del inventario anterior sin usuario ({{ pendientes|length }})</div>
+  <ul class="list-group list-group-flush small">
+    {% for nombre, cedula, n in pendientes %}
+      <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span><strong>{{ nombre }}</strong>{% if cedula %} · C.C. {{ cedula }}{% endif %} <span class="text-muted-jn">· {{ n }} registro{{ n|pluralize }}</span></span>
+        {% if puede_editar %}<a class="btn btn-sm btn-outline-primary" href="{% url 'inventario:funcionario_nuevo' %}?nombre={{ nombre|urlencode }}&cedula={{ cedula }}">Crear funcionario</a>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+  <div class="card-footer small text-muted-jn">Si la persona ya tiene usuario, no la cree de nuevo: escriba su cédula en su ficha y se asocia sola.</div>
+</div>
+{% endif %}
+
+<form class="row g-2 mb-3" method="get">
+  <div class="col-md-5"><input class="form-control" name="q" value="{{ q }}" placeholder="Nombre, cédula o cargo…" aria-label="Buscar"></div>
+  <div class="col-6 col-md-3"><select name="area" class="form-select" onchange="this.form.submit()" aria-label="Área"><option value="">Todas las áreas</option>{% for a in areas %}<option {% if a == area %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></div>
+  <div class="col-6 col-md-2"><select name="estado" class="form-select" onchange="this.form.submit()" aria-label="Estado"><option value="activos" {% if estado == 'activos' %}selected{% endif %}>Activos</option><option value="inactivos" {% if estado == 'inactivos' %}selected{% endif %}>Inactivos</option><option value="todos" {% if estado == 'todos' %}selected{% endif %}>Todos</option></select></div>
+  <div class="col-md-2">{% if puede_editar %}<a class="btn btn-accent w-100" href="{% url 'inventario:funcionario_nuevo' %}"><i class="bi bi-plus-lg"></i> Nuevo</a>{% endif %}</div>
+</form>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle small">
+      <thead><tr><th>Funcionario</th><th>Cédula</th><th>Cargo</th><th>Rol</th><th>Área · sede</th><th>Contacto</th><th>Estado</th></tr></thead>
+      <tbody>
+      {% for u in lista %}
+        <tr>
+          <td>{% if puede_editar %}<a href="{% url 'inventario:funcionario_editar' u.pk %}">{{ u.get_full_name|default:u.username }}</a>{% else %}{{ u.get_full_name|default:u.username }}{% endif %}<div class="text-muted-jn">{{ u.username }}{% if not u.has_usable_password %} · sin acceso{% endif %}</div></td>
+          <td class="radicado">{% if u.documento %}{{ u.documento }}{% else %}<span class="text-warning-emphasis">Falta</span>{% endif %}</td>
+          <td>{{ u.cargo|default:"—" }}</td>
+          <td>{{ u.rol_corto }}</td>
+          <td>{{ u.area|default:"—" }}{% if u.sede %} · {{ u.sede }}{% endif %}</td>
+          <td>{{ u.email|default:"" }}{% if u.telefono %}<div>{{ u.telefono }}</div>{% endif %}</td>
+          <td>{% if u.is_active %}<span class="badge text-bg-success">Activo</span>{% else %}<span class="badge text-bg-secondary">Inactivo</span>{% endif %}</td>
+        </tr>
+      {% empty %}<tr><td colspan="7" class="text-center py-4 text-muted-jn">No hay funcionarios con esos filtros.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

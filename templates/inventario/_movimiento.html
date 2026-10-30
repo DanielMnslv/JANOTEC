@@ -1,0 +1,16 @@
+{% load inventario_extras %}{# Una fila del historial de un activo o insumo #}
+<li class="list-group-item small">
+  <div class="d-flex flex-wrap justify-content-between gap-2">
+    <div><strong>{{ m.fecha|date:"d/m/Y" }}</strong> · {{ m.get_tipo_display }}{% if m.estado %} → <span class="badge text-bg-light border">{{ m.get_estado_display }}</span>{% endif %}{% if m.cantidad %} · <strong>{{ m.cantidad|cant }}</strong>{% endif %}{% if m.modalidad %} · {{ m.get_modalidad_display }}{% endif %}</div>
+    <div class="text-muted-jn">{{ m.get_origen_display }} → {{ m.get_destino_display }}{% if m.cantidad and m.saldo_bodega is not None %} · saldo bodega <strong>{{ m.saldo_bodega|cant }}</strong>{% endif %}</div>
+  </div>
+  <div class="text-muted-jn">
+    {% if m.responsable %}<i class="bi bi-person"></i> {{ m.responsable }}{% endif %}
+    {% if m.cliente %} · <i class="bi bi-building"></i> {{ m.cliente }}{% if m.sede %} · {{ m.sede.nombre }}{% endif %}{% endif %}
+    {% if m.proveedor %} · {{ m.proveedor }}{% endif %}{% if m.factura %} · factura {{ m.factura }}{% endif %}
+    {% if m.ticket %} · <a href="{{ m.ticket.get_absolute_url }}">{{ m.ticket.radicado }}</a>{% endif %}
+    {% if m.acta %} · <a href="{{ m.acta.get_absolute_url }}">Acta N° {{ m.acta.numero }}</a>{% endif %}
+  </div>
+  {% if m.observaciones %}<div>{{ m.observaciones }}</div>{% endif %}
+  {% if m.registrado_por_nombre or m.importado_de %}<div class="text-muted-jn" style="font-size:.75rem">{% if m.registrado_por_nombre and m.registrado_por_nombre != 'Google Sheets' %}Registró: {{ m.registrado_por_nombre }}{% if m.importado_de %} · {% endif %}{% endif %}{% if m.importado_de %}Importado del Google Sheets ({{ m.importado_de }}){% endif %}</div>{% endif %}
+</li>

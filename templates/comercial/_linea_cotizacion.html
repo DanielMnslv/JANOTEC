@@ -1,0 +1,9 @@
+<tr class="linea">
+  <td>{{ f.id }}{{ f.descripcion }}{% for e in f.descripcion.errors %}<div class="text-danger">{{ e }}</div>{% endfor %}</td>
+  <td>{{ f.cantidad }}</td>
+  <td>{{ f.valor_unitario }}{% for e in f.valor_unitario.errors %}<div class="text-danger">{{ e }}</div>{% endfor %}</td>
+  <td>{{ f.descuento }}</td>
+  <td>{{ f.iva }}</td>
+  <td class="text-end subtotal">—</td>
+  <td class="text-center">{% if f.DELETE %}<label class="small text-muted-jn" title="Quitar este ítem">{{ f.DELETE }} <i class="bi bi-trash"></i></label>{% endif %}</td>
+</tr>

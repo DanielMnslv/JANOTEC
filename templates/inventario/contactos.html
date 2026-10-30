@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block titulo %}Clientes y proveedores{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Clientes y proveedores" subtitulo="Los clientes con su encargado y sus sedes, y los proveedores con quién nos atiende, qué marcas manejan y qué nos han vendido." %}
+<ul class="nav nav-pills mb-3 small">
+  <li class="nav-item"><a class="nav-link" href="{% url 'inventario:catalogo' 'marcas' %}">Marcas</a></li>
+  <li class="nav-item"><a class="nav-link" href="{% url 'inventario:catalogo' 'categorias' %}">Categorías</a></li>
+  <li class="nav-item"><a class="nav-link active" href="{% url 'inventario:contactos' %}">Clientes y proveedores</a></li>
+  <li class="nav-item"><a class="nav-link" href="{% url 'inventario:funcionarios' %}">Funcionarios</a></li>
+</ul>
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <div class="btn-group">
+    <a class="btn btn-sm {% if tipo == 'clientes' %}btn-primary{% else %}btn-light border{% endif %}" href="?tipo=clientes">Clientes</a>
+    <a class="btn btn-sm {% if tipo == 'proveedores' %}btn-primary{% else %}btn-light border{% endif %}" href="?tipo=proveedores">Proveedores</a>
+  </div>
+  <form class="d-flex gap-2 flex-grow-1" method="get"><input type="hidden" name="tipo" value="{{ tipo }}"><input class="form-control form-control-sm" name="q" value="{{ q }}" placeholder="{% if tipo == 'proveedores' %}Nombre, NIT, asesor o marca…{% else %}Nombre, NIT, encargado, sede o municipio…{% endif %}" aria-label="Buscar"><button class="btn btn-sm btn-primary"><i class="bi bi-search"></i></button></form>
+  {% if user.gestiona_inventario %}<a class="btn btn-sm btn-accent" href="{% url 'inventario:contacto_nuevo' tipo %}"><i class="bi bi-plus-lg"></i> {% if tipo == 'clientes' %}Nuevo cliente{% else %}Nuevo proveedor{% endif %}</a>{% endif %}
+</div>
+
+{% if sin_crear %}
+<div class="card mb-4 border-warning">
+  <div class="card-header small"><i class="bi bi-exclamation-triangle text-warning"></i> Clientes del inventario anterior que no están en la plataforma ({{ sin_crear|length }})</div>
+  <ul class="list-group list-group-flush small">
+    {% for texto, n in sin_crear %}
+      <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span><strong>{{ texto }}</strong> <span class="text-muted-jn">· {{ n }} registro{{ n|pluralize }}</span></span>
+        {% if user.gestiona_inventario %}<span class="d-flex flex-wrap gap-1">
+          <a class="btn btn-sm btn-outline-primary" href="{% url 'inventario:contacto_nuevo' 'clientes' %}?nombre={{ texto|urlencode }}">Crear como cliente</a>
+          <form method="post" action="{% url 'inventario:asociar_cliente' %}" class="d-flex gap-1">{% csrf_token %}<input type="hidden" name="texto" value="{{ texto }}">
+            <select name="empresa" class="form-select form-select-sm" required aria-label="Cliente existente para {{ texto }}"><option value="">Es el cliente…</option>{% for e in empresas %}<option value="{{ e.pk }}">{{ e }}</option>{% endfor %}</select>
+            <button class="btn btn-sm btn-light border">Asociar</button></form>
+        </span>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle small">
+      <thead><tr><th>{% if tipo == 'clientes' %}Cliente{% else %}Proveedor{% endif %}</th><th>NIT</th>{% if tipo == 'proveedores' %}<th>Quién nos atiende</th><th>Marcas</th>{% else %}<th>Encargado</th><th>Sedes</th>{% endif %}<th>Correo</th><th>Teléfono</th><th class="text-end">{% if tipo == 'clientes' %}Equipos instalados{% else %}Compras{% endif %}</th></tr></thead>
+      <tbody>
+      {% for c, n in lista %}
+        <tr>
+          <td><a href="{% if tipo == 'proveedores' %}{% url 'inventario:proveedor' c.pk %}{% else %}{% url 'inventario:cliente' c.pk %}{% endif %}">{{ c.razon_social }}</a>{% if tipo == 'clientes' and c.ciudad %}<div class="text-muted-jn">{{ c.ciudad }}</div>{% endif %}</td>
+          <td class="radicado">{{ c.nit|default:"—" }}</td>
+          {% if tipo == 'proveedores' %}
+          <td>{% with a=c.asesor %}{% if a %}{{ a.nombre }}{% if a.celular %}<div class="text-muted-jn">{{ a.celular }}</div>{% endif %}{% else %}—{% endif %}{% endwith %}</td>
+          <td>{% for m in c.marcas_vista|slice:":4" %}<span class="badge text-bg-light border fw-normal">{{ m }}</span> {% empty %}—{% endfor %}{% if c.marcas_vista|length > 4 %}<span class="text-muted-jn">+{{ c.marcas_vista|length|add:"-4" }}</span>{% endif %}</td>
+          {% else %}
+          <td>{% with a=c.encargado %}{% if a %}{{ a.nombre }}{% if a.celular %}<div class="text-muted-jn">{{ a.celular }}</div>{% endif %}{% else %}—{% endif %}{% endwith %}</td>
+          <td>{{ c.sedes.all|length }}{% if c.municipios %}<div class="text-muted-jn">{{ c.municipios|slice:":3"|join:", " }}{% if c.municipios|length > 3 %} +{{ c.municipios|length|add:"-3" }}{% endif %}</div>{% endif %}</td>
+          {% endif %}
+          <td>{% if tipo == 'clientes' %}{{ c.email_contacto|default:"—" }}{% else %}{{ c.correo|default:"—" }}{% endif %}</td>
+          <td>{{ c.telefono|default:"—" }}</td>
+          <td class="text-end">{{ n }}</td>
+        </tr>
+      {% empty %}<tr><td colspan="7" class="text-center py-4 text-muted-jn">No hay resultados.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

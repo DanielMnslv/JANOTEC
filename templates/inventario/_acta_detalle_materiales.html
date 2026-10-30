@@ -1,0 +1,11 @@
+{# En el acta registrada: el material que salió del inventario con ella #}
+{% load inventario_extras %}
+{% if material_activos or material_insumos %}
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-boxes"></i> Materiales y equipos utilizados del inventario (descontados)</div>
+  <ul class="list-group list-group-flush small">
+    {% for m in material_activos %}<li class="list-group-item">{% if user.es_personal %}<a class="radicado" href="{{ m.activo.get_absolute_url }}">{{ m.activo.placa }}</a>{% else %}<span class="radicado">{{ m.activo.placa }}</span>{% endif %} · {{ m.activo.descripcion_corta }}{% if m.activo.serial %} · S/N {{ m.activo.serial }}{% endif %} <span class="text-muted-jn">· {{ m.get_modalidad_display }}</span></li>{% endfor %}
+    {% for m in material_insumos %}<li class="list-group-item d-flex justify-content-between"><span>{{ m.insumo.descripcion }} <span class="text-muted-jn">({{ m.insumo.codigo }})</span></span><strong>{{ m.cantidad|cant }} {{ m.insumo.get_unidad_display|lower }}</strong></li>{% endfor %}
+  </ul>
+</div>
+{% endif %}

@@ -1,0 +1,42 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}{{ base.referencia }}{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo=base.referencia subtitulo=base.descripcion %}
+<a href="{% url 'inventario:productos' %}?tipo=equipos" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Inventario</a>
+<div class="row g-4 mt-1">
+  <div class="col-lg-8">
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <span class="badge text-bg-light border fs-6">{{ total }} unidad{{ total|pluralize:"es" }} en total</span>
+      {% for nombre, n, color in conteo %}<span class="badge text-bg-{{ color }} fs-6">{{ n }} · {{ nombre }}</span>{% endfor %}
+    </div>
+    <div class="card"><div class="table-responsive"><table class="table table-hover mb-0 align-middle small">
+      <thead><tr><th>Placa</th><th>Serial</th><th>Estado</th><th>Dónde está</th><th>Compra</th><th></th></tr></thead>
+      <tbody>
+      {% for a in unidades %}
+        <tr>
+          <td class="text-nowrap"><a class="fw-semibold" href="{{ a.get_absolute_url }}">{{ a.placa }}</a></td>
+          <td class="text-nowrap">{{ a.serial|default:"—" }}</td>
+          <td><span class="badge text-bg-{{ a.color_estado }}">{{ a.get_estado_display }}</span></td>
+          <td>{{ a.ubicacion }}</td>
+          <td class="text-nowrap text-muted-jn">{{ a.fecha_compra|date:"d/m/Y"|default:"—" }}{% if a.factura %} · Fact. {{ a.factura }}{% endif %}</td>
+          <td class="text-end"><a class="btn btn-sm btn-light border py-0" href="{% url 'inventario:activo_editar' a.placa %}" title="Editar"><i class="bi bi-pencil"></i></a></td>
+        </tr>
+      {% empty %}<tr><td colspan="6" class="text-center py-4 text-muted-jn">Ninguna unidad está en JANOTEC.</td></tr>{% endfor %}
+      </tbody>
+    </table></div></div>
+    {% if ocultas and not todos %}<p class="small text-muted-jn mt-2"><i class="bi bi-eye-slash"></i> No se muestran {{ ocultas }} unidad{{ ocultas|pluralize:"es" }} vendida{{ ocultas|pluralize }}, alquilada{{ ocultas|pluralize }}, prestada{{ ocultas|pluralize }} o de baja: <a href="?ref={{ base.referencia|urlencode }}&amp;todos=1">verlas</a>.</p>
+    {% elif todos %}<p class="small mt-2"><a href="?ref={{ base.referencia|urlencode }}">Ver solo las que están en JANOTEC</a></p>{% endif %}
+    <a class="btn btn-sm btn-outline-secondary mt-2" href="{% url 'inventario:etiquetas' %}?placas={% for a in unidades %}{{ a.placa|urlencode }}{% if not forloop.last %},{% endif %}{% endfor %}"><i class="bi bi-qr-code"></i> Etiquetas de estas unidades</a>
+  </div>
+  <div class="col-lg-4">
+    <div class="card" id="datos-modelo"><div class="card-header"><i class="bi bi-pencil"></i> Datos del modelo</div>
+      <form method="post" class="card-body">{% csrf_token %}<input type="hidden" name="ref" value="{{ base.referencia }}">
+        {% for campo in form %}{% include "tickets/_campo.html" %}{% endfor %}
+        <button class="btn btn-primary w-100" onclick="return confirm('¿Aplicar estos datos a las {{ total }} unidades de este modelo?')"><i class="bi bi-check2"></i> Guardar en todas las unidades</button>
+        <p class="small text-muted-jn mt-2 mb-0">Corrige la descripción, la marca o el modelo una sola vez para todas sus unidades. El serial de cada una se edita en la unidad.</p>
+      </form>
+    </div>
+    {% include "inventario/_proveedores_producto.html" with clase="mt-4" %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block titulo %}Nueva acta{% endblock %}
+{% block contenido %}
+<a href="{% url 'actas_lista' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Actas</a>
+<h1 class="h3 page-title mt-2 mb-1">Nueva acta · trabajo no programado</h1>
+<p class="text-muted-jn mb-4">Para dejar constancia de un trabajo que no estaba en el cronograma: por ejemplo, durante una visita el cliente pide
+  revisar o anexar algo pequeño y se soluciona de inmediato. Si el trabajo viene de un ticket, diligencie el acta desde el ticket.</p>
+
+<div class="card" style="max-width:640px"><div class="card-body p-4">
+  <form method="get">
+    <section class="paso-form">
+      <h2 class="h6 paso-titulo"><span class="paso-num">1</span> Cliente</h2>
+      <select name="empresa" class="form-select" onchange="this.form.sede && (this.form.sede.value = ''); this.form.submit()" required>
+        <option value="">Elija el cliente…</option>
+        {% for e in empresas %}<option value="{{ e.pk }}" {% if e == empresa %}selected{% endif %}>{{ e.razon_social }}</option>{% endfor %}
+      </select>
+    </section>
+    {% if empresa %}
+    <section class="paso-form">
+      <h2 class="h6 paso-titulo"><span class="paso-num">2</span> Sede</h2>
+      <select name="sede" class="form-select" required>
+        {% if sedes %}<option value="">Elija la sede…</option>{% endif %}
+        {% for s in sedes %}<option value="{{ s.pk }}">{{ s.nombre }}{% if s.ciudad %} · {{ s.ciudad }}{% endif %}</option>{% endfor %}
+        <option value="0">Sin sede específica</option>
+      </select>
+    </section>
+    <div class="d-flex justify-content-end gap-2">
+      <a href="{% url 'actas_lista' %}" class="btn btn-light">Cancelar</a>
+      <button class="btn btn-accent">Continuar al acta <i class="bi bi-arrow-right"></i></button>
+    </div>
+    {% else %}
+    <noscript><button class="btn btn-accent">Continuar</button></noscript>
+    {% endif %}
+  </form>
+</div></div>
+{% endblock %}

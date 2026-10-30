@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block titulo %}Préstamos y alquileres{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Préstamos y alquileres" subtitulo="Equipos que están en clientes y deben volver a bodega. Los vencidos se resaltan en rojo." %}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg"><a class="kpi" href="?"><div class="valor">{{ kpi.total }}</div><div class="etiqueta">En clientes</div><div class="small text-muted-jn">{{ kpi.alquilados }} alquilados · {{ kpi.prestados }} prestados</div></a></div>
+  <div class="col-6 col-lg"><a class="kpi {% if kpi.vencidos %}alerta{% endif %}" href="?ver=vencidos"><div class="valor">{{ kpi.vencidos }}</div><div class="etiqueta">Vencidos</div></a></div>
+  <div class="col-6 col-lg"><a class="kpi {% if kpi.semana %}aviso{% endif %}" href="?ver=semana"><div class="valor">{{ kpi.semana }}</div><div class="etiqueta">Vuelven esta semana</div></a></div>
+  <div class="col-6 col-lg"><a class="kpi" href="?ver=sin_fecha"><div class="valor">{{ kpi.sin_fecha }}</div><div class="etiqueta">Sin fecha de devolución</div></a></div>
+</div>
+<form class="row g-2 mb-3" method="get">
+  <input type="hidden" name="ver" value="{{ ver }}">
+  <div class="col-md-6"><input class="form-control" name="q" value="{{ q }}" placeholder="Placa, equipo o cliente…"></div>
+  <div class="col-6 col-md-3"><select name="tipo" class="form-select" onchange="this.form.submit()"><option value="">Préstamos y alquileres</option><option value="prestado" {% if tipo == 'prestado' %}selected{% endif %}>Solo préstamos</option><option value="alquilado" {% if tipo == 'alquilado' %}selected{% endif %}>Solo alquileres</option></select></div>
+  <div class="col-6 col-md-3"><button class="btn btn-primary w-100"><i class="bi bi-search"></i> Buscar</button></div>
+</form>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle small">
+      <thead><tr><th>Placa</th><th>Equipo</th><th>Cliente</th><th>Tipo</th><th>Desde</th><th>Devolución</th></tr></thead>
+      <tbody>
+      {% for a in lista %}
+        <tr class="fila-click {% if a.vencido %}table-danger{% endif %}" data-href="{{ a.get_absolute_url }}">
+          <td><a class="radicado" href="{{ a.get_absolute_url }}">{{ a.placa }}</a></td>
+          <td>{{ a.descripcion_corta }}</td>
+          <td>{{ a.ubicacion }}</td>
+          <td>{{ a.get_estado_display }}</td>
+          <td class="text-nowrap">{{ a.fecha_ultimo_movimiento|date:"d/m/Y" }}</td>
+          <td class="text-nowrap">{% include "inventario/_devolucion.html" %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="text-center py-4 text-muted-jn">No hay equipos prestados ni alquilados con esos filtros.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer small text-muted-jn">Para registrar que un equipo volvió, ábralo y use «Volvió a bodega». Para dar más tiempo, use «Prorrogar hasta» con el motivo.</div>
+</div>
+{% endblock %}

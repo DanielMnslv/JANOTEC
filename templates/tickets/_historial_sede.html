@@ -1,0 +1,13 @@
+{% if historial_sede %}
+<div class="card mt-3">
+  <div class="card-header"><i class="bi bi-clock-history"></i> Últimas visitas a {% if ticket.sede %}esta sede{% else %}este cliente{% endif %}</div>
+  <ul class="list-group list-group-flush">
+    {% for a in historial_sede %}
+      <a class="list-group-item list-group-item-action small" href="{{ a.get_absolute_url }}">
+        <span class="radicado">{{ a.numero }}</span> · {{ a.fecha|date:"d/m/Y" }} {% include "tickets/_resultado.html" %}{% if a.pdf_original %} <i class="bi bi-file-earmark-pdf text-danger" title="Tiene el acta original en PDF"></i>{% endif %}
+        <div class="text-truncate">{{ a.diagnostico }}</div>
+      </a>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}

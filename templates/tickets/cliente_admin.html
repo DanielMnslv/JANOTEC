@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block titulo %}{{ empresa }}{% endblock %}
+{% block contenido %}
+<a href="{% url 'clientes' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Clientes y sedes</a>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 my-2">
+  <div>
+    <h1 class="h3 page-title mb-1">{{ empresa.razon_social }}{% if not empresa.activa %} <span class="badge text-bg-secondary fs-6 align-middle">Inactivo</span>{% endif %}</h1>
+    <p class="small text-muted-jn mb-0">NIT {{ empresa.nit|default:"—" }} · {{ empresa.get_sector_display }}{% if empresa.ciudad %} · {{ empresa.ciudad }}{% endif %}{% if empresa.direccion %} · {{ empresa.direccion }}{% endif %}<br>
+      {{ empresa.email_contacto|default:"Sin correo" }} · {{ empresa.telefono|default:"Sin teléfono" }}</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-sm btn-light border" href="{% url 'cliente_editar_admin' empresa.pk %}"><i class="bi bi-pencil"></i> Editar cliente</a>
+    <form method="post" action="{% url 'cliente_eliminar' empresa.pk %}" onsubmit="return confirm('¿Eliminar este cliente y sus sedes? Si tiene historial solo quedará inactivo.');">{% csrf_token %}
+      <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Eliminar</button></form>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header small fw-semibold">Sedes ({{ sedes|length }})</div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle small">
+          <thead><tr><th>Sede</th><th>Municipio</th><th>Contacto que recibe</th><th>Abonado</th><th class="text-end">Tickets</th><th></th></tr></thead>
+          <tbody>
+          {% for s in sedes %}
+            <tr{% if sede_editada.pk == s.pk %} class="table-active"{% endif %}>
+              <td>{{ s.nombre }}{% if not s.activa %} <span class="badge text-bg-secondary">Inactiva</span>{% endif %}</td>
+              <td>{{ s.ciudad|default:"—" }}{% if s.departamento %}<div class="text-muted-jn">{{ s.departamento }}</div>{% endif %}</td>
+              <td>{% if s.contacto_email or s.contacto_nombre %}{{ s.contacto_nombre|default:"—" }}{% if s.contacto_cargo %} · {{ s.contacto_cargo }}{% endif %}<div class="text-muted-jn">{{ s.contacto_telefono }} {{ s.contacto_email }}</div>{% else %}<span class="text-warning-emphasis"><i class="bi bi-exclamation-circle"></i> Sin contacto</span>{% endif %}</td>
+              <td>{{ s.abonado|default:"—" }}</td>
+              <td class="text-end">{{ s.n_tickets }}</td>
+              <td class="text-end text-nowrap">
+                <a class="btn btn-sm btn-light border py-0" href="?sede={{ s.pk }}" title="Editar sede" aria-label="Editar sede {{ s.nombre }}"><i class="bi bi-pencil"></i></a>
+                <form method="post" action="{% url 'sede_eliminar' s.pk %}" class="d-inline" onsubmit="return confirm('¿Eliminar la sede {{ s.nombre|escapejs }}? Si tiene historial solo quedará inactiva.');">{% csrf_token %}
+                  <button class="btn btn-sm btn-outline-danger py-0" title="Eliminar sede" aria-label="Eliminar sede {{ s.nombre }}"><i class="bi bi-trash"></i></button></form>
+              </td>
+            </tr>
+          {% empty %}<tr><td colspan="6" class="text-center py-4 text-muted-jn">Aún no tiene sedes: agregue la primera.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <form method="post" class="card" id="form-sede">{% csrf_token %}
+      {% if sede_editada %}<input type="hidden" name="sede" value="{{ sede_editada.pk }}">{% endif %}
+      <div class="card-header small fw-semibold">{% if sede_editada %}Editar sede «{{ sede_editada.nombre }}»{% else %}Agregar sede{% endif %}</div>
+      <div class="card-body"><div class="row g-3">
+        {% for campo in form %}<div class="{% if campo.name == 'nombre' or campo.name == 'direccion' or campo.name == 'activa' %}col-12{% else %}col-md-6{% endif %}">{% include "tickets/_campo.html" %}</div>{% endfor %}
+      </div></div>
+      <div class="card-footer d-flex justify-content-end gap-2">
+        {% if sede_editada %}<a class="btn btn-light border" href="{% url 'cliente_detalle' empresa.pk %}">Cancelar</a>{% endif %}
+        <button class="btn btn-primary"><i class="bi bi-check2"></i> {% if sede_editada %}Guardar sede{% else %}Agregar sede{% endif %}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

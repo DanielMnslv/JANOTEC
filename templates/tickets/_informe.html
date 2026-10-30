@@ -1,0 +1,27 @@
+{# Informe en elaboración: el área técnica lo entrega al cliente o lo pasa a comercial para la propuesta #}
+<div class="card mb-4 border-info" id="informe">
+  <div class="card-header"><i class="bi bi-file-earmark-text"></i> Informe en elaboración</div>
+  <div class="card-body">
+    {% include "tickets/_borrador_informe.html" %}
+    <p class="small text-muted-jn">{% if borrador.aprobado %}Escriba las conclusiones para el cliente (opcional) y elija a quién se entrega.{% else %}Adjunte el informe técnico de la visita y escriba las conclusiones. Luego elija a quién se entrega.{% endif %}</p>
+    <form method="post" action="{% url 'entregar_informe' ticket.radicado %}" enctype="multipart/form-data">{% csrf_token %}
+      <input type="file" name="informe" class="form-control mb-2" accept=".pdf,.doc,.docx,image/*" multiple>
+      <textarea name="nota" class="form-control mb-3" rows="3" placeholder="Conclusiones del informe (las ve el cliente)"></textarea>
+      <details class="mb-3" {% if ticket.ficha or borrador.es_estudio %}open{% endif %}>
+        <summary class="small fw-semibold">Si pasa a comercial: lo que se va a cotizar</summary>
+        <div class="row g-2 mt-1">
+          <div class="col-md-6"><label class="form-label small" for="inf-servicios">Servicios a cotizar (uno por línea)</label>
+            <textarea name="servicios" id="inf-servicios" class="form-control" rows="4" placeholder="1 Desmonte del sistema de alarma PACOM&#10;1 Inventario y registro fotográfico">{% if borrador.aprobado and borrador.es_estudio %}{{ borrador.servicios }}{% endif %}</textarea>
+            <div class="form-text">Se cotizan; no pasan por bodega.</div></div>
+          <div class="col-md-6"><label class="form-label small" for="inf-materiales">Materiales y equipos a suministrar (uno por línea, con cantidad)</label>
+            <textarea name="materiales" id="inf-materiales" class="form-control" rows="4" placeholder="3 Cámara bala IP 4 MP&#10;80 m Cable UTP cat 6">{% if borrador.aprobado and borrador.es_estudio %}{{ borrador.materiales_para_comercial }}{% endif %}</textarea>
+            <div class="form-text">Lo que bodega alista si el cliente aprueba. Vacío si solo hay servicios.</div></div>
+        </div>
+      </details>
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-accent" name="destino" value="cliente"><i class="bi bi-send"></i> Entregar al cliente</button>
+        <button class="btn btn-outline-primary" name="destino" value="comercial" onclick="return confirm('El ticket pasará al área comercial para elaborar la propuesta. ¿Continuar?')"><i class="bi bi-briefcase"></i> Pasar a comercial para la propuesta</button>
+      </div>
+    </form>
+  </div>
+</div>

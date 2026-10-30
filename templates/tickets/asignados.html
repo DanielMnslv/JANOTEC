@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block titulo %}Tickets asignados a mí{% endblock %}
+{% block contenido %}
+<h1 class="h3 page-title mb-1">Tickets asignados a mí</h1>
+<p class="small text-muted-jn">El área técnica los dejó en sus manos: deje su gestión en el ticket (nota interna o respuesta al cliente) y, al terminar, avísele al coordinador para que lo retome.</p>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle small">
+      <thead><tr><th>Radicado</th><th>Cliente</th><th>Asunto</th><th>Estado</th><th>Actualizado</th></tr></thead>
+      <tbody>
+      {% for t in tickets %}
+        <tr>
+          <td><a class="radicado" href="{{ t.get_absolute_url }}">{{ t.radicado }}</a></td>
+          <td>{{ t.empresa }}{% if t.sede %}<div class="text-muted-jn">{{ t.sede }}</div>{% endif %}</td>
+          <td>{{ t.asunto }}</td>
+          <td><span class="badge text-bg-{{ t.color_estado }}">{{ t.get_estado_display }}</span></td>
+          <td>{{ t.actualizado|date:"d/m/Y h:i a" }}</td>
+        </tr>
+      {% empty %}<tr><td colspan="5" class="text-center py-4 text-muted-jn">No tiene tickets asignados por ahora.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

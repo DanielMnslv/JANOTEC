@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+{% block titulo %}Acta de soporte · {% if ticket %}{{ ticket.radicado }}{% else %}{{ empresa.razon_social }}{% endif %}{% endblock %}
+{% block contenido %}
+{% if ticket %}<a href="{{ ticket.get_absolute_url }}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ ticket.radicado }}</a>
+{% else %}<a href="{% url 'acta_sin_programar' %}?empresa={{ empresa.pk }}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Cambiar cliente o sede</a>{% endif %}
+<h1 class="h3 page-title mt-2 mb-1">Acta de soporte, instalación, desinstalación</h1>
+{% if ticket %}<p class="text-muted-jn mb-4">Diligencie el acta al terminar la visita. Queda en el historial de la sede, el cliente la ve en su solicitud y se envía copia a los correos indicados.</p>
+{% else %}<p class="text-muted-jn mb-4"><span class="badge text-bg-warning me-1">Trabajo no programado</span> Deje constancia del trabajo que el cliente pidió y se resolvió en el momento. El acta queda en el historial de la sede y se envía copia a los correos indicados.</p>{% endif %}
+
+<form method="post" enctype="multipart/form-data" novalidate id="form-acta">{% csrf_token %}
+  {% if form.errors or equipos.total_error_count or utilizados.total_error_count or retirados.total_error_count %}
+    <div class="alert alert-warning"><i class="bi bi-exclamation-circle"></i> Revise los campos marcados.
+      {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
+      {% for e in equipos.non_form_errors %}<div>{{ e }}</div>{% endfor %}
+      {% for e in utilizados.non_form_errors %}<div>{{ e }}</div>{% endfor %}
+    </div>
+  {% endif %}
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <div class="card mb-4"><div class="card-body p-4">
+        <section class="paso-form">
+          <h2 class="h6 paso-titulo"><span class="paso-num">1</span> Visita</h2>
+          <div class="row">
+            <div class="col-md-4 mb-3"><label class="form-label fw-medium">Cliente</label><div class="form-control bg-light">{{ empresa.razon_social }}</div></div>
+            <div class="col-md-4 mb-3"><label class="form-label fw-medium">Sede</label><div class="form-control bg-light">{{ sede|default:"—" }}</div></div>
+            {% include "tickets/_campo.html" with campo=form.ciudad clase="col-md-4" %}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-medium">{{ form.modalidad.label }} <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-3">{% for op in form.modalidad %}<div class="form-check">{{ op.tag }} <label class="form-check-label" for="{{ op.id_for_label }}">{{ op.choice_label }}</label></div>{% endfor %}</div>
+            <div class="small text-muted-jn" id="nota-virtual" hidden>Virtual: por teléfono, videollamada o acceso remoto. No se pide la firma del cliente ni se registra la ubicación.</div>
+            {% for e in form.modalidad.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+          </div>
+        </section>
+
+        <section class="paso-form">
+          <h2 class="h6 paso-titulo"><span class="paso-num">2</span> Trabajo realizado</h2>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-medium">{{ form.actividad.label }} <span class="text-danger">*</span></label>
+              <div class="d-flex flex-wrap gap-3">{% for op in form.actividad %}<div class="form-check">{{ op.tag }} <label class="form-check-label" for="{{ op.id_for_label }}">{{ op.choice_label }}</label></div>{% endfor %}</div>
+              {% for e in form.actividad.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+            </div>
+            {% include "tickets/_campo.html" with campo=form.sistema clase="col-md-6" %}
+          </div>
+          {% include "tickets/_campo.html" with campo=form.diagnostico %}
+        </section>
+
+        <section class="paso-form">
+          <h2 class="h6 paso-titulo"><span class="paso-num">3</span> Relación de equipos y materiales</h2>
+          <h3 class="h6 mt-3 mb-1"><i class="bi bi-wrench-adjustable"></i> Equipos intervenidos</h3>
+          <p class="small text-muted-jn mb-2">Los equipos que revisó, reparó, configuró o retiró. Ej.: cámara IP bala, DVR, panel de alarma. Si lo desmontó, en «¿Qué se hizo?» elija <b>Se retiró</b> e indique de quién es.</p>
+          {{ equipos.management_form }}
+          <div id="lista-equipos">
+            {% for f in equipos %}{% include "tickets/_equipo_acta.html" %}{% endfor %}
+          </div>
+          <template id="plantilla-equipos">{% with f=equipos.empty_form %}{% include "tickets/_equipo_acta.html" %}{% endwith %}</template>
+          <button type="button" class="btn btn-outline-primary btn-sm agregar-fila" data-prefijo="equipos"><i class="bi bi-plus-lg"></i> Agregar equipo intervenido</button>
+
+          <h3 class="h6 mt-4 mb-1"><i class="bi bi-box-seam"></i> Materiales y equipos utilizados</h3>
+          <p class="small text-muted-jn mb-2">Lo que usó para que el servicio quedara corregido o funcionando. Ej.: router Ruijie, conectores, cable, fuente.</p>
+          {% include "inventario/_acta_materiales.html" %}
+          {{ utilizados.management_form }}
+          <div id="lista-utilizados" class="mt-3">
+            {% for f in utilizados %}{% include "tickets/_equipo_acta.html" %}{% endfor %}
+          </div>
+          <template id="plantilla-utilizados">{% with f=utilizados.empty_form %}{% include "tickets/_equipo_acta.html" %}{% endwith %}</template>
+          <button type="button" class="btn btn-outline-primary btn-sm agregar-fila" data-prefijo="utilizados"><i class="bi bi-plus-lg"></i> Agregar material o equipo que no está en el inventario</button>
+        </section>
+
+        <section class="paso-form">
+          <h2 class="h6 paso-titulo"><span class="paso-num">4</span> Resultado</h2>
+          <div class="mb-3">
+            <label class="form-label fw-medium">{{ form.resultado.label }} <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-3">{% for op in form.resultado %}<div class="form-check">{{ op.tag }} <label class="form-check-label" for="{{ op.id_for_label }}">{{ op.choice_label }}</label></div>{% endfor %}</div>
+            {% for e in form.resultado.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+          </div>
+          {% include "tickets/_campo.html" with campo=form.observaciones %}
+          <div class="row g-3">
+            <div class="col-md-6">{% include "tickets/_campo.html" with campo=form.evidencias_proceso %}</div>
+            <div class="col-md-6">{% include "tickets/_campo.html" with campo=form.evidencias_resultado %}</div>
+          </div>
+        </section>
+
+        <section class="paso-form">
+          <h2 class="h6 paso-titulo"><span class="paso-num">5</span> Asistentes y firmas</h2>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="firma-bloque">
+                <div class="fw-semibold">{{ user.get_full_name|default:user.username }}</div>
+                <div class="small text-muted-jn mb-2">Técnico</div>
+                {% include "tickets/_campo.html" with campo=form.cargo_tecnico %}
+                {% include "tickets/_firma.html" with campo=form.firma_tecnico titulo="Firma del técnico" obligatoria=True %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="firma-bloque">
+                <div class="fw-semibold">Representante del cliente</div>
+                <div class="small text-muted-jn mb-2">Quien recibe el servicio</div>
+                {% include "tickets/_campo.html" with campo=form.recibio %}
+                {% include "tickets/_campo.html" with campo=form.cargo_recibio %}
+                <div id="caja-firma-cliente">{% include "tickets/_firma.html" with campo=form.firma_cliente titulo="Firma del representante del cliente" obligatoria=True %}</div>
+              </div>
+            </div>
+            <div class="col-12">
+              <details class="firma-bloque" {% if form.acompanante_nombre.value %}open{% endif %}>
+                <summary class="fw-semibold">Agregar acompañante (otro técnico que asistió)</summary>
+                <div class="row mt-2">
+                  {% include "tickets/_campo.html" with campo=form.acompanante_nombre clase="col-md-6" %}
+                  {% include "tickets/_campo.html" with campo=form.acompanante_cargo clase="col-md-6" %}
+                </div>
+                {% include "tickets/_firma.html" with campo=form.firma_acompanante titulo="Firma del acompañante" %}
+              </details>
+            </div>
+          </div>
+        </section>
+
+        <section class="paso-form oportunidad-acta">
+          <h2 class="h6 paso-titulo"><span class="paso-num">6</span> ¿Detectó otra necesidad u oportunidad? <span class="small fw-normal text-muted-jn">(opcional · interno)</span></h2>
+          <p class="small text-muted-jn mt-n1"><i class="bi bi-lock"></i> El cliente no ve esta sección. Llega al área comercial: «una venta jala otra».</p>
+          <div class="opciones-servicio mb-3">
+            {% for op in form.oportunidad_servicios %}
+              <label class="opcion-servicio" for="{{ op.id_for_label }}">{{ op.tag }} {{ op.choice_label }}</label>
+            {% endfor %}
+          </div>
+          {% include "tickets/_campo.html" with campo=form.oportunidad_nota %}
+        </section>
+
+        <section class="paso-form">
+          <h2 class="h6 paso-titulo"><span class="paso-num">7</span> Envío</h2>
+          {% include "tickets/_campo.html" with campo=form.copia_correo %}
+          {% if not ticket %}
+          {% elif ticket.ficha.etapa == 'levantamiento' %}
+            <div class="alert alert-info small py-2"><i class="bi bi-info-circle"></i> Visita de levantamiento: después de guardar el acta, diligencie el <b>informe del requerimiento</b> (qué necesita el cliente y los materiales y equipos). Con ese informe el ticket vuelve al área comercial para la propuesta.</div>
+          {% else %}{% include "tickets/_campo.html" with campo=form.marcar_resuelto %}{% endif %}
+          {{ form.latitud }}{{ form.longitud }}
+          <div class="small text-muted-jn" id="estado-gps"><i class="bi bi-geo-alt"></i> Obteniendo la ubicación de la visita…</div>
+        </section>
+
+        <div class="d-flex justify-content-end gap-2">
+          <a href="{% if ticket %}{{ ticket.get_absolute_url }}{% else %}{% url 'actas_lista' %}{% endif %}" class="btn btn-light">Cancelar</a>
+          <button class="btn btn-accent"><i class="bi bi-check2-circle"></i> Revisar y guardar acta</button>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="col-lg-4">
+      {% if not ticket %}
+      <div class="card">
+        <div class="card-header">Trabajo no programado</div>
+        <div class="card-body small">
+          <p class="mb-2">Use esta acta cuando, durante otra visita o en sitio, el cliente pide un trabajo adicional que se soluciona de inmediato.</p>
+          <dl class="dl-ficha mb-0">
+            <dt>Cliente</dt><dd>{{ empresa.razon_social }}</dd>
+            <dt>Sede</dt><dd>{{ sede|default:"Sin sede específica" }}</dd>
+            {% if sede.direccion %}<dt>Dirección</dt><dd>{{ sede.direccion }}</dd>{% endif %}
+            {% if sede.abonado %}<dt>Abonado</dt><dd class="radicado">{{ sede.abonado }}</dd>{% endif %}
+          </dl>
+          <p class="text-muted-jn mt-3 mb-0"><i class="bi bi-info-circle"></i> No crea ni cambia ningún ticket. El coordinador recibe copia del acta.</p>
+        </div>
+      </div>
+      {% else %}
+      <div class="card">
+        <div class="card-header">Solicitud {{ ticket.radicado }}</div>
+        <div class="card-body small">
+          <div class="fw-semibold mb-1">{{ ticket.asunto }}</div>
+          {% if ticket.falla_display %}<div class="mb-2">{{ ticket.falla_display }}</div>{% endif %}
+          <div style="white-space:pre-line" class="text-muted-jn mb-3">{{ ticket.descripcion|truncatechars:400 }}</div>
+          <dl class="dl-ficha mb-0">
+            {% if ticket.contacto_nombre %}<dt>Contacto en sitio</dt><dd>{{ ticket.contacto_nombre }}{% if ticket.contacto_telefono %} · <a href="tel:{{ ticket.contacto_telefono }}">{{ ticket.contacto_telefono }}</a>{% endif %}</dd>{% endif %}
+            {% if ticket.sede.abonado %}<dt>Abonado</dt><dd class="radicado">{{ ticket.sede.abonado }}</dd>{% endif %}
+          </dl>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</form>
+<div class="modal fade" id="modal-acta" tabindex="-1" aria-labelledby="titulo-modal-acta" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content border-warning">
+      <div class="modal-header bg-warning-subtle">
+        <h2 class="modal-title h5" id="titulo-modal-acta"><i class="bi bi-exclamation-triangle-fill text-warning"></i> Revise el acta antes de guardarla</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <p class="fw-semibold mb-2">Una vez firmada y guardada, el acta <u>no se puede modificar</u>. Se envía al cliente y a los correos de copia.</p>
+        <dl class="dl-ficha small mb-2" id="resumen-acta"></dl>
+        <div class="alert alert-danger small py-2 mb-0" id="avisos-acta" hidden></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Revisar antes</button>
+        <button type="button" class="btn btn-accent" id="confirmar-acta"><i class="bi bi-check2-circle"></i> Sí, guardar y enviar el acta</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  // Las firmas (recuadros .firma-pad) las maneja static/js/firmas.js
+
+  // --- Equipos intervenidos y materiales utilizados: agregar filas ------------
+  document.querySelectorAll('.agregar-fila').forEach(function (boton) {
+    const prefijo = boton.dataset.prefijo, total = document.getElementById('id_' + prefijo + '-TOTAL_FORMS');
+    boton.addEventListener('click', function () {
+      const n = parseInt(total.value, 10);
+      const html = document.getElementById('plantilla-' + prefijo).innerHTML.replace(/__prefix__/g, n);
+      document.getElementById('lista-' + prefijo).insertAdjacentHTML('beforeend', html);
+      total.value = n + 1;
+    });
+  });
+
+  // --- «Se retiró»: solo entonces se pregunta de quién es y la placa ----------
+  function mostrarRetiro(sel) {
+    const caja = sel.closest('.equipo-acta').querySelector('.solo-retiro');
+    if (caja) caja.hidden = sel.value !== 'retirado';
+  }
+  document.addEventListener('change', function (ev) {
+    if (ev.target.matches('select[name$="-accion"]')) mostrarRetiro(ev.target);
+  });
+  document.querySelectorAll('select[name$="-accion"]').forEach(mostrarRetiro);
+
+  // --- Ubicación de la visita (si el técnico lo permite) ---------------------
+  const estado = document.getElementById('estado-gps');
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(function (p) {
+      document.getElementById('id_latitud').value = p.coords.latitude.toFixed(7);
+      document.getElementById('id_longitud').value = p.coords.longitude.toFixed(7);
+      estado.innerHTML = '<i class="bi bi-geo-alt-fill text-success"></i> Ubicación de la visita registrada.';
+    }, function () {
+      estado.innerHTML = '<i class="bi bi-geo-alt"></i> No se pudo obtener la ubicación (el acta se guarda igual).';
+    }, { enableHighAccuracy: true, timeout: 15000 });
+  } else {
+    estado.textContent = 'Este dispositivo no comparte la ubicación (el acta se guarda igual).';
+  }
+  // --- Virtual: sin firma del cliente ni ubicación ---------------------------
+  function esVirtual() { return !!document.querySelector('input[name=modalidad][value=virtual]:checked'); }
+  function mostrarModalidad() {
+    const virtual = esVirtual();
+    document.getElementById('nota-virtual').hidden = !virtual;
+    document.getElementById('caja-firma-cliente').hidden = virtual;
+    estado.hidden = virtual;
+  }
+  document.querySelectorAll('input[name=modalidad]').forEach(function (r) { r.addEventListener('change', mostrarModalidad); });
+  mostrarModalidad();
+  // --- Alerta antes de guardar: el acta firmada no se modifica ---------------
+  (function () {
+    const formActa = document.getElementById('form-acta'), caja = document.getElementById('modal-acta');
+    if (!formActa || !caja || !window.bootstrap) return;
+    const modal = new bootstrap.Modal(caja);
+    let confirmado = false;
+    function nombres(prefijo) {
+      return [...formActa.querySelectorAll('input[name^="' + prefijo + '-"][name$="-equipo"]')]
+        .map(function (c) { return c.value.trim(); }).filter(Boolean);
+    }
+    function fila(dl, titulo, valor) {
+      const dt = document.createElement('dt'), dd = document.createElement('dd');
+      dt.textContent = titulo; dd.textContent = valor; dl.append(dt, dd);
+    }
+    formActa.addEventListener('submit', function (ev) {
+      if (confirmado) return;
+      ev.preventDefault();
+      const dl = document.getElementById('resumen-acta'), avisos = [];
+      dl.replaceChildren();
+      const modalidad = formActa.querySelector('input[name=modalidad]:checked');
+      fila(dl, 'Modalidad', modalidad ? modalidad.closest('.form-check').textContent.trim() : 'Sin elegir');
+      const resultado = formActa.querySelector('input[name=resultado]:checked');
+      fila(dl, 'Resultado', resultado ? resultado.closest('.form-check').textContent.trim() : 'Sin elegir');
+      const intervenidos = nombres('equipos'), utilizados = nombres('utilizados');
+      const inventario = [...formActa.querySelectorAll('input[name=usar_activo]:checked')].length
+        + [...formActa.querySelectorAll('input[name^=usar_insumo_]')].filter(function (c) { return parseFloat(c.value) > 0; }).length;
+      fila(dl, 'Equipos intervenidos', intervenidos.length ? intervenidos.join(', ') : 'Ninguno');
+      const retirados = [...formActa.querySelectorAll('select[name^="equipos-"][name$="-accion"]')]
+        .filter(function (s) { return s.value === 'retirado'; }).length;
+      if (retirados) fila(dl, 'Equipos retirados', retirados + ' (de JANOTEC: quedan a su nombre hasta entregarlos en bodega)');
+      fila(dl, 'Materiales y equipos utilizados', (utilizados.length ? utilizados.join(', ') : 'Ninguno')
+        + (inventario ? ' · ' + inventario + ' del inventario (se descuentan)' : ''));
+      const copia = formActa.querySelector('[name=copia_correo]');
+      fila(dl, 'Se envía a', copia && copia.value.trim() ? copia.value.trim() : 'Solo al cliente');
+      const resuelto = formActa.querySelector('[name=marcar_resuelto]');
+      if (resuelto) fila(dl, 'Al guardar', resuelto.checked ? 'El ticket avanza (visita ejecutada)' : 'El ticket queda como está');
+      if (!modalidad) avisos.push('Falta indicar si fue presencial o virtual.');
+      if (!resultado) avisos.push('Falta elegir el resultado.');
+      if (!formActa.querySelector('[name=firma_tecnico]').value) avisos.push('Falta la firma del técnico.');
+      if (!esVirtual() && !formActa.querySelector('[name=firma_cliente]').value) avisos.push('Falta la firma del representante del cliente.');
+      const cajaAvisos = document.getElementById('avisos-acta');
+      cajaAvisos.hidden = !avisos.length;
+      cajaAvisos.textContent = avisos.join(' ');
+      modal.show();
+    });
+    document.getElementById('confirmar-acta').addEventListener('click', function () {
+      confirmado = true;
+      modal.hide();
+      formActa.submit();
+    });
+  })();
+})();
+</script>
+{% endblock %}

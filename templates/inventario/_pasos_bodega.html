@@ -1,0 +1,27 @@
+{# Paso a paso de bodega de un ticket (seguimiento_ticket). compacto=True: solo los puntos, para la bandeja #}
+{% if compacto %}
+<div class="d-flex align-items-center gap-1" title="Paso {{ f.numero }} de {{ f.total }}: {{ f.nombre }}">
+  {% for clave, nombre, hecho, actual in f.pasos %}
+    <span class="rounded-circle d-inline-block {% if actual %}bg-primary{% elif hecho %}bg-success{% else %}bg-secondary-subtle border{% endif %}" style="width:.7rem;height:.7rem" aria-hidden="true"></span>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card mb-4">
+  <div class="card-header d-flex flex-wrap justify-content-between gap-2">
+    <span><i class="bi bi-signpost-split"></i> Paso a paso en bodega · {{ f.ticket.radicado }}</span>
+    {% if f.numero %}<span class="small text-muted-jn">Paso {{ f.numero }} de {{ f.total }}</span>{% endif %}
+  </div>
+  <div class="card-body">
+    <ol class="list-unstyled d-flex flex-wrap gap-2 mb-3">
+      {% for clave, nombre, hecho, actual in f.pasos %}
+        <li class="badge rounded-pill {% if actual %}text-bg-primary{% elif hecho %}text-bg-success{% else %}text-bg-light border text-muted-jn{% endif %} fw-normal py-2 px-3">
+          {% if hecho and not actual %}<i class="bi bi-check2"></i>{% else %}{{ forloop.counter }}.{% endif %} {{ nombre }}</li>
+      {% endfor %}
+    </ol>
+    <div class="{% if f.atrasado %}text-danger{% endif %}"><strong>Lo que sigue:</strong> {{ f.sigue }}{% if f.quien %} <span class="badge text-bg-light border">{{ f.quien }}</span>{% endif %}
+      {% if f.atrasado %}<span class="small"> · lleva {{ f.dias }} días en bodega (meta: 3)</span>{% endif %}</div>
+    {% if f.solicitudes|length > 1 %}<div class="small text-muted-jn mt-2">El ticket tiene {{ f.solicitudes|length }} solicitudes; el paso es el de la más atrasada:
+      {% for s in f.solicitudes %}<a href="{{ s.get_absolute_url }}">{{ s.numero }}</a> ({{ s.get_estado_display|lower }}){% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+  </div>
+</div>
+{% endif %}

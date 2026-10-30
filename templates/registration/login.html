@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% load static %}
+{% block titulo %}Ingresar{% endblock %}
+{% block cuerpo %}
+<div class="login-wrap">
+  <section class="login-hero">
+    <div><img src="{% static 'img/marca/logo-blanco.webp' %}" alt="JANOTEC" class="logo-hero"></div>
+    <div>
+      <h1>Su seguridad,<br>con <span class="acento">seguimiento</span> en tiempo real.</h1>
+      <p class="opacity-75 mt-3 mb-4">Radique sus solicitudes de soporte y vea cada avance de nuestro equipo técnico.</p>
+      <ul>
+        <li><i class="bi bi-camera-video text-jn-verde me-2"></i>CCTV y videovigilancia</li>
+        <li><i class="bi bi-broadcast text-jn-verde me-2"></i>Monitoreo 24/7</li>
+        <li><i class="bi bi-bell text-jn-verde me-2"></i>Alarmas y control de accesos</li>
+      </ul>
+    </div>
+    <small class="opacity-50">Jano Tec S.A.S. · Villavicencio, Meta</small>
+  </section>
+  <section class="login-form">
+    <div class="card p-4">
+      <img src="{% static 'img/marca/logo-color.webp' %}" alt="JANOTEC" class="logo-login mb-4 d-lg-none">
+      <h2 class="h4 page-title mb-1">Ingresar</h2>
+      <p class="text-muted-jn small mb-4">Portal de soporte para clientes y personal JANOTEC.</p>
+      {% if form.errors %}<div class="alert alert-danger py-2 small">Usuario o contraseña incorrectos.</div>{% endif %}
+      <form method="post">{% csrf_token %}
+        <div class="mb-3"><label class="form-label" for="id_username">Usuario</label>
+          <input type="text" name="username" id="id_username" class="form-control" autofocus required value="{{ form.username.value|default:'' }}"></div>
+        <div class="mb-3"><label class="form-label" for="id_password">Contraseña</label>
+          <input type="password" name="password" id="id_password" class="form-control" required></div>
+        <input type="hidden" name="next" value="{{ next }}">
+        <button class="btn btn-primary w-100">Ingresar</button>
+      </form>
+      <div class="text-center mt-3"><a class="small" href="{% url 'password_reset' %}">¿Olvidó su contraseña?</a></div>
+      <hr class="my-3">
+      <a class="btn btn-outline-primary w-100" href="{% url 'consulta' %}"><i class="bi bi-search"></i> Consultar mi servicio sin usuario</a>
+      <div class="small text-muted-jn text-center mt-1">Con el número de radicado y su teléfono de contacto.</div>
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "cronograma/_correo_marco.html" %}
+{% block cuerpo %}
+<p style="margin:0 0 10px;">Buenas tardes, <b>{{ destinatario }}</b>.</p>
+<p style="margin:0 0 14px;color:#3a4a56;">Se le informa la siguiente actividad programada{% if rol %} (su rol: <b>{{ rol }}</b>){% endif %}:</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;">
+  <tr><td style="padding:7px 10px;background:#f0f1f4;font-weight:bold;width:150px;border:1px solid #e2e2e6;">Fecha y hora</td><td style="padding:7px 10px;border:1px solid #e2e2e6;"><b>{{ cuando|capfirst }}</b> · {{ a.hora_inicio|time:"H:i" }}–{{ a.hora_fin|time:"H:i" }}</td></tr>
+  <tr><td style="padding:7px 10px;background:#f0f1f4;font-weight:bold;border:1px solid #e2e2e6;">Cliente / sede</td><td style="padding:7px 10px;border:1px solid #e2e2e6;">{{ a.cliente }} · {{ a.sede }}</td></tr>
+  <tr><td style="padding:7px 10px;background:#f0f1f4;font-weight:bold;border:1px solid #e2e2e6;">Tipo</td><td style="padding:7px 10px;border:1px solid #e2e2e6;">{{ a.get_tipo_display }}{% if a.trabajo_alturas %} · <b style="color:#b3141c;">Alturas</b>{% endif %}{% if a.sst %} · SST{% endif %}{% if a.vehiculo %} · Vehículo{% endif %}{% if a.viaticos %} · Viáticos{% endif %}</td></tr>
+  <tr><td style="padding:7px 10px;background:#f0f1f4;font-weight:bold;border:1px solid #e2e2e6;">Actividad</td><td style="padding:7px 10px;border:1px solid #e2e2e6;">{{ a.actividad|linebreaksbr }}</td></tr>
+  <tr><td style="padding:7px 10px;background:#f0f1f4;font-weight:bold;border:1px solid #e2e2e6;">Técnicos</td><td style="padding:7px 10px;border:1px solid #e2e2e6;">{% for u in a.tecnicos %}{{ u.get_full_name|default:u.username }}<br>{% endfor %}</td></tr>
+  <tr><td style="padding:7px 10px;background:#f0f1f4;font-weight:bold;border:1px solid #e2e2e6;">Insumos</td><td style="padding:7px 10px;border:1px solid #e2e2e6;">{% if insumos %}<ul style="margin:0;padding-left:16px;">{% for i in insumos %}<li>{{ i.cantidad|floatformat:"-1" }} {% if i.unidad == 'm' %}m {% endif %}{{ i.descripcion }}</li>{% endfor %}</ul>{% else %}Sin insumos{% endif %}</td></tr>
+</table>
+{% endblock %}

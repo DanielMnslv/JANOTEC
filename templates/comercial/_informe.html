@@ -1,0 +1,12 @@
+{# Informe del requerimiento: lo que quiere y necesita el cliente (base de la propuesta) #}
+<div class="informe-requerimiento">
+  <div class="small text-muted-jn mb-2">{% if informe.con_visita %}<i class="bi bi-geo-alt"></i> Con visita de levantamiento{% else %}<i class="bi bi-telephone"></i> Sin visita{% endif %}
+    · {{ informe.elaborado_por|default:"—" }} · {{ informe.actualizado|date:"d/m/Y h:i a" }}</div>
+  <dl class="dl-ficha mb-0">
+    <dt>Qué quiere y necesita el cliente</dt><dd style="white-space:pre-line">{{ informe.necesidad }}</dd>
+    {% if informe.solucion %}<dt>Solución recomendada</dt><dd style="white-space:pre-line">{{ informe.solucion }}</dd>{% endif %}
+    {% if informe.servicios.strip %}<dt>Servicios a cotizar</dt><dd><ul class="mb-0 ps-3">{% for linea in informe.servicios.splitlines %}{% if linea.strip %}<li>{{ linea }}</li>{% endif %}{% endfor %}</ul></dd>{% endif %}
+    <dt>Materiales y equipos a suministrar</dt><dd>{% if informe.materiales.strip %}<ul class="mb-0 ps-3">{% for linea in informe.materiales.splitlines %}{% if linea.strip %}<li>{{ linea }}</li>{% endif %}{% endfor %}</ul>{% else %}<span class="text-muted-jn">Ninguno: solo servicios (no pasa por bodega).</span>{% endif %}</dd>
+    {% if informe.observaciones %}<dt>Condiciones del sitio y observaciones</dt><dd style="white-space:pre-line">{{ informe.observaciones }}</dd>{% endif %}
+  </dl>
+</div>

@@ -1,0 +1,10 @@
+{# Semana con los días/franjas en que el cliente NO puede atender (rojo) #}
+<div class="semana-mini" role="img" aria-label="{% if ticket.resumen_no_disponible %}No puede atender: {{ ticket.resumen_no_disponible }}{% else %}Puede atender cualquier día{% endif %}">
+  {% for dia, franja, texto in ticket.semana_atencion %}
+    <div class="d {{ franja }}" title="{{ dia }}: {% if texto %}no {{ texto }}{% else %}puede atender{% endif %}">
+      <span>{{ dia|slice:":2" }}</span>{% if franja == 'manana' %}AM{% elif franja == 'tarde' %}PM{% elif franja == 'todo' %}✕{% elif franja == 'horas' %}<i class="bi bi-clock"></i>{% else %}✓{% endif %}
+    </div>
+  {% endfor %}
+</div>
+{% if ticket.resumen_no_disponible %}<div class="small mt-1"><i class="bi bi-calendar-x text-danger"></i> No puede: {{ ticket.resumen_no_disponible }}</div>{% endif %}
+{% if ticket.restricciones %}<div class="small text-muted-jn mt-1">{{ ticket.restricciones }}</div>{% endif %}

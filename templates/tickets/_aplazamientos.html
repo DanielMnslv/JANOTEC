@@ -1,0 +1,37 @@
+{# Formulario para aplazar (solo el coordinador) y el historial de aplazamientos del ticket #}
+{% if form_aplazar %}
+<div class="card mb-4 border-danger" id="aplazar">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-calendar-x text-danger"></i> Aplazar la visita programada</span>
+    <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="collapse" data-bs-target="#form-aplazar" aria-expanded="false">Aplazar…</button>
+  </div>
+  <div class="collapse" id="form-aplazar">
+    <form method="post" action="{% url 'aplazar' ticket.radicado %}" class="card-body">{% csrf_token %}
+      <p class="small text-muted-jn">La visita sale del cronograma y el ticket vuelve a <strong>«Recepcionado»</strong>, listo para reprogramarlo con el mismo radicado y sus datos, con el distintivo «Aplazado», y el motivo queda resaltado en el historial. Se avisa a los técnicos{% if ticket.acompanamiento_sst %} y a SST{% endif %}; la autorización que tenía el cliente deja de servir.</p>
+      {% include "tickets/_campo.html" with campo=form_aplazar.motivo %}
+      {% include "tickets/_campo.html" with campo=form_aplazar.detalle %}
+      {% include "tickets/_campo.html" with campo=form_aplazar.informar_cliente %}
+      <button class="btn btn-danger" onclick="return confirm('¿Aplazar la visita? Saldrá del cronograma y el ticket volverá a Recepcionado para reprogramarlo.')"><i class="bi bi-calendar-x"></i> Aplazar visita</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if aplazamientos %}
+<div class="card mb-4 card-aplazamientos">
+  <div class="card-header"><i class="bi bi-arrow-counterclockwise"></i> Este ticket se aplazó {{ aplazamientos|length }} {{ aplazamientos|length|pluralize:"vez,veces" }}</div>
+  <ul class="list-group list-group-flush">
+    {% for a in aplazamientos %}
+      <li class="list-group-item">
+        <div class="d-flex flex-wrap justify-content-between gap-2">
+          <strong>N.º {{ a.numero }} · {{ a.get_motivo_display }}</strong>
+          <span class="small text-muted-jn">{{ a.creado|date:"d/m/Y h:i a" }} · {{ a.autor|default:"—" }}</span>
+        </div>
+        <div style="white-space:pre-line">{{ a.detalle }}</div>
+        {% if a.programacion %}<div class="small text-muted-jn mt-1"><i class="bi bi-calendar-event"></i> Estaba programada: {{ a.programacion }}</div>{% endif %}
+        <div class="small {% if a.informado_cliente %}text-success{% else %}text-muted-jn{% endif %}"><i class="bi bi-envelope"></i> {% if a.informado_cliente %}Se le informó al cliente{% else %}No se le informó al cliente{% endif %}</div>
+      </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}

@@ -1,0 +1,46 @@
+{# Alerta antes de recepcionar: al recepcionar se le notifica al cliente, así que primero se revisan los cambios pendientes #}
+<div class="modal fade" id="modal-recepcion" tabindex="-1" aria-labelledby="titulo-recepcion" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-warning">
+      <div class="modal-header bg-warning-subtle">
+        <h2 class="modal-title h5" id="titulo-recepcion"><i class="bi bi-exclamation-triangle-fill text-warning"></i> Va a recepcionar <span class="radicado" data-campo="radicado"></span></h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <p class="fw-semibold mb-2">Al recepcionarlo se le notificará al cliente por correo.</p>
+        <p class="small mb-2" data-campo="correos-bloque">Le llegará a: <strong data-campo="correos"></strong></p>
+        <p class="small mb-0">Antes de continuar, revise si el ticket tiene cambios pendientes (tipo, sede, urgencia, descripción…). Si los hace después, habría que volver a notificar al cliente.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Revisar antes</button>
+        <button type="button" class="btn btn-accent" id="confirmar-recepcion"><i class="bi bi-inbox"></i> Sí, recepcionar y notificar</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  const caja = document.getElementById('modal-recepcion');
+  if (!caja || !window.bootstrap) return;
+  const modal = new bootstrap.Modal(caja);
+  let pendiente = null;
+  document.addEventListener('click', function (ev) {
+    const boton = ev.target.closest('[data-confirmar-recepcion]');
+    if (!boton || boton.dataset.confirmado === '1') return;
+    ev.preventDefault();
+    pendiente = boton;
+    caja.querySelector('[data-campo=radicado]').textContent = boton.dataset.confirmarRecepcion;
+    const correos = boton.dataset.correos || '';
+    caja.querySelector('[data-campo=correos]').textContent = correos;
+    caja.querySelector('[data-campo=correos-bloque]').hidden = !correos;
+    modal.show();
+  });
+  document.getElementById('confirmar-recepcion').addEventListener('click', function () {
+    if (!pendiente) return;
+    pendiente.dataset.confirmado = '1';
+    modal.hide();
+    const form = pendiente.form;
+    if (form.requestSubmit) { form.requestSubmit(pendiente); } else { pendiente.click(); }
+  });
+})();
+</script>

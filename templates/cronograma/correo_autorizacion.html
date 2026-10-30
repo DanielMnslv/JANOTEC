@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es"><body style="margin:0;padding:0;background:#f5f5f6;font-family:Arial,Helvetica,sans-serif;color:#1f2024;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f6;padding:24px 0;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #e2e2e6;">
+  <tr><td style="background:#686975;padding:18px 24px;border-bottom:4px solid #acc812;">
+    <div style="color:#ffffff;font-size:18px;font-weight:bold;letter-spacing:.5px;">JANOTEC S.A.S.</div>
+    <div style="color:#e9eaee;font-size:12px;">Autorización de ingreso · visita técnica{% if ticket %} · {{ ticket.radicado }}{% endif %}</div>
+  </td></tr>
+  <tr><td style="padding:22px 24px;font-size:14px;line-height:1.5;">
+    <p style="margin:0 0 12px;">Cordial saludo.</p>
+    <p style="margin:0 0 16px;">Solicitamos su autorización para el ingreso de nuestro personal técnico en la siguiente fecha:</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;margin:0 0 16px;">
+      <tr><td style="padding:8px 10px;background:#f0f1f4;font-weight:bold;width:150px;border:1px solid #e2e2e6;">Fecha y hora</td><td style="padding:8px 10px;border:1px solid #e2e2e6;font-weight:bold;">{{ cuando }}</td></tr>
+      <tr><td style="padding:8px 10px;background:#f0f1f4;font-weight:bold;border:1px solid #e2e2e6;">Cliente / sede</td><td style="padding:8px 10px;border:1px solid #e2e2e6;">{{ a.cliente }}{% if a.sede %} · {{ a.sede }}{% endif %}</td></tr>
+      <tr><td style="padding:8px 10px;background:#f0f1f4;font-weight:bold;border:1px solid #e2e2e6;">Tipo</td><td style="padding:8px 10px;border:1px solid #e2e2e6;">{{ a.get_tipo_display }}{% if a.trabajo_alturas %} · <b style="color:#b3141c;">Trabajo en alturas</b>{% endif %}</td></tr>
+      <tr><td style="padding:8px 10px;background:#f0f1f4;font-weight:bold;border:1px solid #e2e2e6;">Actividad</td><td style="padding:8px 10px;border:1px solid #e2e2e6;">{{ a.actividad|linebreaksbr }}</td></tr>
+      <tr><td style="padding:8px 10px;background:#f0f1f4;font-weight:bold;border:1px solid #e2e2e6;">Personal técnico</td><td style="padding:8px 10px;border:1px solid #e2e2e6;">{% for t in tecnicos %}{{ t.get_full_name|default:t.username }}{% if t.cargo %} <span style="color:#5f606b;">· {{ t.cargo }}</span>{% endif %}<br>{% endfor %}</td></tr>
+    </table>
+    <p style="margin:0 0 18px;font-size:12px;color:#5f606b;">Adjuntamos la identificación y los aportes a seguridad social de cada técnico{% if a.trabajo_alturas %}, y sus certificados de trabajo seguro en alturas{% endif %}.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 8px;"><tr>
+      <td style="padding:0 6px;"><a href="{{ aceptar }}" style="display:inline-block;background:#acc812;color:#2f3036;text-decoration:none;font-weight:bold;font-size:15px;padding:12px 26px;border-radius:8px;">Aceptar</a></td>
+      <td style="padding:0 6px;"><a href="{{ rechazar }}" style="display:inline-block;background:#ffffff;color:#b3141c;border:2px solid #b3141c;text-decoration:none;font-weight:bold;font-size:15px;padding:10px 24px;border-radius:8px;">Rechazar</a></td>
+    </tr></table>
+    <p style="margin:14px 0 0;font-size:11px;color:#8a8b94;text-align:center;">Al hacer clic se abrirá una página para confirmar su respuesta.</p>
+  </td></tr>
+  <tr><td style="padding:12px 24px;background:#f0f1f4;font-size:11px;color:#5f606b;">JANOTEC S.A.S. · Cra 40A N.º 16-21, Barrio Villa María · Villavicencio · Tel: 310 229 8160 · janotec@janotec.app</td></tr>
+</table>
+</td></tr></table>
+</body></html>

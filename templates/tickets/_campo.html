@@ -1,0 +1,10 @@
+<div class="mb-3 {{ clase }}">
+  {% if campo.field.widget.input_type == 'checkbox' %}
+    <div class="form-check">{{ campo }} <label class="form-check-label" for="{{ campo.id_for_label }}">{{ campo.label }}</label></div>
+  {% else %}
+    <label class="form-label fw-medium" for="{{ campo.id_for_label }}">{{ campo.label }}{% if campo.field.required or campo.field.widget.attrs.aria_required %} <span class="text-danger">*</span>{% endif %}</label>
+    {% if campo.errors %}{{ campo.as_widget }}{% else %}{{ campo }}{% endif %}
+  {% endif %}
+  {% if campo.help_text %}<div class="form-text">{{ campo.help_text }}</div>{% endif %}
+  {% for e in campo.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+</div>

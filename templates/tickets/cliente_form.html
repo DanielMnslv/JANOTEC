@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block titulo %}{% if empresa %}{{ empresa }}{% else %}Nuevo cliente{% endif %}{% endblock %}
+{% block contenido %}
+<a href="{% if empresa %}{% url 'cliente_detalle' empresa.pk %}{% else %}{% url 'clientes' %}{% endif %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {% if empresa %}{{ empresa }}{% else %}Clientes y sedes{% endif %}</a>
+<h1 class="h3 page-title my-2">{% if empresa %}Editar cliente{% else %}Nuevo cliente{% endif %}</h1>
+<form method="post" class="card" style="max-width:760px">{% csrf_token %}
+  <div class="card-body"><div class="row g-3">
+    {% for campo in form %}<div class="{% if campo.name == 'razon_social' or campo.name == 'direccion' or campo.name == 'activa' %}col-12{% else %}col-md-6{% endif %}">{% include "tickets/_campo.html" %}</div>{% endfor %}
+  </div></div>
+  <div class="card-footer text-end"><button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button></div>
+</form>
+{% endblock %}

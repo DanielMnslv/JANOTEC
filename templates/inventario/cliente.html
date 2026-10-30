@@ -1,0 +1,81 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}{{ e.razon_social }}{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo=e.razon_social subtitulo="Quién es el encargado, qué sedes tiene y dónde quedan." %}
+<a href="{% url 'inventario:contactos' %}?tipo=clientes" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Clientes</a>
+<div class="row g-4 mt-1">
+  <div class="col-lg-4">
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center"><span><i class="bi bi-person-badge"></i> Encargado del cliente</span>
+        {% if user.gestiona_inventario %}<a class="btn btn-sm btn-accent py-0" href="{% url 'inventario:encargado_nuevo' e.pk %}"><i class="bi bi-plus-lg"></i> Agregar</a>{% endif %}</div>
+      <ul class="list-group list-group-flush small">
+        {% for a in e.encargados.all %}
+          <li class="list-group-item {% if not a.activo %}text-muted-jn{% endif %}">
+            <div class="d-flex justify-content-between gap-2">
+              <div><strong>{{ a.nombre }}</strong>{% if not a.activo %} <span class="badge text-bg-secondary fw-normal">Ya no es el encargado</span>{% endif %}{% if a.cargo %}<div>{{ a.cargo }}</div>{% endif %}</div>
+              {% if user.gestiona_inventario %}<a class="btn btn-sm btn-light border py-0 align-self-start" href="{% url 'inventario:encargado_editar' e.pk a.pk %}" aria-label="Editar a {{ a.nombre }}"><i class="bi bi-pencil"></i></a>{% endif %}
+            </div>
+            {% if a.celular %}<div><i class="bi bi-phone"></i> <a href="tel:{{ a.celular }}">{{ a.celular }}</a></div>{% endif %}
+            {% if a.correo %}<div><i class="bi bi-envelope"></i> <a href="mailto:{{ a.correo }}">{{ a.correo }}</a></div>{% endif %}
+            {% if a.notas %}<div class="text-muted-jn">{{ a.notas }}</div>{% endif %}
+          </li>
+        {% empty %}
+          <li class="list-group-item text-muted-jn">Aún no se ha registrado el encargado.</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center"><span><i class="bi bi-building"></i> Datos del cliente</span>
+        {% if user.gestiona_inventario %}<a class="btn btn-sm btn-light border py-0" href="{% url 'inventario:contacto_editar' 'clientes' e.pk %}"><i class="bi bi-pencil"></i> Editar</a>{% endif %}</div>
+      <div class="card-body small">
+        <dl class="dl-ficha mb-0">
+          <dt>NIT</dt><dd class="radicado">{{ e.nit|default:"—" }}</dd>
+          <dt>Ciudad</dt><dd>{{ e.ciudad|default:"—" }}</dd>
+          <dt>Dirección</dt><dd>{{ e.direccion|default:"—" }}</dd>
+          <dt>Correo</dt><dd>{{ e.email_contacto|default:"—" }}</dd>
+          <dt>Teléfono</dt><dd>{{ e.telefono|default:"—" }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-8">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+      <h2 class="h6 mb-0">Sedes ({{ sedes|length }})</h2>
+      {% if user.gestiona_inventario %}<a class="btn btn-sm btn-accent py-0" href="{% url 'inventario:sede_nueva' e.pk %}"><i class="bi bi-plus-lg"></i> Nueva sede</a>{% endif %}
+    </div>
+    {% if sin_municipio %}<div class="alert alert-warning small py-2"><i class="bi bi-geo-alt"></i> {{ sin_municipio }} sede{{ sin_municipio|pluralize }} sin municipio. Abra cada una, revise el dato y guárdela.</div>{% endif %}
+    <div class="card mb-4"><div class="table-responsive"><table class="table table-hover mb-0 align-middle small">
+      <thead><tr><th>Sede</th><th>Municipio</th><th>Dirección</th><th>Contacto en la sede</th><th class="text-end">Equipos</th><th></th></tr></thead>
+      <tbody>
+      {% for s in sedes %}
+        <tr>
+          <td class="fw-semibold">{{ s.nombre }}{% if not s.activa %} <span class="badge text-bg-secondary fw-normal">Inactiva</span>{% endif %}</td>
+          <td>{% if s.ciudad %}{{ s.ciudad }}{% elif s.sugerido %}<span class="text-muted-jn fst-italic" title="Según actas y tickets: confírmelo al guardar la sede">¿{{ s.sugerido }}?</span>{% else %}<span class="text-danger">Sin municipio</span>{% endif %}</td>
+          <td>{{ s.direccion|default:"—" }}</td>
+          <td>{% if s.contacto_nombre %}{{ s.contacto_nombre }}{% if s.contacto_cargo %}<div class="text-muted-jn">{{ s.contacto_cargo }}</div>{% endif %}{% if s.contacto_telefono %}<div class="text-muted-jn">{{ s.contacto_telefono }}</div>{% endif %}
+            {% elif s.recibio %}<span class="text-muted-jn" title="Quien recibió en la última acta">Última acta: {{ s.recibio.0 }}{% if s.recibio.1 %} · {{ s.recibio.1 }}{% endif %}</span>{% else %}—{% endif %}</td>
+          <td class="text-end">{{ s.equipos|default:"—" }}</td>
+          <td class="text-end">{% if user.gestiona_inventario %}<a class="btn btn-sm btn-light border py-0" href="{% url 'inventario:sede_editar' e.pk s.pk %}" aria-label="Editar {{ s.nombre }}"><i class="bi bi-pencil"></i></a>{% endif %}</td>
+        </tr>
+      {% empty %}<tr><td colspan="6" class="text-center py-3 text-muted-jn">Este cliente aún no tiene sedes.</td></tr>{% endfor %}
+      </tbody>
+    </table></div></div>
+    {% if sin_sede %}<p class="small text-muted-jn"><i class="bi bi-exclamation-triangle"></i> {{ sin_sede }} equipo{{ sin_sede|pluralize }} instalado{{ sin_sede|pluralize }} sin sede indicada.</p>{% endif %}
+    <h2 class="h6">Equipos instalados</h2>
+    <div class="card"><div class="table-responsive"><table class="table table-hover mb-0 align-middle small">
+      <thead><tr><th>Sede</th><th>Modelo</th><th>Marca</th><th>Descripción</th><th class="text-end">Unidades</th></tr></thead>
+      <tbody>
+      {% for g in equipos %}
+        <tr>
+          <td>{{ g.sede.nombre|default:"Sin sede" }}</td>
+          <td class="text-nowrap fw-semibold">{% if g.referencia %}<a href="{% url 'inventario:modelo' %}?ref={{ g.referencia|urlencode }}">{{ g.referencia }}</a>{% else %}(sin modelo){% endif %}</td>
+          <td>{{ g.marca|default:"—" }}</td>
+          <td>{{ g.descripcion|truncatechars:60|default:"—" }}</td>
+          <td class="text-end">{{ g.unidades }}</td>
+        </tr>
+      {% empty %}<tr><td colspan="5" class="text-center py-3 text-muted-jn">No hay equipos registrados en este cliente.</td></tr>{% endfor %}
+      </tbody>
+    </table></div></div>
+  </div>
+</div>
+{% endblock %}

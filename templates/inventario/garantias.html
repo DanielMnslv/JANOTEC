@@ -1,0 +1,53 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Garantías y devoluciones{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Garantías y devoluciones al proveedor" subtitulo="Equipos que salieron al proveedor por falla o devolución, cuánto llevan por fuera y cómo se resolvió." %}
+<div class="row g-4">
+  <div class="col-lg-8">
+    <ul class="nav nav-pills small mb-3">
+      <li class="nav-item"><a class="nav-link {% if ver == 'abiertas' %}active{% endif %}" href="?ver=abiertas">En el proveedor{% if abiertas %} <span class="badge text-bg-warning">{{ abiertas }}</span>{% endif %}</a></li>
+      <li class="nav-item"><a class="nav-link {% if ver == 'cerradas' %}active{% endif %}" href="?ver=cerradas">Resueltas</a></li>
+    </ul>
+    <div class="card"><div class="table-responsive"><table class="table table-tickets mb-0 align-middle">
+      <thead><tr><th>Caso</th><th>Equipo</th><th>Proveedor</th><th>Qué falla</th><th>Enviado</th><th>{% if ver == 'abiertas' %}Días por fuera{% else %}Resultado{% endif %}</th></tr></thead>
+      <tbody>
+      {% for g in casos %}
+        <tr>
+          <td class="text-nowrap"><a class="fw-semibold" href="{% url 'inventario:garantia' g.pk %}">{{ g.numero }}</a></td>
+          <td><a href="{{ g.activo.get_absolute_url }}">{{ g.activo.placa }}</a><div class="small text-muted-jn">{{ g.activo.descripcion|truncatechars:50 }}</div></td>
+          <td class="small">{{ g.proveedor|default:"—" }}{% if g.radicado %}<div class="text-muted-jn">Radicado {{ g.radicado }}</div>{% endif %}</td>
+          <td class="small">{{ g.motivo|truncatechars:70 }}</td>
+          <td class="text-nowrap small">{{ g.enviada|date:"d/m/Y" }}</td>
+          <td>{% if g.abierta %}<span class="badge {% if g.dias > 30 %}text-bg-danger{% elif g.dias > 15 %}text-bg-warning{% else %}text-bg-light border{% endif %}">{{ g.dias }} día{{ g.dias|pluralize }}</span>
+              {% else %}<span class="badge text-bg-{{ g.color_estado }}">{{ g.get_estado_display }}</span><div class="small text-muted-jn">{{ g.resuelta|date:"d/m/Y" }} · {{ g.dias }} días</div>{% endif %}</td>
+        </tr>
+      {% empty %}<tr><td colspan="6" class="text-center py-4 text-muted-jn">{% if ver == 'abiertas' %}No hay equipos en el proveedor.{% else %}Todavía no hay casos resueltos.{% endif %}</td></tr>{% endfor %}
+      </tbody>
+    </table></div></div>
+    <p class="small text-muted-jn mt-2">Más de 15 días por fuera se marca en amarillo y más de 30 en rojo: es momento de llamar al proveedor.</p>
+  </div>
+  <div class="col-lg-4">
+    <div class="card"><div class="card-header"><i class="bi bi-shield-exclamation"></i> Mandar un equipo al proveedor</div>
+      <form method="post" class="card-body">{% csrf_token %}
+        <label class="form-label small mb-1" for="placa">Placa del equipo <span class="text-danger">*</span></label>
+        <input id="placa" name="placa" class="form-control mb-2" list="lista-equipos" value="{{ placa }}" required placeholder="Escriba o escanee la placa">
+        <label class="form-label small mb-1" for="motivo">Qué falla <span class="text-danger">*</span></label>
+        <textarea id="motivo" name="motivo" rows="2" class="form-control mb-2" required minlength="5" placeholder="Ej.: no enciende, se reinicia, pixel muerto…"></textarea>
+        <label class="form-label small mb-1" for="proveedor">Proveedor <span class="text-muted-jn">(si se deja vacío, el de la compra)</span></label>
+        <input id="proveedor" name="proveedor" class="form-control mb-2" list="lista-proveedores">
+        <div class="row g-2">
+          <div class="col-6"><label class="form-label small mb-1" for="fecha">Enviado el <span class="text-danger">*</span></label>
+            <input id="fecha" type="date" name="fecha" class="form-control" value="{{ hoy|date:'Y-m-d' }}" required></div>
+          <div class="col-6"><label class="form-label small mb-1" for="radicado">Radicado o guía</label>
+            <input id="radicado" name="radicado" class="form-control"></div>
+        </div>
+        <label class="form-label small mb-1 mt-2" for="ticket">Ticket donde se encontró la falla</label>
+        <input id="ticket" name="ticket" class="form-control mb-3" placeholder="JNT-2026-000000 (opcional)">
+        <button class="btn btn-accent w-100"><i class="bi bi-send"></i> Registrar el envío</button>
+      </form>
+    </div>
+  </div>
+</div>
+<datalist id="lista-equipos">{% for a in equipos %}<option value="{{ a.placa }} · {{ a.descripcion|truncatechars:60 }}">{% endfor %}</datalist>
+<datalist id="lista-proveedores">{% for p in proveedores %}<option value="{{ p }}">{% endfor %}</datalist>
+{% endblock %}

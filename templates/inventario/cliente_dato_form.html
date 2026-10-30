@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block contenido %}
+<a href="{% url 'inventario:cliente' e.pk %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ e.razon_social }}</a>
+<h1 class="h3 page-title my-2">{{ titulo }}</h1>
+{% if sugerido %}<div class="alert alert-warning small py-2" style="max-width:760px"><i class="bi bi-geo-alt"></i> El municipio «{{ sugerido }}» sale de las actas y tickets de esta sede. Revíselo: solo queda consignado cuando guarde.</div>{% endif %}
+<form method="post" class="card" style="max-width:760px">{% csrf_token %}
+  <div class="card-body"><div class="row g-3">
+    {% for campo in form %}<div class="{% if campo.name == 'nombre' or campo.name == 'notas' or campo.name == 'direccion' or campo.name == 'activa' or campo.name == 'activo' %}col-12{% else %}col-md-6{% endif %}">{% include "tickets/_campo.html" %}</div>{% endfor %}
+  </div></div>
+  <div class="card-footer text-end"><button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button></div>
+</form>
+{% endblock %}

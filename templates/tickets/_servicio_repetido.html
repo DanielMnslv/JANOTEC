@@ -1,0 +1,11 @@
+{% if visitas_previas %}
+<div class="alert alert-warning mb-4">
+  <div class="fw-semibold"><i class="bi bi-arrow-repeat"></i> Servicio repetido: esta sede tuvo {{ visitas_previas|length }} soporte{{ visitas_previas|pluralize }} en los 30 días anteriores a este ticket</div>
+  <div class="small mb-2">Revise qué se hizo antes de programar: puede ser la misma falla que volvió.</div>
+  <ul class="small mb-0 ps-3">
+    {% for a in visitas_previas %}
+      <li><a href="{{ a.get_absolute_url }}">Acta {{ a.numero }}</a> · {{ a.fecha|date:"d/m/Y" }} · {{ a.get_sistema_display_corto }} · {{ a.tecnico|default:a.tecnico_texto }} · {{ a.get_resultado_display|default:"Sin resultado" }}<div class="text-truncate" style="max-width:40rem">{{ a.diagnostico }}</div></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Material de {{ persona }}{% endblock %}
+{% block contenido %}
+{% if persona == user %}{% include "inventario/_acciones.html" with titulo="Mi material" subtitulo="Lo que bodega le entregó y aún no ha instalado ni devuelto. Al diligenciar el acta, marque lo que usó y se descuenta solo." %}
+{% else %}{% include "inventario/_acciones.html" with titulo=persona subtitulo="Material en su poder: lo descuenta en el acta o lo devuelve a bodega." %}{% endif %}
+
+{% if user.gestiona_inventario %}
+<div class="d-flex gap-2 mb-3">
+  <a class="btn btn-sm btn-accent" href="{% url 'inventario:entrega' %}?tecnico={{ persona.pk }}"><i class="bi bi-box-arrow-right"></i> Entregarle más</a>
+  {% if activos or insumos %}<a class="btn btn-sm btn-outline-primary" href="{% url 'inventario:devolucion' persona.pk %}"><i class="bi bi-box-arrow-in-left"></i> Recibir devolución</a>{% endif %}
+</div>
+{% endif %}
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-upc-scan"></i> Activos en su poder ({{ activos|length }})</div>
+      <ul class="list-group list-group-flush">
+        {% for a in activos %}
+          <li class="list-group-item small"><a class="radicado" href="{{ a.get_absolute_url }}">{{ a.placa }}</a> · {{ a.descripcion_corta }}
+            <div class="text-muted-jn">{{ a.get_modalidad_display|default:"Sin modalidad" }}{% if a.empresa or a.cliente_texto %} para {{ a.empresa|default:a.cliente_texto }}{% endif %}{% if a.ticket_destino %} · <a href="{{ a.ticket_destino.get_absolute_url }}">{{ a.ticket_destino.radicado }}</a>{% endif %} · desde {{ a.fecha_ultimo_movimiento|date:"d/m/Y" }}</div></li>
+        {% empty %}<li class="list-group-item small text-muted-jn">No tiene activos.</li>{% endfor %}
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header"><i class="bi bi-box-seam"></i> Insumos en su poder ({{ insumos|length }})</div>
+      <ul class="list-group list-group-flush">
+        {% for i, cantidad in insumos %}
+          <li class="list-group-item small d-flex justify-content-between"><span><a class="radicado" href="{{ i.get_absolute_url }}">{{ i.codigo }}</a> · {{ i.descripcion }}</span><strong class="text-nowrap">{{ cantidad|cant }} {{ i.get_unidad_display|lower }}</strong></li>
+        {% empty %}<li class="list-group-item small text-muted-jn">No tiene insumos.</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center"><span><i class="bi bi-tools"></i> Herramientas asignadas ({{ herramientas|length }})</span>
+        {% if user.gestiona_inventario and herramientas %}<a class="btn btn-sm btn-accent py-0" href="{% url 'inventario:auditar' persona.pk %}">Auditar</a>{% endif %}</div>
+      <ul class="list-group list-group-flush">
+        {% for h in herramientas %}<li class="list-group-item small d-flex justify-content-between"><a href="{{ h.get_absolute_url }}">{{ h.nombre }}{% if h.serial %} · {{ h.serial }}{% endif %}</a><span>{{ h.cantidad }} · <span class="badge text-bg-{{ h.color_estado }}">{{ h.get_estado_display }}</span></span></li>
+        {% empty %}<li class="list-group-item small text-muted-jn">No tiene herramientas asignadas.</li>{% endfor %}
+      </ul>
+      {% if ultima_auditoria %}<div class="card-footer small">Última auditoría: <a href="{{ ultima_auditoria.get_absolute_url }}">#{{ ultima_auditoria.pk }} · {{ ultima_auditoria.fecha|date:"d/m/Y" }} · {{ ultima_auditoria.get_resultado_display }}</a></div>{% endif %}
+    </div>
+    <h2 class="h6 mb-2">Últimos movimientos de activos</h2>
+    <ul class="list-group mb-4">{% for m in recientes %}<li class="list-group-item small">{{ m.fecha|date:"d/m/Y" }} · <a href="{{ m.activo.get_absolute_url }}">{{ m.activo.placa }}</a> · {{ m.get_tipo_display }}{% if m.cliente %} · {{ m.cliente }}{% endif %}{% if m.ticket %} · {{ m.ticket.radicado }}{% endif %}</li>{% empty %}<li class="list-group-item small text-muted-jn">Sin movimientos.</li>{% endfor %}</ul>
+    <h2 class="h6 mb-2">Últimos movimientos de insumos</h2>
+    <ul class="list-group">{% for m in recientes_insumos %}<li class="list-group-item small">{{ m.fecha|date:"d/m/Y" }} · <a href="{{ m.insumo.get_absolute_url }}">{{ m.insumo.codigo }}</a> × {{ m.cantidad|cant }} · {{ m.get_tipo_display }}{% if m.cliente %} · {{ m.cliente }}{% endif %}</li>{% empty %}<li class="list-group-item small text-muted-jn">Sin movimientos.</li>{% endfor %}</ul>
+  </div>
+</div>
+{% endblock %}

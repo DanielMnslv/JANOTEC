@@ -1,0 +1,17 @@
+<div class="equipo-acta">
+  {% for e in f.non_field_errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+  <div class="row">
+    {% include "tickets/_campo.html" with campo=f.equipo clase="col-md-4" %}
+    {% include "tickets/_campo.html" with campo=f.marca clase="col-md-2" %}
+    {% include "tickets/_campo.html" with campo=f.referencia clase="col-md-2" %}
+    {% include "tickets/_campo.html" with campo=f.serial clase="col-md-2" %}
+    {% include "tickets/_campo.html" with campo=f.cantidad clase="col-md-2" %}
+  </div>
+  {% if f.accion %}<div class="row">{% include "tickets/_campo.html" with campo=f.accion clase="col-md-5" %}</div>{% endif %}
+  {% if f.propiedad %}<div class="row solo-retiro"{% if f.accion and f.accion.value != 'retirado' %} hidden{% endif %}>
+    {% include "tickets/_campo.html" with campo=f.propiedad clase="col-md-7" %}
+    {% include "tickets/_campo.html" with campo=f.placa clase="col-md-5" %}
+  </div>{% endif %}
+  {% include "tickets/_campo.html" with campo=f.observaciones %}
+  {% include "tickets/_campo.html" with campo=f.fotos %}
+</div>

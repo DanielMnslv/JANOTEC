@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Material nuevo{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Material nuevo" subtitulo="Se crea en el catálogo sin existencias; entran al registrar la compra o recibir la factura." %}
+<a href="{% url 'inventario:productos' %}?tipo=materiales" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Inventario</a>
+<div class="row mt-1"><div class="col-lg-6">
+  <form method="post" class="card"><div class="card-body">{% csrf_token %}
+    {% for campo in form %}{% include "tickets/_campo.html" %}{% endfor %}
+    <div class="d-flex gap-2"><button class="btn btn-primary"><i class="bi bi-check2"></i> Crear material</button>
+      <a class="btn btn-light border" href="{% url 'inventario:productos' %}?tipo=materiales">Cancelar</a></div>
+  </div></form>
+</div></div>
+{% endblock %}

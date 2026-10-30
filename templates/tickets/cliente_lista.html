@@ -1,0 +1,58 @@
+{% extends "base.html" %}{% load tickets_extras %}
+{% block titulo %}{% if user.es_cliente %}Mis solicitudes{% else %}Solicitudes registradas{% endif %}{% endblock %}
+{% block contenido %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+  <div>
+    <h1 class="h3 page-title mb-0">{% if user.es_cliente %}Mis solicitudes{% else %}Solicitudes registradas{% endif %}</h1>
+    <div class="text-muted-jn">{% if user.es_cliente %}{{ user.empresa|default:"" }}{% else %}Las que usted registró a nombre de los clientes{% endif %}</div>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    {% if user.es_cliente %}<a href="{% url 'comercial:nuevo_cliente' %}" class="btn btn-outline-primary"><i class="bi bi-file-earmark-text"></i> Solicitar cotización</a>{% endif %}
+    <a href="{% url 'nuevo_ticket' %}" class="btn btn-accent"><i class="bi bi-plus-lg"></i> Radicar solicitud</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3"><a class="kpi" href="?estado=abiertos"><div class="valor">{{ resumen.abiertos }}</div><div class="etiqueta">En trámite</div></a></div>
+  <div class="col-6 col-md-3"><a class="kpi" href="?estado=en_cronograma"><div class="valor">{{ resumen.programadas }}</div><div class="etiqueta">Visitas programadas</div></a></div>
+  <div class="col-6 col-md-3"><a class="kpi aviso" href="?estado=visita_ejecutada"><div class="valor">{{ resumen.por_confirmar }}</div><div class="etiqueta">Visitas por confirmar</div></a></div>
+  <div class="col-6 col-md-3"><a class="kpi" href="?estado=cerrado"><div class="valor">{{ resumen.cerrados }}</div><div class="etiqueta">Cerradas</div></a></div>
+</div>
+
+{% if resumen.por_confirmar and user.es_cliente %}
+<div class="alert alert-warning"><i class="bi bi-check2-circle"></i> Tiene {{ resumen.por_confirmar }} visita{{ resumen.por_confirmar|pluralize }} técnica{{ resumen.por_confirmar|pluralize }} por confirmar: indíquenos si quedó solucionado.</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-body border-bottom">
+    <form class="row g-2" method="get">
+      <div class="col-md-4">{{ form.q }}</div>
+      <div class="col-md-3">{{ form.tipo }}</div>
+      <div class="col-md-3">{{ form.estado }}</div>
+      <div class="col-md-2 d-grid"><button class="btn btn-outline-primary">Filtrar</button></div>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover table-tickets mb-0">
+      <thead><tr><th>Radicado</th><th>Asunto</th><th class="d-none d-md-table-cell">{% if user.es_cliente %}Sede{% else %}Empresa / sede{% endif %}</th><th>Estado</th><th class="text-end">Radicado el</th></tr></thead>
+      <tbody>
+      {% for t in pagina %}
+        <tr class="fila-click{% if t.estado == 'en_cronograma' or t.estado == 'visita_ejecutada' %} fila-nueva{% endif %}" data-href="{{ t.get_absolute_url }}">
+          <td><a class="radicado" href="{{ t.get_absolute_url }}">{{ t.radicado }}</a></td>
+          <td>{{ t.asunto }}<div class="small text-muted-jn"><i class="bi {{ t.icono_tipo }}"></i> {{ t.get_tipo_display }} · {{ t.sistema_display }} · {{ t.creado|date:"d/m/Y" }}{% if t.solicitante != user %} · {{ t.solicitante }}{% endif %}</div></td>
+          <td class="d-none d-md-table-cell small">{% if not user.es_cliente %}{{ t.empresa }}<br>{% endif %}{{ t.sede|default:"—" }}</td>
+          <td>{% include "tickets/_estado.html" %}{% if t.visita_programada and t.abierto %}<div class="small text-nowrap mt-1"><i class="bi bi-calendar-event"></i> Visita {{ t.visita_programada|date:"j M · g:i a" }}</div>{% endif %}</td>
+          <td class="small text-end text-nowrap fecha-correo" title="{{ t.creado|date:'l j \d\e F \d\e Y, h:i a' }}">{{ t.creado|fecha_correo }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="text-center py-5 text-muted-jn">
+          <i class="bi bi-inbox fs-2 d-block mb-2"></i>No hay solicitudes con esos filtros.<br>
+          <a href="{% url 'nuevo_ticket' %}">Radicar una nueva solicitud</a>
+        </td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "tickets/_paginacion.html" %}
+{% endblock %}

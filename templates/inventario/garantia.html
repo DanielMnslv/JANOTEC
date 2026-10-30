@@ -1,0 +1,63 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}{{ g.numero }}{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo=g.numero subtitulo="Garantía o devolución al proveedor" %}
+<a href="{% url 'inventario:garantias' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Garantías y devoluciones</a>
+<div class="row g-4 mt-1">
+  <div class="col-lg-7">
+    <div class="card mb-4"><div class="card-body">
+      <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+        <span class="badge fs-6 text-bg-{{ g.color_estado }}">{{ g.get_estado_display }}</span>
+        <span class="small text-muted-jn">{{ g.dias }} día{{ g.dias|pluralize }}{% if g.abierta %} por fuera{% endif %}</span>
+      </div>
+      <dl class="dl-ficha mb-0">
+        <dt>Equipo</dt><dd><a href="{{ g.activo.get_absolute_url }}">{{ g.activo.placa }}</a> · {{ g.activo.descripcion }}{% if g.activo.serial %} · S/N {{ g.activo.serial }}{% endif %}</dd>
+        <dt>Proveedor</dt><dd>{{ g.proveedor|default:"—" }}{% if g.radicado %} · radicado {{ g.radicado }}{% endif %}</dd>
+        <dt>Factura de compra</dt><dd>{{ g.factura|default:"—" }}{% if g.activo.fecha_compra %} del {{ g.activo.fecha_compra|date:"d/m/Y" }}{% endif %}</dd>
+        <dt>Garantía de fábrica</dt><dd>{% if vence %}{% if vence >= g.enviada %}<span class="text-success">Vigente al enviarlo</span>{% else %}<span class="text-danger">Ya había vencido</span>{% endif %} (hasta el {{ vence|date:"d/m/Y" }}){% else %}Sin fecha de compra{% endif %}</dd>
+        <dt>Qué falla</dt><dd style="white-space:pre-line">{{ g.motivo }}</dd>
+        <dt>Enviado</dt><dd>{{ g.enviada|date:"d/m/Y" }} por {{ g.creado_por.get_full_name|default:g.creado_por.username|default:"—" }}</dd>
+        {% if g.ticket %}<dt>Ticket</dt><dd><a href="{{ g.ticket.get_absolute_url }}">{{ g.ticket.radicado }}</a> · {{ g.ticket.empresa }}</dd>{% endif %}
+        {% if not g.abierta %}
+        <dt>Resuelto</dt><dd>{{ g.resuelta|date:"d/m/Y" }}{% if g.resultado %} · {{ g.resultado }}{% endif %}</dd>
+        {% if g.serial_anterior %}<dt>Serial anterior</dt><dd>{{ g.serial_anterior }}</dd>{% endif %}
+        {% if g.valor_nota %}<dt>Nota crédito</dt><dd>{{ g.valor_nota|pesos }}</dd>{% endif %}
+        {% endif %}
+      </dl>
+    </div></div>
+    {% if anteriores %}<div class="card"><div class="card-header">Otras garantías de este equipo</div><ul class="list-group list-group-flush">
+      {% for a in anteriores %}<li class="list-group-item small"><a href="{% url 'inventario:garantia' a.pk %}">{{ a.numero }}</a> · {{ a.enviada|date:"d/m/Y" }} · {{ a.get_estado_display }} · {{ a.motivo|truncatechars:60 }}</li>{% endfor %}
+    </ul></div>{% endif %}
+  </div>
+  <div class="col-lg-5">
+    {% if g.abierta %}
+    <div class="card"><div class="card-header"><i class="bi bi-reply"></i> Respondió el proveedor</div>
+      <form method="post" class="card-body">{% csrf_token %}
+        {% for v, l in estados %}<div class="form-check"><input class="form-check-input" type="radio" name="estado" id="estado-{{ v }}" value="{{ v }}" required>
+          <label class="form-check-label" for="estado-{{ v }}">{{ l }}</label></div>{% endfor %}
+        <div class="small text-muted-jn my-2">Reparado o cambiado: vuelve disponible a bodega. No aplicó: vuelve a bodega en mantenimiento para revisarlo. Nota crédito: el equipo se da de baja.</div>
+        <div id="campo-serial" hidden><label class="form-label small mb-1" for="serial_nuevo">Serial del equipo nuevo <span class="text-muted-jn">(conserva la placa {{ g.activo.placa }})</span></label>
+          <input id="serial_nuevo" name="serial_nuevo" class="form-control mb-2"></div>
+        <div id="campo-valor" hidden><label class="form-label small mb-1" for="valor_nota">Valor de la nota crédito</label>
+          <input id="valor_nota" name="valor_nota" type="number" step="any" min="0" class="form-control mb-2"></div>
+        <label class="form-label small mb-1" for="fecha">Fecha de la respuesta</label>
+        <input id="fecha" type="date" name="fecha" class="form-control mb-2" value="{{ hoy|date:'Y-m-d' }}" required>
+        <label class="form-label small mb-1" for="resultado">Detalle</label>
+        <input id="resultado" name="resultado" class="form-control mb-3" maxlength="300" placeholder="Ej.: cambiaron la tarjeta principal">
+        <button class="btn btn-accent w-100"><i class="bi bi-check2"></i> Cerrar el caso</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll('input[name="estado"]').forEach(function (r) {
+  r.addEventListener('change', function () {
+    document.getElementById('campo-serial').hidden = r.value !== 'reemplazado';
+    document.getElementById('campo-valor').hidden = r.value !== 'nota_credito';
+  });
+});
+</script>
+{% endblock %}
