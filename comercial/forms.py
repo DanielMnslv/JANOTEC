@@ -321,7 +321,7 @@ class LineaCotizacionForm(BootstrapMixin, forms.ModelForm):
     class Meta:
         from .models import LineaCotizacion
         model = LineaCotizacion
-        fields = ["descripcion", "cantidad", "valor_unitario", "descuento", "iva"]
+        fields = ["descripcion", "categoria", "cantidad", "valor_unitario", "descuento", "iva"]
         widgets = {
             "descripcion": forms.TextInput(attrs={"list": "catalogo-precios", "placeholder": "Busque en el catálogo o escriba…",
                                                   "class": "descripcion"}),
@@ -334,6 +334,8 @@ class LineaCotizacionForm(BootstrapMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._aplicar_estilos()
+        self.fields["categoria"].choices = [("", "Automática")] + list(self.fields["categoria"].choices)[1:]
+        self.fields["categoria"].widget.attrs["class"] = "categoria"
         for campo in self.fields.values():
             campo.widget.attrs["class"] = (campo.widget.attrs.get("class", "") + " form-control-sm").strip()
 
@@ -349,8 +351,10 @@ class CotizacionForm(BootstrapMixin, forms.ModelForm):
     class Meta:
         from .models import Cotizacion
         model = Cotizacion
-        fields = ["alcance", "condiciones", "modalidad", "aiu_utilidad", "tasa_mensual", "plazos", "opcion_compra"]
-        widgets = {"alcance": forms.Textarea(attrs={"rows": 2}), "condiciones": forms.Textarea(attrs={"rows": 3})}
+        fields = ["alcance", "condiciones", "modalidad", "margen", "aiu_utilidad", "tasa_mensual", "recargo_alquiler", "plazos",
+                  "opcion_compra"]
+        widgets = {"alcance": forms.Textarea(attrs={"rows": 2}), "condiciones": forms.Textarea(attrs={"rows": 3}),
+                   "margen": forms.NumberInput(attrs={"min": "1", "max": "99", "step": "any"})}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

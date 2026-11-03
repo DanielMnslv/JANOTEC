@@ -9,7 +9,7 @@
 import logging
 
 from django.conf import settings
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMultiAlternatives
 from django.db import transaction
 from django.utils import timezone
 
@@ -305,7 +305,8 @@ def _enviar_con_ficha(asunto, cuerpo, destinatarios, ficha, interna):
     destinatarios = [d for d in set(destinatarios) if d]
     if not destinatarios:
         return
-    correo = EmailMessage(asunto, cuerpo, settings.DEFAULT_FROM_EMAIL, destinatarios)
+    correo = EmailMultiAlternatives(asunto, cuerpo, settings.DEFAULT_FROM_EMAIL, destinatarios)
+    correo.attach_alternative(notif.html_desde_texto(asunto, cuerpo), "text/html")
     try:
         correo.attach(*ficha_pdf(ficha, interna=interna), "application/pdf")
     except Exception:  # noqa: BLE001

@@ -552,3 +552,60 @@ def correo_sst(request, pk):
         return _volver(actividad)
     return render(request, "cronograma/correo_sst.html", {"a": actividad, "texto": servicios.texto_sst(actividad),
                                                           "destino": destino, "lunes": Actividad.lunes_de(actividad.fecha)})
+
+
+@login_required
+@personal_requerido
+def horas_extras(request):
+    """Auto reporte de salida a campo. El técnico ve lo suyo; el área administrativa ve todo y descarga el Excel."""
+    from .forms import ReporteHorasExtraForm
+    from .models import ReporteHorasExtra
+
+    form = ReporteHorasExtraForm(request.POST or None, usuario=request.user)
+    if request.method == "POST" and form.is_valid():
+        reporte = form.save(commit=False)
+        if not request.user.es_supervisor:
+            reporte.colaborador = request.user
+        reporte.registrado_por = request.user
+        reporte.save()
+        messages.success(request, f"Horas registradas: {reporte.duracion} h en {reporte.cliente}.")
+        return redirect("cronograma:horas_extras")
+
+    hoy = timezone.localdate()
+    try:
+        anio, mes = (int(x) for x in request.GET.get("mes", f"{hoy:%Y-%m}").split("-"))
+        date(anio, mes, 1)
+    except ValueError:
+        anio, mes = hoy.year, hoy.month
+    reportes = ReporteHorasExtra.objects.filter(fecha__year=anio, fecha__month=mes).select_related("colaborador")
+    if not request.user.es_supervisor:
+        reportes = reportes.filter(colaborador=request.user)
+    reportes = list(reportes)
+
+    totales = {}
+    for r in reportes:
+        totales[r.colaborador] = totales.get(r.colaborador, 0) + r.minutos
+    totales = [(c, f"{m // 60}:{m % 60:02d}") for c, m in sorted(totales.items(), key=lambda x: x[0].get_full_name())]
+
+    if request.user.es_supervisor and request.GET.get("formato") == "excel":
+        from openpyxl import Workbook
+
+        libro = Workbook()
+        hoja = libro.active
+        hoja.title = "Horas extras"
+        hoja.append(["Colaborador", "Fecha", "Hora de salida", "Hora de llegada", "Horas", "Cliente", "Registró"])
+        for r in sorted(reportes, key=lambda x: (x.fecha, x.hora_salida)):
+            hoja.append([r.colaborador.get_full_name() or r.colaborador.username, r.fecha, r.hora_salida.strftime("%H:%M"),
+                         r.hora_llegada.strftime("%H:%M"), round(r.minutos / 60, 2), r.cliente,
+                         (r.registrado_por.get_full_name() or r.registrado_por.username) if r.registrado_por else ""])
+            hoja.cell(hoja.max_row, 2).number_format = "DD/MM/YYYY"
+        for col, ancho in zip("ABCDEFG", (34, 12, 14, 14, 8, 40, 30)):
+            hoja.column_dimensions[col].width = ancho
+        respuesta = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        respuesta["Content-Disposition"] = f'attachment; filename="horas_extras_{anio}-{mes:02d}.xlsx"'
+        libro.save(respuesta)
+        return respuesta
+
+    return render(request, "cronograma/horas_extras.html", {
+        "form": form, "reportes": reportes, "totales": totales, "mes": f"{anio}-{mes:02d}",
+    })

@@ -1,6 +1,8 @@
+from django.conf import settings
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
-from django.urls import include, path
+from django.contrib.staticfiles.views import serve as servir_estatico
+from django.urls import include, path, re_path
 
 admin.site.site_header = "JANOTEC · Administración de la plataforma de tickets"
 admin.site.site_title = "JANOTEC Tickets"
@@ -15,3 +17,7 @@ urlpatterns = [
     path("inventario/", include("inventario.urls")),
     path("", include("tickets.urls")),
 ]
+
+if not settings.DEBUG:
+    # Estilos, íconos e imágenes en producción aunque Nginx no tenga «location /static/» (si la tiene, Nginx responde primero)
+    urlpatterns += [re_path(r"^static/(?P<path>.*)$", servir_estatico, {"insecure": True})]

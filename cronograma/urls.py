@@ -28,6 +28,7 @@ urlpatterns = [
     path("actividad/<int:pk>/autorizacion/", views.enviar_autorizacion, name="enviar_autorizacion"),
     path("autorizacion/<str:token>/", views.autorizacion, name="autorizacion"),
     path("documentos/", views.documentos, name="documentos"),
+    path("horas-extras/", views.horas_extras, name="horas_extras"),
     path("documentos/mios/", views.documentos_tecnico, name="mis_documentos"),
     path("documentos/<int:pk>/", views.documentos_tecnico, name="documentos_tecnico"),
     path("documentos/archivo/<int:pk>/", views.documento_descargar, name="documento"),

@@ -1296,15 +1296,19 @@ class EquiposIntervenidosYUtilizadosTests(ActaBase):
         self.client.force_login(self.agente)
         html = self.client.get(reverse("acta_nueva", args=[self.ticket.radicado])).content.decode()
         self.assertIn("Se retiró (desmonte)", html)
+        self.assertNotIn("Revisado, reparado o configurado", html)  # cada trabajo es una opción aparte
         self.assertNotIn("Agregar equipo retirado", html)  # ya no es una sección aparte
-        for accion, propiedad in (("intervenido", ""), ("retirado", "cliente")):  # fila vacía, con lo que quede marcado
+        for accion, propiedad in (("revisado", ""), ("retirado", "cliente")):  # fila vacía, con lo que quede marcado
             ActaSoporte.objects.filter(ticket=self.ticket).delete()
             r = self.client.post(reverse("acta_nueva", args=[self.ticket.radicado]), self.datos_acta(**{
-                "equipos-0-equipo": "Cámara IP bala", "equipos-0-accion": "intervenido",
+                "equipos-0-equipo": "Cámara IP bala", "equipos-0-accion": "reparado",
                 "equipos-TOTAL_FORMS": "2", "equipos-1-equipo": "", "equipos-1-accion": accion,
                 "equipos-1-propiedad": propiedad, "equipos-1-placa": ""}))
             self.assertEqual(r.status_code, 302, accion)
-            self.assertEqual(ActaSoporte.objects.get(ticket=self.ticket).equipos_retirados, [])
+            acta = ActaSoporte.objects.get(ticket=self.ticket)
+            self.assertEqual(acta.equipos_retirados, [])
+            self.assertEqual([e.trabajo for e in acta.equipos_intervenidos], ["reparado"])
+        self.assertContains(self.client.get(acta.get_absolute_url()), "Reparado")
 
     def test_dos_listas_en_el_acta(self):
         from .models import ActaSoporte, EquipoActa
@@ -1398,6 +1402,32 @@ class CorreoEnFaseDePruebasTests(BaseTickets):
         self.assertIn("iba para: cliente@empresa.co", m.subject)
         send_mail("Interno", "x", "de@janotec.test", [self.agente.email])
         self.assertEqual((mail.outbox[-1].to, mail.outbox[-1].subject), ([self.agente.email], "Interno"))
+
+    @override_settings(CORREO_COMERCIAL_PRUEBA="yuri@janotec.test", NOTIFICAR_COMERCIAL_EMAIL="comercial@janotec.test")
+    def test_lo_del_cliente_prueba_solo_les_llega_a_quienes_prueban(self):
+        from django.core.mail import send_mail
+        bodega = Usuario.objects.create_user("sindy", "sindy@janotec.test", "Clave-segura-1", rol="bodega")
+        prueba = self.crear_ticket()
+        prueba.empresa = Empresa.objects.create(razon_social="PRUEBA", nit="9")
+        prueba.save()
+        real = self.crear_ticket()
+
+        send_mail(f"[{prueba.radicado}] x", "x", "de@janotec.test", [self.agente.email, "cliente@empresa.co"])
+        self.assertEqual(mail.outbox[-1].to, ["pruebas@janotec.test"])
+        self.assertIn(self.agente.email, mail.outbox[-1].subject)
+        send_mail("[MAT-1] Material · PRUEBA", f"Solicitud · {prueba.radicado}", "de@janotec.test", [bodega.email])
+        self.assertEqual(mail.outbox[-1].to, ["yuri@janotec.test"])
+        send_mail("[Oportunidad] PRUEBA · CCTV", "x", "de@janotec.test", ["comercial@janotec.test", self.agente.email])
+        self.assertEqual(set(mail.outbox[-1].to), {"yuri@janotec.test", "pruebas@janotec.test"})
+
+        # Lo real no cambia, tampoco si en un correo van juntos un ticket real y uno de prueba
+        send_mail(f"[{real.radicado}] x", "x", "de@janotec.test", [self.agente.email, bodega.email])
+        self.assertEqual((set(mail.outbox[-1].to), mail.outbox[-1].subject),
+                         ({self.agente.email, bodega.email}, f"[{real.radicado}] x"))
+        send_mail("Semana", f"{real.radicado} y {prueba.radicado}", "de@janotec.test", [self.agente.email])
+        self.assertEqual(mail.outbox[-1].to, [self.agente.email])
+        send_mail("Esto es una prueba", "x", "de@janotec.test", [self.agente.email])
+        self.assertEqual(mail.outbox[-1].to, [self.agente.email])
 
 
 class TresCorreosAlClienteTests(BaseTickets):
@@ -1853,3 +1883,40 @@ class EvidenciasActaTests(ActaBase):
         self.assertEqual(self.client.get(reverse("archivo_acta", args=["evidencia", ev.pk])).status_code, 200)
         self.client.force_login(self.cli_b)
         self.assertEqual(self.client.get(reverse("archivo_acta", args=["evidencia", ev.pk])).status_code, 404)
+
+
+class TambienTecnicoTests(TestCase):
+    """Dirección que también va a visitas: sale en las listas de técnicos sin perder lo que ya podía hacer."""
+
+    def setUp(self):
+        self.director = Usuario.objects.create_user("director", "d@janotec.test", "Clave-segura-1", rol="direccion", first_name="Dir")
+        self.otro = Usuario.objects.create_user("otro", "o@janotec.test", "Clave-segura-1", rol="direccion", first_name="Otro")
+        self.coord = Usuario.objects.create_user("coord", "c@janotec.test", "Clave-segura-1", rol="supervisor", first_name="Coord")
+        self.director.tambien_tecnico = True
+        self.director.save()
+
+    def test_sale_en_las_listas_de_tecnicos_y_conserva_direccion(self):
+        from django.utils import timezone
+
+        from cronograma.forms import tecnicos_queryset
+        from inventario.forms import tecnicos
+        from .indicadores import por_responsable
+        for lista in (tecnicos_queryset(), tecnicos()):
+            self.assertIn(self.director, lista)
+            self.assertIn(self.coord, lista)
+            self.assertNotIn(self.otro, lista)
+        hoy = timezone.localdate()
+        empresa = Empresa.objects.create(codigo="acme", razon_social="ACME")
+        for numero, u in enumerate((self.director, self.coord), 1):
+            ActaSoporte.objects.create(numero=numero, empresa=empresa, tecnico=u, fecha=timezone.now())
+        nombres = [f["nombre"] for f in por_responsable(Ticket.objects.all(), hoy, hoy)]
+        self.assertIn("Dir", nombres)
+        self.assertNotIn("Coord", nombres)
+        self.assertTrue(self.director.es_direccion and self.director.gestiona_inventario and self.director.is_staff)
+        self.assertEqual(self.director.rol_corto, "Dirección y técnico")
+        self.assertEqual(self.otro.rol_corto, "Dirección")
+
+    def test_otro_rol_con_la_marca_ve_lo_de_un_tecnico(self):
+        bodega = Usuario.objects.create_user("b", "b@janotec.test", "Clave-segura-1", rol="bodega", tambien_tecnico=True)
+        self.assertTrue(bodega.es_personal and bodega.ve_inventario)
+        self.assertFalse(bodega.es_supervisor)

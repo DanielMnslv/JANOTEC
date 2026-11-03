@@ -275,6 +275,16 @@ templates/         base, login, portal cliente, panel soporte
 static/            css propio + Bootstrap e íconos locales
 ```
 
+## Actualizar el servidor
+
+Los cambios se hacen y se prueban en el equipo de desarrollo, se suben a GitHub y el servidor los baja:
+
+```bash
+cd /ruta/de/la/plataforma && ./actualizar.sh
+```
+
+El script baja lo último de GitHub, instala dependencias, aplica migraciones, prepara los estilos y reinicia. En el servidor solo se edita a mano el `.env`.
+
 ## Ideas para siguientes versiones
 - Tiempos de respuesta (SLA) por prioridad con alertas de vencimiento.
 - Notificaciones por WhatsApp (API de Meta / Twilio).

@@ -16,7 +16,7 @@ from tickets.permisos import cliente_requerido, obtener_ticket, personal_requeri
 from . import pasos, servicios
 from .pdf import ficha_pdf
 from .forms import CotizacionClienteForm, FichaForm, GestionComercialForm, InformeForm
-from .models import FichaComercial, InformeRequerimiento
+from .models import FichaComercial, InformeRequerimiento, LineaCotizacion
 from .permisos import comercial_requerido, obtener_ticket_comercial
 
 F = FichaComercial
@@ -397,6 +397,8 @@ def cotizador(request, radicado):
             if accion == "informe":
                 n = coti.traer_del_informe(cotizacion)
                 messages.success(request, f"Se agregaron {n} ítem(s) del informe del requerimiento. Revise cantidades y precios.")
+            elif accion == "ver_pdf":
+                return redirect("comercial:cotizacion_pdf", radicado)
             elif accion == "enviar":
                 try:
                     version = coti.enviar(cotizacion, request.user)
@@ -417,6 +419,7 @@ def cotizador(request, radicado):
         c["valor_unitario"], c["iva"] = float(c["valor_unitario"]), float(c["iva"])
     return render(request, "comercial/cotizador.html", {
         "ticket": ticket, "ficha": ficha, "cotizacion": cotizacion, "form": form, "lineas": lineas, "catalogo": catalogo,
+        "palabras_categoria": LineaCotizacion.PALABRAS_CATEGORIA,
         "totales": cotizacion.totales(), "numero": (ficha.versiones.count() + 1),
         "codigo": coti.codigo(ficha, ficha.versiones.count() + 1),
     })
@@ -431,6 +434,9 @@ def cotizacion_pdf(request, radicado):
 
     ticket = obtener_ticket_comercial(request.user, radicado)
     cotizacion = coti.borrador(ticket.ficha)
+    if not cotizacion.margen:
+        messages.error(request, coti.MARGEN_OBLIGATORIO)
+        return redirect("comercial:cotizador", radicado)
     numero = ticket.ficha.versiones.count() + 1
     nombre, contenido = propuesta_pdf(cotizacion, coti.codigo(ticket.ficha, numero), numero, borrador=True)
     respuesta = HttpResponse(contenido, content_type="application/pdf")

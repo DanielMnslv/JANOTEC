@@ -149,6 +149,7 @@ NOTIFICAR_SST_EMAIL = os.getenv("NOTIFICAR_SST_EMAIL", "")  # recibe las solicit
 NOTIFICAR_ADMINISTRATIVA_EMAIL = os.getenv("NOTIFICAR_ADMINISTRATIVA_EMAIL", "")  # recibe el cronograma consolidado de la semana
 # Fase de pruebas: lo que iba para un cliente llega a este correo (el personal JANOTEC recibe normal). Vacío = real.
 CORREO_CLIENTES_PRUEBA = os.getenv("CORREO_CLIENTES_PRUEBA", "").strip()
+CORREO_COMERCIAL_PRUEBA = os.getenv("CORREO_COMERCIAL_PRUEBA", "").strip()  # lo comercial y de bodega del cliente PRUEBA
 if CORREO_CLIENTES_PRUEBA:
     EMAIL_BACKEND_REAL, EMAIL_BACKEND = EMAIL_BACKEND, "config.correo.RedirigirClientesBackend"
 SITIO_URL = os.getenv("SITIO_URL", "http://127.0.0.1:8000")

@@ -14,6 +14,7 @@ import re
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.urls import reverse
 
@@ -246,27 +247,34 @@ class Cotizacion(models.Model):
     class Modalidad(models.TextChoices):
         VENTA = "venta", "Venta (pago único)"
         MONITOREO = "monitoreo", "Monitoreo mensual (AIU)"
-        ALQUILER = "alquiler", "Alquiler con opción de compra"
+        ALQUILER = "alquiler", "Alquiler (mano de obra sumada al canon)"
+        HIBRIDO = "hibrido", "Híbrido (alquiler de equipos y venta de mano de obra)"
 
     VIGENCIA = "Vigencia de la propuesta: siete (7) días hábiles."
-    CONDICIONES = ("Valores en pesos colombianos. IVA del 19 % discriminado.\n"
-                   "Garantía de equipos: un (1) año por defectos de fábrica.\n"
-                   "La instalación se programa una vez aprobada la propuesta, según disponibilidad del cliente.")
+    CONDICIONES = ("La garantía de los equipos es de un (1) año. Todas las garantías son nulas si los productos han sido mal "
+                   "aplicados, mal usados, maltratados, dañados, o retirados del sitio original de la instalación. La Garantía "
+                   "no cubre daños por fallas del fluido eléctrico, mal manejo o maltrato a los equipos por parte de los usuarios.")
 
     ficha = models.ForeignKey(FichaComercial, on_delete=models.CASCADE, related_name="cotizaciones")
     version = models.OneToOneField(PropuestaVersion, on_delete=models.SET_NULL, null=True, blank=True, related_name="cotizacion")
     alcance = models.TextField("alcance de la propuesta", blank=True,
                                help_text="Qué se va a hacer, en palabras del cliente (sale en el PDF).")
     condiciones = models.TextField(default=CONDICIONES)
-    # Forma de cobro: venta (pago único), monitoreo mensual con AIU o alquiler con opción de compra
+    # Forma de cobro: venta (pago único), monitoreo mensual con AIU, alquiler o híbrido (la mano de obra se cobra aparte)
     modalidad = models.CharField(max_length=10, choices=Modalidad.choices, default=Modalidad.VENTA)
+    margen = models.DecimalField("margen de utilidad %", max_digits=5, decimal_places=2, null=True, blank=True,
+                                 validators=[MinValueValidator(1), MaxValueValidator(99)],
+                                 help_text="Porcentaje del precio de venta que queda de utilidad: precio = costo ÷ (1 − margen). "
+                                           "Es obligatorio para enviar; el cliente solo ve el precio final.")
     aiu_utilidad = models.DecimalField("utilidad del AIU %", max_digits=5, decimal_places=2, default=Decimal("10"),
                                        help_text="En el monitoreo el IVA se cobra solo sobre la utilidad.")
-    tasa_mensual = models.DecimalField("tasa mensual %", max_digits=5, decimal_places=2, default=Decimal("1.5"),
+    tasa_mensual = models.DecimalField("tasa mensual %", max_digits=5, decimal_places=2, default=Decimal("2"),
                                        help_text="Interés del alquiler: el canon es una cuota fija a esta tasa.")
-    plazos = models.CharField("plazos en meses", max_length=30, default="12,24,36", help_text="Separados por coma.")
-    opcion_compra = models.DecimalField("opción de compra %", max_digits=5, decimal_places=2, default=Decimal("1"),
-                                        help_text="Lo que paga el cliente al final para quedarse con los equipos.")
+    recargo_alquiler = models.DecimalField("recargo del alquiler %", max_digits=5, decimal_places=2, default=Decimal("2"),
+                                           help_text="Se suma al valor de los bienes antes de calcular el canon.")
+    plazos = models.CharField("plazos en meses", max_length=30, default="6,12,24,36,48", help_text="Separados por coma.")
+    opcion_compra = models.DecimalField("opción de compra %", max_digits=5, decimal_places=2, default=0,
+                                        help_text="Lo que paga el cliente al final para quedarse con los equipos. 0 = sin opción de compra.")
     creado = models.DateTimeField(auto_now_add=True)
     actualizado = models.DateTimeField(auto_now=True)
 
@@ -277,6 +285,14 @@ class Cotizacion(models.Model):
 
     def __str__(self):
         return f"Cotización · {self.ficha.ticket.radicado}"
+
+    @property
+    def es_alquiler(self):
+        return self.modalidad in (self.Modalidad.ALQUILER, self.Modalidad.HIBRIDO)
+
+    @property
+    def mano_obra_en_canon(self):
+        return self.modalidad == self.Modalidad.ALQUILER
 
     @property
     def enviada(self):
@@ -296,24 +312,57 @@ class Cotizacion(models.Model):
         return sorted({int(p) for p in re.findall(r"\d+", self.plazos) if 0 < int(p) <= 120})
 
     def canones(self):
-        """Alquiler: canon mensual fijo por plazo (cuota a la tasa mensual sobre el valor con IVA) y la opción de compra."""
+        """Alquiler: canon mensual fijo por plazo y, si la hay, la opción de compra.
+
+        La cuota sale de los bienes más el recargo, a la tasa mensual; el IVA se suma a cada canon. La mano de obra se
+        cobra aparte, salvo que se incluya en el canon (así se calculó PE-2026-10-007: tasa 2 %, recargo 2 %).
+        """
         from decimal import ROUND_HALF_UP
 
-        valor = self.totales()["total"]
+        dos = Decimal("0.01")
+        bienes = iva_bienes = mano_obra = Decimal(0)
+        for linea in self.lineas.all():
+            c = linea.calculo()
+            if linea.categoria_final == LineaCotizacion.Categoria.MANO_OBRA and not self.mano_obra_en_canon:
+                mano_obra += c["total"]
+            else:
+                bienes += c["base"]
+                iva_bienes += c["iva"]
+        tasa_iva = iva_bienes / bienes if bienes else Decimal(0)
+        financiado = bienes * (1 + self.recargo_alquiler / 100)
         r = self.tasa_mensual / 100
         filas = []
         for n in self.lista_plazos():
-            canon = valor / n if not r else valor * r / (1 - (1 + r) ** -n)
-            canon = canon.quantize(Decimal("0.01"), ROUND_HALF_UP)
-            filas.append({"plazo": n, "canon": canon, "total": canon * n})
-        compra = (valor * self.opcion_compra / 100).quantize(Decimal("0.01"), ROUND_HALF_UP)
-        return {"valor": valor, "filas": filas, "opcion_compra": compra}
+            antes_iva = (financiado / n if not r else financiado * r / (1 - (1 + r) ** -n)).quantize(dos, ROUND_HALF_UP)
+            iva = (antes_iva * tasa_iva).quantize(dos, ROUND_HALF_UP)
+            filas.append({"plazo": n, "antes_iva": antes_iva, "iva": iva, "canon": antes_iva + iva, "total": (antes_iva + iva) * n})
+        valor = bienes + iva_bienes
+        compra = (valor * self.opcion_compra / 100).quantize(dos, ROUND_HALF_UP)
+        return {"valor": valor, "mano_obra": mano_obra, "filas": filas, "opcion_compra": compra}
 
 
 class LineaCotizacion(models.Model):
+    class Categoria(models.TextChoices):
+        EQUIPOS = "equipos", "Equipos"
+        ENERGIA = "energia", "Energía"
+        LICENCIAS = "licencias", "Licencias"
+        CONECTIVIDAD = "conectividad", "Conectividad y comunicaciones"
+        ACCESORIOS = "accesorios", "Accesorios"
+        MANO_OBRA = "mano_obra", "Mano de obra"
+
+    # Sin categoría elegida, se deduce de la descripción; lo que no coincida es un equipo
+    PALABRAS_CATEGORIA = (
+        ("mano_obra", ("servicio", "instalaci", "configuraci", "mano de obra", "traslado", "adecuaci", "mantenimiento", "soporte t")),
+        ("energia", ("fuente", "bater", "ups", "energ", "regulador", "transformador")),
+        ("licencias", ("licencia", "software", "suscripci")),
+        ("conectividad", ("cable", "switch", "router", "fibra", "conector", "patch", "antena")),
+        ("accesorios", ("bot[oó]n", "caja", "canaleta", "tubo", "soporte", "accesorio", "tornillo", "chazo", "amarre")),
+    )
+
     cotizacion = models.ForeignKey(Cotizacion, on_delete=models.CASCADE, related_name="lineas")
     item = models.ForeignKey(ItemCatalogo, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     descripcion = models.CharField("descripción", max_length=250)
+    categoria = models.CharField("categoría", max_length=15, choices=Categoria.choices, blank=True)
     cantidad = models.DecimalField(max_digits=12, decimal_places=2, default=1)
     valor_unitario = models.DecimalField("valor unitario (antes de IVA)", max_digits=14, decimal_places=2)
     descuento = models.DecimalField("descuento %", max_digits=5, decimal_places=2, default=0)
@@ -326,11 +375,34 @@ class LineaCotizacion(models.Model):
     def __str__(self):
         return f"{self.cantidad:g} {self.descripcion}"
 
+    @property
+    def categoria_final(self):
+        if self.categoria:
+            return self.categoria
+        texto = self.descripcion.lower()
+        for categoria, palabras in self.PALABRAS_CATEGORIA:
+            if re.search(r"\b(" + "|".join(palabras) + ")", texto):
+                return categoria
+        return self.Categoria.EQUIPOS
+
+    def _precio_exacto(self):
+        margen = self.cotizacion.margen
+        if not margen or margen >= 100:  # Fuera de rango llega solo mientras el formulario muestra el error
+            return self.valor_unitario  # Las propuestas anteriores al margen conservan sus valores
+        return self.valor_unitario / (1 - margen / 100)
+
+    @property
+    def precio_unitario(self):
+        """Lo que ve el cliente: el margen es sobre la venta, como en las propuestas reales (597.462 con 25 % = 796.616)."""
+        from decimal import ROUND_HALF_UP
+
+        return self._precio_exacto().quantize(Decimal("0.01"), ROUND_HALF_UP)
+
     def calculo(self, aiu_utilidad=None):
         """Valores de la línea. Con AIU (monitoreo) el IVA va solo sobre la utilidad: base × utilidad % × IVA %."""
         from decimal import ROUND_HALF_UP, Decimal
         dos = Decimal("0.01")
-        bruto = (self.cantidad * self.valor_unitario).quantize(dos, ROUND_HALF_UP)
+        bruto = (self.cantidad * self._precio_exacto()).quantize(dos, ROUND_HALF_UP)  # Sin redondear antes, para no descuadrar por cantidad
         descuento = (bruto * self.descuento / 100).quantize(dos, ROUND_HALF_UP)
         base = bruto - descuento
         tasa = self.iva / 100 * (aiu_utilidad / 100 if aiu_utilidad is not None else 1)

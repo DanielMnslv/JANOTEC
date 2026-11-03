@@ -480,7 +480,7 @@ class CotizadorTests(BaseComercial):
 
     def lineas(self, filas):
         datos = {"alcance": "Cámaras para el parqueadero", "condiciones": "Garantía de 1 año", "modalidad": "venta",
-                 "aiu_utilidad": "10", "tasa_mensual": "1.5", "plazos": "12,24,36", "opcion_compra": "1",
+                 "aiu_utilidad": "10", "tasa_mensual": "1.5", "recargo_alquiler": "0", "plazos": "12,24,36", "opcion_compra": "1",
                  "lineas-TOTAL_FORMS": str(len(filas)), "lineas-INITIAL_FORMS": "0", "lineas-MIN_NUM_FORMS": "0",
                  "lineas-MAX_NUM_FORMS": "1000"}
         for i, (desc, cant, valor, descuento) in enumerate(filas):
@@ -504,20 +504,21 @@ class CotizadorTests(BaseComercial):
         self.assertEqual([(l.descripcion, l.valor_unitario) for l in cot.lineas.all()],
                          [("Cable HDMI 15 m High Speed 4K", Decimal("73335.57")), ("Canaleta", Decimal("0"))])
         r = self.client.post(url, {**self.lineas([("Canaleta 20x12", "6", "0", "0")]), "accion": "enviar"}, follow=True)
-        self.assertContains(r, "Cada ítem necesita cantidad y valor unitario")
+        self.assertContains(r, "Cada ítem necesita cantidad y costo unitario")
         cot.lineas.all().delete()
         self.client.post(url, self.lineas([("Cable HDMI 15 m High Speed 4K", "1", "73335.57", "12"), ("Canaleta 20x12", "6", "9635.85", "0")]))
         tot = cot.totales()
         self.assertEqual((tot["bruto"], tot["descuento"], tot["base"]), (Decimal("131150.67"), Decimal("8800.27"), Decimal("122350.40")))
         self.assertEqual(tot["iva"], Decimal("23246.58"))
+        t.ficha.cotizaciones.update(margen=1)
         pdf = self.client.get(reverse("comercial:cotizacion_pdf", args=[t.radicado]))
         self.assertEqual(pdf["Content-Type"], "application/pdf")
         mail.outbox.clear()
-        self.client.post(url, {**self.lineas([]), "accion": "enviar"})
+        self.client.post(url, {**self.lineas([]), "margen": "1", "accion": "enviar"})
         t.refresh_from_db()
         v1 = PropuestaVersion.objects.get(ficha=t.ficha)
         self.assertRegex(v1.codigo, r"^PE-\d{4}-\d{2}-\d{2}-V1$")
-        self.assertEqual((t.ficha.etapa, t.ficha.valor_propuesta, v1.archivo.nombre_original), ("enviada", 122350, f"{v1.codigo}.pdf"))
+        self.assertEqual((t.ficha.etapa, t.ficha.valor_propuesta, v1.archivo.nombre_original), ("enviada", 123586, f"{v1.codigo}.pdf"))
         correo = next(m for m in mail.outbox if "leidy@a.co" in m.to)
         self.assertEqual(correo.attachments[0][0], f"{v1.codigo}.pdf")
         self.assertIn(v1.codigo, correo.alternatives[0][0])
@@ -525,7 +526,7 @@ class CotizadorTests(BaseComercial):
         self.client.post(reverse("comercial:gestionar", args=[t.radicado]),
                          {"etapa": "ajustes", "visibilidad": "interno", "cambios": "Otra marca de cable"})
         self.assertContains(self.client.get(url), "Cable HDMI 15 m High Speed 4K")
-        self.client.post(url, {**self.lineas([]), "accion": "enviar"})
+        self.client.post(url, {**self.lineas([]), "margen": "1", "accion": "enviar"})
         v2 = PropuestaVersion.objects.get(ficha=t.ficha, numero=2)
         self.assertEqual(v2.codigo, v1.codigo.replace("-V1", "-V2"))
         self.assertEqual(t.ficha.cotizaciones.count(), 2)
@@ -541,9 +542,11 @@ class CotizadorTests(BaseComercial):
         cot = t.ficha.cotizaciones.get()
         tot = cot.totales()
         self.assertEqual((tot["iva"], tot["total"]), (Decimal("1864.57"), Decimal("100000.00")))  # IVA solo sobre la utilidad
+        t.ficha.cotizaciones.update(margen=1)
         self.assertEqual(self.client.get(reverse("comercial:cotizacion_pdf", args=[t.radicado]))["Content-Type"], "application/pdf")
         cot.lineas.all().delete()
-        self.client.post(url, {**self.lineas([("Sistema de videovigilancia", "1", "24746222.98", "0")]), "modalidad": "alquiler"})
+        self.client.post(url, {**self.lineas([("Sistema de videovigilancia", "1", "24746222.98", "0")]), "modalidad": "alquiler",
+                               "recargo_alquiler": "0"})
         cot.refresh_from_db()
         c = cot.canones()
         self.assertEqual(c["valor"], Decimal("29448005.35"))
@@ -552,7 +555,142 @@ class CotizadorTests(BaseComercial):
             self.assertLessEqual(abs(f["canon"] - Decimal(esperado)), Decimal("0.01"))
         self.assertEqual([f["plazo"] for f in c["filas"]], [12, 24, 36])
         self.assertEqual(c["opcion_compra"], Decimal("294480.05"))
+        t.ficha.cotizaciones.update(margen=1)
         self.assertEqual(self.client.get(reverse("comercial:cotizacion_pdf", args=[t.radicado]))["Content-Type"], "application/pdf")
+
+    def test_alquiler_como_la_propuesta_real_aprobada(self):
+        """PE-2026-10-007: los bienes más el recargo, a la tasa mensual; la mano de obra se cobra aparte."""
+        from decimal import Decimal
+
+        t = self.crear()
+        self.client.post(reverse("comercial:informe", args=[t.radicado]), {"necesidad": "Acceso", "servicios": "Acceso"})
+        url = reverse("comercial:cotizador", args=[t.radicado])
+        self.client.post(url, {**self.lineas([
+            ("Terminal de reconocimiento facial [TER-1]", "1", "796616", "0"), ("Cable Cat6+", "40", "2645.38", "0"),
+            ("Botón de salida", "1", "33237", "0"), ("Caja de sobreponer", "1", "11055", "0"),
+            ("Servicio de instalación", "1", "234140", "0")]),
+            "modalidad": "hibrido", "tasa_mensual": "2", "recargo_alquiler": "2", "plazos": "6,12,24,36,48", "opcion_compra": "0"})
+        cot = t.ficha.cotizaciones.get()
+        c = cot.canones()
+        self.assertEqual([round(f["antes_iva"]) for f in c["filas"]], [172395, 91312, 51055, 37886, 31482])
+        self.assertEqual(round(c["filas"][0]["canon"]), 205150)
+        self.assertEqual(round(c["mano_obra"]), 278627)
+        self.assertEqual([l.categoria_final for l in cot.lineas.order_by("orden", "id")],
+                         ["equipos", "conectividad", "accesorios", "accesorios", "mano_obra"])
+        cot.modalidad = "alquiler"  # Sin venta aparte: la mano de obra se suma al canon
+        cot.save()
+        self.assertEqual(cot.canones()["mano_obra"], 0)
+        t.ficha.cotizaciones.update(margen=1)
+        respuesta = self.client.get(reverse("comercial:cotizacion_pdf", args=[t.radicado]))
+        self.assertEqual(respuesta["Content-Type"], "application/pdf")
+        self.assertEqual(respuesta.content.count(b"/Type /Page\n") + respuesta.content.count(b"/Type /Page\r"), 3)
+
+    def test_margen_obligatorio_sube_el_precio_y_no_se_ve_en_el_pdf(self):
+        from decimal import Decimal
+
+        t = self.crear()
+        self.client.post(reverse("comercial:informe", args=[t.radicado]), {"necesidad": "Acceso", "servicios": "Acceso"})
+        url = reverse("comercial:cotizador", args=[t.radicado])
+        lineas = self.lineas([("Terminal", "2", "100000", "0")])
+        self.client.post(url, lineas)
+        cot = t.ficha.cotizaciones.get()
+        self.assertEqual(cot.totales()["base"], Decimal("200000.00"))
+        # Sin margen ni se envía ni sale el PDF
+        self.assertEqual(self.client.get(reverse("comercial:cotizacion_pdf", args=[t.radicado])).status_code, 302)
+        self.client.post(url, {**lineas, "accion": "enviar"})
+        t.ficha.refresh_from_db()
+        self.assertEqual(t.ficha.versiones.count(), 0)
+        for fuera in ("0", "99.01", "100", "-1"):
+            self.assertIn("margen", self.client.post(url, {**lineas, "margen": fuera}).context["form"].errors)
+        cot.lineas.exclude(pk=cot.lineas.first().pk).delete()  # Cada intento sin id agregó otra línea
+        for valido, base in (("1", "202020.20"), ("99", "20000000.00"), ("30", "285714.29")):
+            cot.margen = Decimal(valido)
+            cot.save()
+            self.assertEqual(cot.totales()["base"], Decimal(base))
+        self.assertEqual(cot.lineas.get().valor_unitario, Decimal("100000.00"))
+        self.assertEqual(self.client.get(reverse("comercial:cotizacion_pdf", args=[t.radicado])).status_code, 200)
+        linea = cot.lineas.get()
+        datos = {"lineas-TOTAL_FORMS": "1", "lineas-INITIAL_FORMS": "1", "lineas-MIN_NUM_FORMS": "0", "lineas-MAX_NUM_FORMS": "1000",
+                 "lineas-0-id": linea.pk, "lineas-0-descripcion": "Terminal", "lineas-0-cantidad": "2", "lineas-0-valor_unitario": "100000",
+                 "lineas-0-descuento": "0", "lineas-0-iva": "19"}
+        self.client.post(url, {**lineas, **datos, "margen": "30", "accion": "enviar"})
+        t.ficha.refresh_from_db()
+        self.assertEqual(t.ficha.valor_propuesta, 285714)
+        from comercial import cotizador as coti
+        t.ficha.etapa = "ajustes"
+        t.ficha.save()
+        self.assertEqual(coti.borrador(t.ficha).margen, Decimal("30.00"))
+
+    def test_ver_pdf_guarda_lo_digitado_antes_de_abrirlo(self):
+        from decimal import Decimal
+
+        t = self.crear()
+        self.client.post(reverse("comercial:informe", args=[t.radicado]), {"necesidad": "Acceso", "servicios": "Acceso"})
+        url = reverse("comercial:cotizador", args=[t.radicado])
+        r = self.client.post(url, {**self.lineas([("Terminal", "1", "100000", "0")]), "margen": "25", "accion": "ver_pdf"}, follow=True)
+        self.assertEqual(r["Content-Type"], "application/pdf")
+        self.assertEqual(t.ficha.cotizaciones.get().margen, Decimal("25.00"))
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(t.ficha.cotizaciones.get().totales()["base"], Decimal("133333.33"))
+
+    def test_propuesta_hibrida_ordena_por_categoria_y_ocupa_tres_paginas(self):
+        from decimal import Decimal
+
+        from comercial.pdf import _resumen_propuesta, propuesta_pdf
+
+        t = self.crear()
+        self.client.post(reverse("comercial:informe", args=[t.radicado]), {"necesidad": "Acceso", "servicios": "Acceso"})
+        url = reverse("comercial:cotizador", args=[t.radicado])
+        largo = "Terminal de reconocimiento facial para exterior IP65, 3.000 usuarios, tarjetas y huellas, con videoportero. " * 2
+        self.client.post(url, self.lineas([("Servicio de instalación y configuración", "1", "187312", "19"), (largo, "1", "637293", "19"),
+                                           ("Cable Cat6 de alto rendimiento para redes de datos. " * 3, "40", "2116", "19"),
+                                           ("Botón de salida sin contacto", "1", "26590", "19"), ("Caja de sobreponer", "1", "8844", "19")]))
+        cot = t.ficha.cotizaciones.get()
+        cot.modalidad = "hibrido"
+        cot.margen = Decimal("25")
+        cot.save()
+        desglose = [f for f in _resumen_propuesta(cot, "PE-1-V1", "Control de acceso") if getattr(f, "_cellvalues", None) and f._ncols >= 5][0]
+        self.assertEqual(desglose._cellvalues[1][0].text, "EQUIPOS")
+        self.assertEqual(desglose._cellvalues[-1][0].text, "MANO DE OBRA")
+        _, contenido = propuesta_pdf(cot, "PE-1-V1", 1)
+        self.assertEqual(contenido.count(b"/Type /Page") - contenido.count(b"/Type /Pages"), 3)
+
+    def test_la_linea_conserva_su_costo_y_el_cotizador_trae_el_aviso_del_catalogo(self):
+        from decimal import Decimal
+
+        from comercial.models import ItemCatalogo
+
+        t = self.crear()
+        self.client.post(reverse("comercial:informe", args=[t.radicado]), {"necesidad": "Acceso", "servicios": "Acceso"})
+        url = reverse("comercial:cotizador", args=[t.radicado])
+        item = ItemCatalogo.objects.create(descripcion="Terminal facial", valor_unitario=Decimal("100000"), iva=19)
+        self.client.post(url, self.lineas([("Terminal facial", "1", "100000", "19")]))
+        item.valor_unitario = Decimal("75000")
+        item.save()
+        r = self.client.get(url)
+        self.assertEqual(t.ficha.cotizaciones.get().lineas.get().valor_unitario, Decimal("100000.00"))
+        self.assertContains(r, "aviso-catalogo")
+        self.assertContains(r, "usar-catalogo")
+
+    def test_margen_sobre_la_venta_da_los_valores_de_la_propuesta_real(self):
+        from decimal import Decimal
+
+        t = self.crear()
+        self.client.post(reverse("comercial:informe", args=[t.radicado]), {"necesidad": "Acceso", "servicios": "Acceso"})
+        self.client.post(reverse("comercial:cotizador", args=[t.radicado]), self.lineas([
+            ("Terminal", "1", "597462", "0"), ("Cable", "40", "1984.04", "0"), ("Boton", "1", "24928", "0"),
+            ("Caja", "1", "8291.25", "0"), ("Servicio de instalación", "1", "175605", "0")]))
+        cot = t.ficha.cotizaciones.get()
+        cot.margen = Decimal("25")
+        cot.modalidad = "hibrido"
+        cot.tasa_mensual, cot.recargo_alquiler, cot.plazos, cot.opcion_compra = Decimal("2"), Decimal("2"), "6,12,24,36,48", Decimal("0")
+        cot.save()
+        self.assertEqual(cot.lineas.get(descripcion="Terminal").precio_unitario, Decimal("796616.00"))
+        self.assertEqual(cot.lineas.get(descripcion="Cable").calculo()["base"].quantize(Decimal(1)), Decimal("105815"))
+        self.assertEqual(cot.totales()["base"].quantize(Decimal(1)), Decimal("1180864"))
+        self.assertEqual(cot.totales()["total"].quantize(Decimal(1)), Decimal("1405228"))
+        self.assertEqual([f["canon"].quantize(Decimal(1)) for f in cot.canones()["filas"]],
+                         [Decimal(v) for v in ("205150", "108662", "60756", "45084", "37464")])
 
     def test_catalogo(self):
         self.client.force_login(self.asesor)
@@ -571,7 +709,7 @@ class CotizadorTests(BaseComercial):
         url = reverse("comercial:cotizador", args=[t.radicado])
         self.client.post(url, self.lineas([("Cable HDMI 15 m", "1", "73335.57", "0"), ("Canaleta 20x12", "6", "9635.85", "0"),
                                            ("Servicio de traslado e instalación de pantalla", "1", "212831.02", "0")]))
-        self.client.post(url, {**self.lineas([]), "accion": "enviar"})
+        self.client.post(url, {**self.lineas([]), "margen": "1", "accion": "enviar"})
         t.refresh_from_db()
         com.registrar_respuesta(t.ficha, None, True)
         s = SolicitudMaterial.objects.get(ticket=t, origen="comercial")

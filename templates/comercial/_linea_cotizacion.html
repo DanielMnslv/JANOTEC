@@ -1,7 +1,9 @@
 <tr class="linea">
   <td>{{ f.id }}{{ f.descripcion }}{% for e in f.descripcion.errors %}<div class="text-danger">{{ e }}</div>{% endfor %}</td>
+  <td>{{ f.categoria }}</td>
   <td>{{ f.cantidad }}</td>
-  <td>{{ f.valor_unitario }}{% for e in f.valor_unitario.errors %}<div class="text-danger">{{ e }}</div>{% endfor %}</td>
+  <td>{{ f.valor_unitario }}{% for e in f.valor_unitario.errors %}<div class="text-danger">{{ e }}</div>{% endfor %}
+    <div class="aviso-catalogo small text-danger mt-1" hidden><span></span> <button type="button" class="btn btn-link btn-sm p-0 align-baseline usar-catalogo">Usar</button></div></td>
   <td>{{ f.descuento }}</td>
   <td>{{ f.iva }}</td>
   <td class="text-end subtotal">—</td>

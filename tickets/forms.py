@@ -954,8 +954,8 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
                                     widget=forms.Textarea(attrs={"rows": 2}))
     fotos = MultipleFileField(label="Foto del equipo")
 
-    accion = forms.ChoiceField(label="¿Qué se hizo?", required=False, initial="intervenido", choices=[
-        ("intervenido", "Revisado, reparado o configurado"), ("retirado", "Se retiró (desmonte)")])
+    accion = forms.ChoiceField(label="¿Qué se hizo?", required=False, initial="revisado", choices=[
+        ("revisado", "Revisado"), ("reparado", "Reparado"), ("configurado", "Configurado"), ("retirado", "Se retiró (desmonte)")])
     propiedad = forms.ChoiceField(label="¿De quién es?", required=False, choices=[
         ("", "— Elija —"), ("cliente", "Del cliente: se le entrega"), ("janotec", "De JANOTEC (alquiler): vuelve a bodega")])
     placa = forms.CharField(label="Placa de inventario", max_length=40, required=False)

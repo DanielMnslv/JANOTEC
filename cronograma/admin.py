@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Actividad, DocumentoPersonal
+from .models import Actividad, DocumentoPersonal, ReporteHorasExtra
 
 
 @admin.register(Actividad)
@@ -10,6 +10,13 @@ class ActividadAdmin(admin.ModelAdmin):
     search_fields = ("cliente", "sede", "actividad", "ticket__radicado")
     filter_horizontal = ("encargados", "acompanantes")
     raw_id_fields = ("ticket",)
+
+
+@admin.register(ReporteHorasExtra)
+class ReporteHorasExtraAdmin(admin.ModelAdmin):
+    list_display = ("colaborador", "fecha", "hora_salida", "hora_llegada", "duracion", "cliente")
+    list_filter = ("colaborador", "fecha")
+    search_fields = ("cliente",)
 
 
 @admin.register(DocumentoPersonal)

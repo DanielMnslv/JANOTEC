@@ -269,7 +269,7 @@ class Ticket(models.Model):
         null=True,
         blank=True,
         related_name="tickets_asignados",
-        limit_choices_to={"rol__in": ["agente", "supervisor"]},
+        limit_choices_to=models.Q(rol__in=["agente", "supervisor"]) | models.Q(tambien_tecnico=True),
         verbose_name="técnico encargado",
     )
     creado = models.DateTimeField(auto_now_add=True)
@@ -776,6 +776,11 @@ class EquipoActa(models.Model):
         UTILIZADO = "utilizado", "Material o equipo utilizado"  # se instaló o gastó para que el servicio funcione
         RETIRADO = "retirado", "Equipo retirado"  # desmonte: se entrega al cliente o vuelve a bodega si es de JANOTEC
 
+    class Trabajo(models.TextChoices):
+        REVISADO = "revisado", "Revisado"
+        REPARADO = "reparado", "Reparado"
+        CONFIGURADO = "configurado", "Configurado"
+
     class Propiedad(models.TextChoices):
         CLIENTE = "cliente", "Del cliente: se le entrega"
         JANOTEC = "janotec", "De JANOTEC (alquiler): vuelve a bodega"
@@ -785,6 +790,7 @@ class EquipoActa(models.Model):
     placa = models.CharField("placa de inventario", max_length=40, blank=True,
                              help_text="Equipos de JANOTEC: la placa con la que está en el inventario.")
     clase = models.CharField(max_length=12, choices=Clase.choices, default=Clase.INTERVENIDO)
+    trabajo = models.CharField("¿qué se hizo?", max_length=12, choices=Trabajo.choices, blank=True)  # vacío en las actas anteriores
     equipo = models.CharField(max_length=150, blank=True)
     marca = models.CharField(max_length=100, blank=True)
     referencia = models.CharField("referencia o modelo", max_length=100, blank=True)

@@ -7,13 +7,12 @@ from accounts.models import Usuario
 from tickets.forms import BootstrapMixin, ConSugerencias, validar_correos
 from tickets.models import Ticket
 
-from .models import Actividad, ConfiguracionEnvio, Contacto, DocumentoPersonal
+from .models import Actividad, ConfiguracionEnvio, Contacto, DocumentoPersonal, ReporteHorasExtra
 
 
 def tecnicos_queryset():
-    """Quienes pueden ir a una visita: técnicos y coordinadores activos."""
-    return Usuario.objects.filter(is_active=True, rol__in=[Usuario.Rol.AGENTE, Usuario.Rol.SUPERVISOR]) \
-        .order_by("first_name", "username")
+    """Quienes pueden ir a una visita: técnicos, coordinadores y quien tenga «también técnico»."""
+    return Usuario.tecnicos().order_by("first_name", "username")
 
 
 class ActividadForm(BootstrapMixin, forms.ModelForm):
@@ -151,3 +150,27 @@ class ImportarForm(forms.Form):
         if not isinstance(datos, dict) or not isinstance(datos.get("rows"), list):
             raise forms.ValidationError("El archivo no tiene actividades («rows»).")
         return datos
+
+
+class ReporteHorasExtraForm(BootstrapMixin, forms.ModelForm):
+    class Meta:
+        model = ReporteHorasExtra
+        fields = ["colaborador", "fecha", "hora_salida", "hora_llegada", "cliente"]
+        widgets = {
+            "fecha": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "hora_salida": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
+            "hora_llegada": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
+        }
+
+    def __init__(self, *args, usuario=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        from accounts.models import Empresa
+
+        if usuario.es_supervisor:  # el coordinador puede registrar por otro técnico
+            self.fields["colaborador"].queryset = tecnicos_queryset()
+            self.fields["colaborador"].initial = usuario.pk if tecnicos_queryset().filter(pk=usuario.pk).exists() else None
+        else:
+            del self.fields["colaborador"]
+        self.fields["cliente"].widget = ConSugerencias(Empresa.objects.filter(activa=True).order_by("razon_social").values_list("razon_social", flat=True),
+                                                       attrs={"placeholder": "Escriba o elija el cliente"})
+        self._aplicar_estilos()

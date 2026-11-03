@@ -266,7 +266,7 @@ def por_responsable(tickets, desde, hasta):
 
     ini, fin = _inicio(desde), _inicio(hasta + timedelta(days=1))
     filas = []
-    for u in Usuario.objects.filter(rol=Usuario.Rol.AGENTE, is_active=True).order_by("first_name", "last_name"):
+    for u in Usuario.tecnicos().exclude(rol=Usuario.Rol.SUPERVISOR, tambien_tecnico=False).order_by("first_name", "last_name"):
         cerrados = tickets.filter(asignado_a=u, estado=E.CERRADO, fecha_cierre__gte=ini, fecha_cierre__lt=fin)
         calif = tickets.filter(asignado_a=u, fecha_calificacion__gte=ini, fecha_calificacion__lt=fin).aggregate(
             p=Avg("calificacion"), n=Count("id"))

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block titulo %}Horas extras{% endblock %}
+{% block contenido %}
+<h1 class="h3 page-title mb-1">Horas extras</h1>
+<p class="text-muted-jn mb-4">Auto reporte de salida a campo: registre la hora en que salió, la hora en que llegó y el cliente que visitó.</p>
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-plus-circle"></i> Registrar salida a campo</div>
+      <div class="card-body">
+        <form method="post">{% csrf_token %}
+          {% for e in form.non_field_errors %}<div class="text-danger small mb-2">{{ e }}</div>{% endfor %}
+          {% if form.colaborador %}{% include "tickets/_campo.html" with campo=form.colaborador %}
+          {% else %}<p class="small mb-3"><span class="text-muted-jn">Colaborador:</span> <b>{{ user.get_full_name|default:user.username }}</b></p>{% endif %}
+          {% include "tickets/_campo.html" with campo=form.fecha %}
+          <div class="row">
+            {% include "tickets/_campo.html" with campo=form.hora_salida clase="col-6" %}
+            {% include "tickets/_campo.html" with campo=form.hora_llegada clase="col-6" %}
+          </div>
+          {% include "tickets/_campo.html" with campo=form.cliente %}
+          <button class="btn btn-primary w-100"><i class="bi bi-check2-circle"></i> Registrar horas</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-8">
+    <form method="get" class="d-flex flex-wrap gap-2 align-items-center mb-3">
+      <label class="small text-muted-jn" for="mes">Mes</label>
+      <input type="month" id="mes" name="mes" value="{{ mes }}" class="form-control form-control-sm" style="max-width:170px">
+      <button class="btn btn-sm btn-outline-secondary">Ver</button>
+      {% if user.es_supervisor %}<a class="btn btn-sm btn-outline-success ms-auto" href="?mes={{ mes }}&formato=excel"><i class="bi bi-file-earmark-excel"></i> Descargar Excel</a>{% endif %}
+    </form>
+    {% if user.es_supervisor and totales %}
+    <div class="card mb-3">
+      <div class="card-header"><i class="bi bi-people"></i> Total del mes por colaborador</div>
+      <ul class="list-group list-group-flush small">
+        {% for c, horas in totales %}<li class="list-group-item d-flex justify-content-between"><span>{{ c.get_full_name|default:c.username }}</span><b>{{ horas }} h</b></li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-tickets mb-0">
+          <thead><tr>{% if user.es_supervisor %}<th>Colaborador</th>{% endif %}<th>Fecha</th><th>Salida</th><th>Llegada</th><th class="text-end">Horas</th><th>Cliente</th></tr></thead>
+          {% for r in reportes %}
+            <tr>{% if user.es_supervisor %}<td>{{ r.colaborador.get_full_name|default:r.colaborador.username }}</td>{% endif %}<td>{{ r.fecha|date:"d/m/Y" }}</td><td>{{ r.hora_salida|time:"H:i" }}</td><td>{{ r.hora_llegada|time:"H:i" }}</td><td class="text-end">{{ r.duracion }}</td><td class="small">{{ r.cliente }}</td></tr>
+          {% empty %}
+            <tr><td colspan="6" class="text-center text-muted-jn py-4">No hay horas registradas en este mes.</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+    </div>
+    {% if not user.es_supervisor and totales %}<p class="small mt-2 text-end">Total del mes: <b>{{ totales.0.1 }} h</b></p>{% endif %}
+  </div>
+</div>
+{% endblock %}

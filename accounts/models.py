@@ -113,6 +113,10 @@ class Usuario(AbstractUser):
         "también área comercial", default=False,
         help_text="Además de su rol (p. ej. bodega y logística), atiende los requerimientos comerciales.",
     )
+    tambien_tecnico = models.BooleanField(
+        "también técnico", default=False,
+        help_text="Además de su rol (p. ej. dirección), va a visitas, recibe material y aparece en las listas de técnicos.",
+    )
     empresa = models.ForeignKey(
         Empresa,
         on_delete=models.PROTECT,
@@ -142,7 +146,12 @@ class Usuario(AbstractUser):
     @property
     def es_personal(self):
         """Personal del área técnica (técnicos, coordinador), dirección o superusuario."""
-        return self.is_superuser or self.rol in (self.Rol.AGENTE, self.Rol.SUPERVISOR, self.Rol.DIRECCION)
+        return self.is_superuser or self.tambien_tecnico or self.rol in (self.Rol.AGENTE, self.Rol.SUPERVISOR, self.Rol.DIRECCION)
+
+    @classmethod
+    def tecnicos(cls):
+        """Quienes pueden ir a una visita o recibir material: técnicos, coordinadores y quien tenga «también técnico»."""
+        return cls.objects.filter(models.Q(rol__in=[cls.Rol.AGENTE, cls.Rol.SUPERVISOR]) | models.Q(tambien_tecnico=True), is_active=True)
 
     def save(self, *args, **kwargs):
         # El acceso a Configuración lo da el rol (los superusuarios siempre lo tienen)
@@ -186,7 +195,7 @@ class Usuario(AbstractUser):
 
     @property
     def ve_inventario(self):
-        return self.gestiona_inventario or self.rol == self.Rol.AGENTE
+        return self.gestiona_inventario or self.rol == self.Rol.AGENTE or self.tambien_tecnico
 
     @property
     def es_central(self):
@@ -209,4 +218,4 @@ class Usuario(AbstractUser):
             return "Admin"
         if self.rol == self.Rol.BODEGA and self.tambien_comercial:
             return "Bodega y comercial"
-        return self.get_rol_display().split(" (")[0]
+        return self.get_rol_display().split(" (")[0] + (" y técnico" if self.tambien_tecnico else "")

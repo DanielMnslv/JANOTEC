@@ -28,10 +28,12 @@
       <div class="card mb-3"><div class="card-body">
         <div class="row g-3 align-items-end">
           <div class="col-md-5">{% include "tickets/_campo.html" with campo=form.modalidad %}</div>
+          <div class="col-md-4">{% include "tickets/_campo.html" with campo=form.margen %}</div>
           <div class="col-md-4 solo-monitoreo">{% include "tickets/_campo.html" with campo=form.aiu_utilidad %}</div>
           <div class="col-md-3 solo-alquiler">{% include "tickets/_campo.html" with campo=form.tasa_mensual %}</div>
-          <div class="col-md-2 solo-alquiler">{% include "tickets/_campo.html" with campo=form.plazos %}</div>
-          <div class="col-md-2 solo-alquiler">{% include "tickets/_campo.html" with campo=form.opcion_compra %}</div>
+          <div class="col-md-3 solo-alquiler">{% include "tickets/_campo.html" with campo=form.recargo_alquiler %}</div>
+          <div class="col-md-3 solo-alquiler">{% include "tickets/_campo.html" with campo=form.plazos %}</div>
+          <div class="col-md-3 solo-alquiler">{% include "tickets/_campo.html" with campo=form.opcion_compra %}</div>
         </div>
         <p class="small text-muted-jn mb-0 solo-monitoreo">Los ítems son el valor <strong>mensual</strong>. El IVA del 19 % se cobra solo sobre la utilidad del AIU; la tarifa se ajusta cada año.</p>
         <p class="small text-muted-jn mb-0 solo-alquiler">Los ítems son los bienes a rentar. El canon es una cuota fija mensual sobre el valor con IVA; al terminar, el cliente se queda con los equipos pagando la opción de compra.</p>
@@ -42,7 +44,7 @@
           <button type="button" class="btn btn-sm btn-light border" id="agregar-linea"><i class="bi bi-plus-lg"></i> Agregar ítem</button></div>
         <div class="table-responsive">
           <table class="table table-sm align-middle mb-0 small" id="tabla-lineas">
-            <thead><tr><th style="min-width:260px">Descripción</th><th style="width:85px">Cant.</th><th style="width:130px">Vlr. unitario</th>
+            <thead><tr><th style="min-width:260px">Descripción</th><th style="width:130px">Categoría</th><th style="width:85px">Cant.</th><th style="width:130px">Costo unitario</th>
               <th style="width:80px">Desc. %</th><th style="width:70px">IVA %</th><th class="text-end" style="width:120px">Total antes IVA</th><th></th></tr></thead>
             <tbody>
               {% for f in lineas %}{% include "comercial/_linea_cotizacion.html" %}{% endfor %}
@@ -55,6 +57,7 @@
       </div>
       <datalist id="catalogo-precios">{% for c in catalogo %}<option value="{{ c.descripcion }}">{% endfor %}</datalist>
       {{ catalogo|json_script:"datos-catalogo" }}
+      {{ palabras_categoria|json_script:"palabras-categoria" }}
 
       <div class="card mb-3"><div class="card-body">{% include "tickets/_campo.html" with campo=form.condiciones %}
         <div class="small text-muted-jn">{{ cotizacion.VIGENCIA }}</div></div></div>
@@ -65,6 +68,8 @@
         <div class="card-header">Resumen</div>
         <div class="card-body">
           <dl class="dl-ficha mb-3">
+            <dt>Costo</dt><dd id="t-costo">—</dd>
+            <dt>Utilidad</dt><dd id="t-utilidad">—</dd>
             <dt>Subtotal</dt><dd id="t-bruto">${{ totales.bruto|floatformat:"0g" }}</dd>
             <dt>Descuento</dt><dd id="t-descuento">${{ totales.descuento|floatformat:"0g" }}</dd>
             <dt>Subtotal con descuento</dt><dd id="t-base">${{ totales.base|floatformat:"0g" }}</dd>
@@ -75,11 +80,12 @@
           <div class="solo-alquiler mb-3">
             <div class="small fw-semibold mb-1">Canon mensual</div>
             <table class="table table-sm small mb-1"><tbody id="t-canones"></tbody></table>
+            <div class="small text-muted-jn">Mano de obra aparte: <span id="t-mano"></span></div>
             <div class="small text-muted-jn">Opción de compra al final: <span id="t-compra"></span></div>
           </div>
           <div class="d-grid gap-2">
             <button class="btn btn-outline-primary" name="accion" value="guardar"><i class="bi bi-save"></i> Guardar</button>
-            <a class="btn btn-outline-secondary" href="{% url 'comercial:cotizacion_pdf' ticket.radicado %}" target="_blank" rel="noopener" id="ver-pdf"><i class="bi bi-file-earmark-pdf"></i> Ver PDF (borrador)</a>
+            <button class="btn btn-outline-secondary" name="accion" value="ver_pdf" formtarget="_blank" id="ver-pdf"><i class="bi bi-file-earmark-pdf"></i> Ver PDF (borrador)</button>
             <button class="btn btn-accent" name="accion" value="enviar" id="enviar-propuesta"><i class="bi bi-send"></i> Enviar al cliente</button>
           </div>
           <p class="small text-muted-jn mt-2 mb-0">Al enviar se genera el PDF {{ codigo }}, queda como versión {{ numero }} y le llega al cliente con los botones para aprobar, pedir cambios o no aprobar. Guarde antes de ver el PDF.</p>
@@ -99,40 +105,84 @@
   const pesos = function (v) { return '$' + Math.round(v).toLocaleString('es-CO'); };
   const num = function (el) { return parseFloat((el && el.value) || '0') || 0; };
   const modalidad = document.getElementById('id_modalidad');
+  const palabras = JSON.parse(document.getElementById('palabras-categoria').textContent).map(function (c) {
+    return [c[0], new RegExp('(^|[^a-záéíóúñ])(' + c[1].join('|') + ')')];
+  });
+  function esManoDeObra(tr) {  // Igual que LineaCotizacion.categoria_final
+    const elegida = tr.querySelector('.categoria').value;
+    if (elegida) return elegida === 'mano_obra';
+    const texto = tr.querySelector('.descripcion').value.toLowerCase();
+    const hallada = palabras.find(function (c) { return c[1].test(texto); });
+    return !!hallada && hallada[0] === 'mano_obra';
+  }
+  function revisarCatalogo(tr) {  // La línea guarda su costo: si el catálogo cambió después, se avisa sin tocar el valor
+    const aviso = tr.querySelector('.aviso-catalogo');
+    if (!aviso) return;
+    const c = catalogo[tr.querySelector('.descripcion').value.trim().toLowerCase()];
+    const valor = num(tr.querySelector('.valor'));
+    aviso.hidden = !c || !valor || Math.abs(valor - c.valor_unitario) < 0.005;
+    if (!aviso.hidden) aviso.querySelector('span').textContent = 'Catálogo: $' + c.valor_unitario.toLocaleString('es-CO', {maximumFractionDigits: 2}) + '.';
+  }
   function recalcular() {
     const m = modalidad.value;
+    const alquila = m === 'alquiler' || m === 'hibrido';
     document.querySelectorAll('.solo-monitoreo').forEach(function (el) { el.hidden = m !== 'monitoreo'; });
     document.querySelectorAll('.no-monitoreo').forEach(function (el) { el.hidden = m === 'monitoreo'; });
-    document.querySelectorAll('.solo-alquiler').forEach(function (el) { el.hidden = m !== 'alquiler'; });
+    document.querySelectorAll('.solo-alquiler').forEach(function (el) { el.hidden = !alquila; });
     // Monitoreo con AIU: el IVA va solo sobre la utilidad
     const factor = m === 'monitoreo' ? num(document.getElementById('id_aiu_utilidad')) / 100 : 1;
     const t = {bruto: 0, descuento: 0, base: 0, iva: 0, ahorro: 0};
+    const margen = 1 - Math.min(num(document.getElementById('id_margen')), 99) / 100;  // Sobre la venta, como LineaCotizacion.precio_unitario
+    let costo = 0;
+    const enCanon = m !== 'hibrido';
+    const a = {bienes: 0, iva: 0, mano: 0};
     tabla.querySelectorAll('tr.linea').forEach(function (tr) {
+      revisarCatalogo(tr);
       const borrar = tr.querySelector('input[type=checkbox][name$=DELETE]');
-      const bruto = num(tr.querySelector('.cantidad')) * num(tr.querySelector('.valor'));
+      const costoLinea = num(tr.querySelector('.cantidad')) * num(tr.querySelector('.valor'));
+      const bruto = costoLinea / margen;
       const tasa = num(tr.querySelector('.iva')) / 100 * factor;
       const desc = bruto * num(tr.querySelector('.descuento')) / 100, base = bruto - desc, iva = base * tasa;
       tr.querySelector('.subtotal').textContent = pesos(base);
       tr.classList.toggle('text-decoration-line-through', !!(borrar && borrar.checked));
       if (borrar && borrar.checked) return;
+      costo += costoLinea;
       t.bruto += bruto; t.descuento += desc; t.base += base; t.iva += iva; t.ahorro += desc * (1 + tasa);
+      if (esManoDeObra(tr) && !enCanon) { a.mano += base + iva; } else { a.bienes += base; a.iva += iva; }
     });
     ['bruto', 'descuento', 'base', 'iva', 'ahorro'].forEach(function (k) { document.getElementById('t-' + k).textContent = pesos(t[k]); });
+    document.getElementById('t-costo').textContent = pesos(costo);
+    document.getElementById('t-utilidad').textContent = pesos(t.base - costo);
     const valor = t.base + t.iva;
     document.getElementById('t-total').textContent = pesos(valor);
-    if (m === 'alquiler') {  // canon: cuota fija a la tasa mensual sobre el valor con IVA
+    if (alquila) {  // canon: cuota fija a la tasa mensual sobre los bienes con el recargo, más el IVA
       const r = num(document.getElementById('id_tasa_mensual')) / 100;
       const plazos = (document.getElementById('id_plazos').value.match(/\d+/g) || []).map(Number).filter(function (n) { return n > 0 && n <= 120; });
       document.getElementById('t-canones').innerHTML = plazos.map(function (n) {
-        const canon = r ? valor * r / (1 - Math.pow(1 + r, -n)) : valor / n;
+        const financiado = a.bienes * (1 + num(document.getElementById('id_recargo_alquiler')) / 100);
+        const canon = (r ? financiado * r / (1 - Math.pow(1 + r, -n)) : financiado / n) * (a.bienes ? 1 + a.iva / a.bienes : 1);
         return '<tr><td>' + n + ' meses</td><td class="text-end fw-semibold">' + pesos(canon) + '</td></tr>';
       }).join('');
-      document.getElementById('t-compra').textContent = pesos(valor * num(document.getElementById('id_opcion_compra')) / 100);
+      document.getElementById('t-mano').textContent = pesos(a.mano);
+      document.getElementById('t-compra').textContent = pesos((a.bienes + a.iva) * num(document.getElementById('id_opcion_compra')) / 100);
     }
   }
-  ['id_modalidad', 'id_aiu_utilidad', 'id_tasa_mensual', 'id_plazos', 'id_opcion_compra'].forEach(function (id) {
+  ['id_modalidad', 'id_margen', 'id_aiu_utilidad', 'id_tasa_mensual', 'id_recargo_alquiler', 'id_plazos', 'id_opcion_compra'].forEach(function (id) {
     const el = document.getElementById(id);
     if (el) { el.addEventListener('input', recalcular); el.addEventListener('change', recalcular); }
+  });
+  // «Ver PDF» y «Enviar» necesitan el margen; «Ver PDF» guarda y abre el PDF en otra pestaña, y esta se recarga con lo guardado
+  const campoMargen = document.getElementById('id_margen');
+  campoMargen.addEventListener('input', function () { campoMargen.setCustomValidity(''); });
+  campoMargen.form.addEventListener('submit', function (e) {
+    const accion = e.submitter ? e.submitter.value : '';
+    if ((accion === 'ver_pdf' || accion === 'enviar') && !campoMargen.value) {
+      e.preventDefault();
+      campoMargen.setCustomValidity('Digite el margen de utilidad, de 1 % a 99 %.');
+      campoMargen.reportValidity();
+    } else if (accion === 'ver_pdf') {
+      setTimeout(function () { window.location.href = window.location.pathname; }, 1200);
+    }
   });
   function activar(tr) {
     const desc = tr.querySelector('.descripcion');
@@ -142,9 +192,14 @@
       const valor = tr.querySelector('.valor');
       if (!num(valor)) valor.value = c.valor_unitario.toFixed(2);
       tr.querySelector('.iva').value = c.iva;
+      if (c.tipo === 'servicio') tr.querySelector('.categoria').value = 'mano_obra';
       recalcular();
     });
     tr.querySelectorAll('input').forEach(function (el) { el.addEventListener('input', recalcular); el.addEventListener('change', recalcular); });
+    tr.querySelector('.usar-catalogo').addEventListener('click', function () {
+      tr.querySelector('.valor').value = catalogo[desc.value.trim().toLowerCase()].valor_unitario.toFixed(2);
+      recalcular();
+    });
   }
   tabla.querySelectorAll('tr.linea').forEach(activar);
   document.getElementById('agregar-linea').addEventListener('click', function () {

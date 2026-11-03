@@ -375,3 +375,34 @@ class ConfiguracionEnvio(models.Model):
     @classmethod
     def actual(cls):
         return cls.objects.get_or_create(pk=1)[0]
+
+
+class ReporteHorasExtra(models.Model):
+    """Auto reporte de salida a campo (antes un Google Forms): quién salió, a qué hora salió y llegó, y a qué cliente."""
+
+    colaborador = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="horas_extras")
+    fecha = models.DateField(default=timezone.localdate)
+    hora_salida = models.TimeField("hora de salida")
+    hora_llegada = models.TimeField("hora de llegada")
+    cliente = models.CharField("cliente al que se dirige", max_length=200)
+    registrado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                       related_name="+")
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha", "-hora_salida"]
+        verbose_name = "reporte de horas extras"
+        verbose_name_plural = "reportes de horas extras"
+
+    def __str__(self):
+        return f"{self.colaborador} · {self.fecha:%d/%m/%Y} · {self.cliente}"
+
+    @property
+    def minutos(self):
+        salida = self.hora_salida.hour * 60 + self.hora_salida.minute
+        llegada = self.hora_llegada.hour * 60 + self.hora_llegada.minute
+        return (llegada - salida) % (24 * 60)  # si llega después de medianoche, sigue contando
+
+    @property
+    def duracion(self):
+        return f"{self.minutos // 60}:{self.minutos % 60:02d}"

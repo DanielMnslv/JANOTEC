@@ -1021,3 +1021,44 @@ class EnlaceCompartidoTests(BaseCronograma):
         self.client.get(self.url)
         self.enlace.refresh_from_db()
         self.assertEqual(self.enlace.ultimo_acceso, primero)
+
+
+class HorasExtrasTests(BaseCronograma):
+    """El auto reporte de salida a campo que antes se hacía en Google Forms."""
+
+    def test_el_tecnico_registra_sus_horas_y_solo_ve_las_suyas(self):
+        from .models import ReporteHorasExtra
+
+        url = reverse("cronograma:horas_extras")
+        self.client.force_login(self.tec)
+        self.assertNotContains(self.client.get(url), 'name="colaborador"')  # siempre queda a su nombre
+        r = self.client.post(url, {"colaborador": self.tec2.pk, "fecha": "2026-11-03", "hora_salida": "18:30",
+                                   "hora_llegada": "21:15", "cliente": "LLANOGAS"})
+        self.assertRedirects(r, url)
+        reporte = ReporteHorasExtra.objects.get()
+        self.assertEqual((reporte.colaborador, reporte.registrado_por, reporte.duracion), (self.tec, self.tec, "2:45"))
+        ReporteHorasExtra.objects.create(colaborador=self.tec2, fecha=date(2026, 11, 3), hora_salida="22:00",
+                                         hora_llegada="01:30", cliente="Otro cliente")
+        lista = self.client.get(url + "?mes=2026-11")
+        self.assertContains(lista, "LLANOGAS")
+        self.assertNotContains(lista, "Otro cliente")
+        self.assertEqual(self.client.get(url + "?mes=2026-11&formato=excel")["Content-Type"], "text/html; charset=utf-8")
+
+    def test_el_coordinador_ve_todo_registra_por_otro_y_descarga_el_excel(self):
+        from .models import ReporteHorasExtra
+
+        url = reverse("cronograma:horas_extras")
+        self.client.force_login(self.coord)
+        self.client.post(url, {"colaborador": self.tec2.pk, "fecha": "2026-11-03", "hora_salida": "22:00",
+                               "hora_llegada": "01:30", "cliente": "Otro cliente"})
+        reporte = ReporteHorasExtra.objects.get()
+        self.assertEqual((reporte.colaborador, reporte.registrado_por, reporte.duracion), (self.tec2, self.coord, "3:30"))
+        lista = self.client.get(url + "?mes=2026-11")
+        self.assertContains(lista, "Total del mes por colaborador")
+        self.assertContains(lista, "3:30 h")
+        excel = self.client.get(url + "?mes=2026-11&formato=excel")
+        self.assertIn("spreadsheetml", excel["Content-Type"])
+
+    def test_el_cliente_no_entra(self):
+        self.client.force_login(self.cli)
+        self.assertEqual(self.client.get(reverse("cronograma:horas_extras")).status_code, 403)

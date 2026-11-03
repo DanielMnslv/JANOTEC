@@ -1,11 +1,18 @@
-.env
-__pycache__/
-*.pyc
-db.sqlite3
-media/
-staticfiles/
+﻿.env
+.env.*
+!.env.example
+
 .venv/
 venv/
+__pycache__/
+*.py[cod]
 
-# Datos reales de clientes (no se versionan)
+db.sqlite3
+db.sqlite3-*
+media/
+staticfiles/
 datos_iniciales/
+ENLACE_ACTUAL.txt
+
+*.log
+.pytest_cache/

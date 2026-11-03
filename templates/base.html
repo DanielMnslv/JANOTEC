@@ -28,7 +28,8 @@
       <ul class="navbar-nav me-auto">
         {% if user.es_personal %}
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'panel' %}active{% endif %}" href="{% url 'panel' %}"><i class="bi bi-kanban"></i> {% if user.es_supervisor %}Recepción{% else %}Mis tickets{% endif %}</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'cronograma' %}active{% endif %}" href="{% url 'cronograma:semana' %}"><i class="bi bi-calendar-week"></i> Cronograma</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'cronograma' and request.resolver_match.url_name != 'horas_extras' %}active{% endif %}" href="{% url 'cronograma:semana' %}"><i class="bi bi-calendar-week"></i> Cronograma</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'horas_extras' %}active{% endif %}" href="{% url 'cronograma:horas_extras' %}"><i class="bi bi-clock-history"></i> Horas extras</a></li>
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'actas_lista' or request.resolver_match.url_name == 'acta_detalle' %}active{% endif %}" href="{% url 'actas_lista' %}"><i class="bi bi-clipboard-check"></i> Actas</a></li>
           {% if user.ve_inventario %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'inventario' %}active{% endif %}" href="{% if user.gestiona_inventario %}{% url 'inventario:productos' %}{% else %}{% url 'inventario:mi_material' %}{% endif %}"><i class="bi bi-boxes"></i> {% if user.gestiona_inventario %}Inventario{% else %}Mi material{% endif %}</a></li>
           {% elif user.es_coordinador %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'inventario' %}active{% endif %}" href="{% url 'inventario:funcionarios' %}"><i class="bi bi-people"></i> Funcionarios</a></li>{% endif %}

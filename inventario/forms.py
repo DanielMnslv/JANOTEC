@@ -17,7 +17,7 @@ class _Estilos:
 
 
 def tecnicos():
-    return Usuario.objects.filter(is_active=True, rol__in=["agente", "supervisor"]).order_by("first_name", "last_name")
+    return Usuario.tecnicos().order_by("first_name", "last_name")
 
 
 class MaterialMixin:

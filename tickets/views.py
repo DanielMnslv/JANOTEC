@@ -896,7 +896,8 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
                 e = f.cleaned_data
                 equipo = EquipoActa.objects.create(acta=acta, clase=clase, equipo=e["equipo"], marca=e["marca"],
                                                    referencia=e.get("referencia") or "", serial=e["serial"], cantidad=e["cantidad"], observaciones=e["observaciones"],
-                                                   propiedad=e.get("propiedad") or "", placa=(e.get("placa") or "").strip().upper())
+                                                   propiedad=e.get("propiedad") or "", placa=(e.get("placa") or "").strip().upper(),
+                                                   trabajo=e.get("accion") if e.get("accion") in EquipoActa.Trabajo.values else "")
                 for foto in e["fotos"]:
                     FotoEquipo.objects.create(equipo=equipo, archivo=foto, nombre_original=foto.name[:255])
             for etapa in EvidenciaActa.Etapa.values:

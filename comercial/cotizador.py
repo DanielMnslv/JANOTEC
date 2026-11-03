@@ -18,6 +18,7 @@ from . import servicios
 from .models import Cotizacion, FichaComercial as F, ItemCatalogo, LineaCotizacion, PropuestaVersion
 
 ETAPAS_COTIZABLES = (F.Etapa.GESTION, F.Etapa.ELABORANDO, F.Etapa.AJUSTES)
+MARGEN_OBLIGATORIO = "Digite el margen de utilidad de esta propuesta, de 1 % a 99 %."
 
 
 def borrador(ficha):
@@ -30,7 +31,9 @@ def borrador(ficha):
         if anterior:
             nueva = Cotizacion.objects.create(
                 ficha=ficha, alcance=anterior.alcance, condiciones=anterior.condiciones, modalidad=anterior.modalidad,
+                margen=anterior.margen,
                 aiu_utilidad=anterior.aiu_utilidad, tasa_mensual=anterior.tasa_mensual, plazos=anterior.plazos,
+                recargo_alquiler=anterior.recargo_alquiler,
                 opcion_compra=anterior.opcion_compra)
             for linea in anterior.lineas.all():
                 linea.pk, linea.cotizacion = None, nueva
@@ -110,7 +113,9 @@ def enviar(cotizacion, autor):
         raise ValidationError("Primero registre el informe del requerimiento: es la base de la propuesta.")
     lineas = list(cotizacion.lineas.all())
     if not lineas or any(l.valor_unitario <= 0 or l.cantidad <= 0 for l in lineas):
-        raise ValidationError("Cada ítem necesita cantidad y valor unitario.")
+        raise ValidationError("Cada ítem necesita cantidad y costo unitario.")
+    if not cotizacion.margen:
+        raise ValidationError(MARGEN_OBLIGATORIO)
     totales = cotizacion.totales()
     numero = (ficha.versiones.order_by("-numero").values_list("numero", flat=True).first() or 0) + 1
     cod = codigo(ficha, numero)

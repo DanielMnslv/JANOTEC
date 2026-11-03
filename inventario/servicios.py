@@ -31,7 +31,7 @@ def gestiona_inventario(usuario):
 
 
 def ve_inventario(usuario):
-    return gestiona_inventario(usuario) or (usuario.is_authenticated and usuario.rol == "agente")
+    return gestiona_inventario(usuario) or (usuario.is_authenticated and (usuario.rol == "agente" or usuario.tambien_tecnico))
 
 
 def _nombre(usuario):

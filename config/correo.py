@@ -2,10 +2,16 @@
 
 Con CORREO_CLIENTES_PRUEBA en el .env, todo destinatario que no sea del personal JANOTEC (ni un buzón
 NOTIFICAR_*) se reemplaza por ese correo, y el asunto dice a quién iba. El personal recibe normal.
+
+Los correos del cliente PRUEBA no le llegan a nadie más que a quienes prueban: lo de comercial y bodega a
+CORREO_COMERCIAL_PRUEBA, y lo demás (coordinación, técnicos, dirección, cliente) a CORREO_CLIENTES_PRUEBA.
 """
+import re
+
 from django.conf import settings
 from django.core.mail import get_connection
 from django.core.mail.backends.base import BaseEmailBackend
+from django.db.models import Q
 
 
 def correos_internos():
@@ -17,6 +23,43 @@ def correos_internos():
         if nombre.startswith("NOTIFICAR_") and isinstance(getattr(settings, nombre), str):
             internos |= {c.strip().lower() for c in getattr(settings, nombre).replace(",", ";").split(";") if c.strip()}
     return internos
+
+
+RADICADO = re.compile(r"JNT-\d{4}-\d{6}")
+MARCA_PRUEBA = re.compile(r"\bPRUEBA\b")
+
+
+def es_de_prueba(mensaje):
+    """Si nombra radicados, todos deben ser del cliente PRUEBA; si no nombra ninguno, lo dice el asunto."""
+    from tickets.models import Ticket
+
+    textos = [mensaje.subject, mensaje.body] + [a[0] for a in getattr(mensaje, "alternatives", []) if isinstance(a[0], str)]
+    radicados = set(RADICADO.findall(" ".join(textos)))
+    if not radicados:
+        return bool(MARCA_PRUEBA.search(mensaje.subject))
+    empresas = list(Ticket.objects.filter(radicado__in=radicados).values_list("empresa__razon_social", flat=True))
+    return len(empresas) == len(radicados) and all(MARCA_PRUEBA.match(e or "") for e in empresas)
+
+
+def correos_comercial_y_bodega():
+    from accounts.models import Usuario
+
+    correos = {e.lower() for e in Usuario.objects.exclude(email="").filter(
+        Q(rol__in=[Usuario.Rol.BODEGA, Usuario.Rol.COMERCIAL]) | Q(tambien_comercial=True)).values_list("email", flat=True)}
+    for buzon in (settings.NOTIFICAR_COMERCIAL_EMAIL, settings.NOTIFICAR_ADMINISTRATIVA_EMAIL):
+        correos |= {c.strip().lower() for c in buzon.replace(",", ";").split(";") if c.strip()}
+    return correos
+
+
+def a_quienes_prueban(mensaje):
+    """Cambia los destinatarios por quienes prueban; el asunto conserva a quién iba."""
+    prueba = settings.CORREO_CLIENTES_PRUEBA
+    comercial = settings.CORREO_COMERCIAL_PRUEBA or prueba
+    de_comercial = correos_comercial_y_bodega()
+    originales = list(dict.fromkeys(list(mensaje.to or []) + list(mensaje.cc or []) + list(mensaje.bcc or [])))
+    destinos = {comercial if d.split("<")[-1].strip(" >").lower() in de_comercial else prueba for d in originales}
+    mensaje.to, mensaje.cc, mensaje.bcc = sorted(destinos), [], []
+    mensaje.subject = f"[PRUEBA · iba para: {', '.join(originales)}] {mensaje.subject}"
 
 
 class RedirigirClientesBackend(BaseEmailBackend):
@@ -34,6 +77,9 @@ class RedirigirClientesBackend(BaseEmailBackend):
         prueba = settings.CORREO_CLIENTES_PRUEBA
         internos = correos_internos() | {prueba.lower()}
         for m in mensajes:
+            if es_de_prueba(m):
+                a_quienes_prueban(m)
+                continue
             externos = []
             for campo in ("to", "cc", "bcc"):
                 lista = getattr(m, campo) or []

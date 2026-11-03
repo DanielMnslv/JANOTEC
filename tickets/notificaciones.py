@@ -1,8 +1,9 @@
 """Notificaciones por correo. Nunca interrumpen la operación si el correo falla."""
 import logging
+import re
 
 from django.conf import settings
-from django.core.mail import EmailMultiAlternatives, send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils import timezone
 
@@ -26,12 +27,51 @@ def correos_cliente(ticket):
     return correos
 
 
+_DATO = re.compile(r"^([^:\n]{2,40}):\s+(\S.*)$")
+_URL = re.compile(r"https?://\S+$")
+
+
+def html_desde_texto(asunto, cuerpo):
+    """Los avisos internos se escriben en texto plano; aquí toman la misma presentación de los correos al cliente.
+
+    Bloques separados por línea en blanco: si todas sus líneas son «Etiqueta: valor» van a la tabla de datos,
+    el primer «Etiqueta: enlace» se vuelve el botón, y una línea final «— Área …» es la firma.
+    """
+    radicado = (re.search(r"JNT-\d{4}-\d{6}", asunto) or [""])[0]
+    titulo = re.sub(r"^(\[[^\]]*\]\s*)+", "", asunto).strip() or asunto
+    parrafos, datos, boton, firma = [], [], None, "Plataforma de soporte"
+    for bloque in re.split(r"\n\s*\n", cuerpo.strip()):
+        lineas = [l for l in bloque.splitlines() if l.strip()]
+        sueltas = []
+        for linea in lineas:
+            texto = linea.strip()
+            dato = _DATO.match(texto)
+            if dato and _URL.match(dato[2]) and not boton:
+                boton = (dato[1], dato[2])
+            elif dato and not texto.startswith(("-", "•", "■")):
+                partes = [p for p in texto.split(" · ")]
+                pares = [_DATO.match(p) for p in partes]
+                datos += [(m[1], m[2]) for m in pares] if all(pares) else [(dato[1], dato[2])]
+            elif texto.startswith("—") and linea is lineas[-1]:
+                firma = texto.lstrip("— ").strip()
+            else:
+                sueltas.append(linea.rstrip())
+        if sueltas:
+            parrafos.append("\n".join(sueltas))
+    contexto = {"titulo": titulo, "saludo": "Cordial saludo.", "parrafos": parrafos, "datos": datos, "radicado": radicado,
+                "firma": firma, "boton_texto": boton[0] if boton else "", "boton_url": boton[1] if boton else "",
+                "resumen": (parrafos[0] if parrafos else titulo)[:140], "estrellas": [], "acciones": []}
+    return render_to_string("correos/cliente.html", contexto)
+
+
 def _enviar(asunto, cuerpo, destinatarios):
     destinatarios = [d for d in set(destinatarios) if d]
     if not destinatarios:
         return
     try:
-        send_mail(asunto, cuerpo, settings.DEFAULT_FROM_EMAIL, destinatarios, fail_silently=False)
+        correo = EmailMultiAlternatives(asunto, cuerpo, settings.DEFAULT_FROM_EMAIL, destinatarios)
+        correo.attach_alternative(html_desde_texto(asunto, cuerpo), "text/html")
+        correo.send(fail_silently=False)
     except Exception:  # noqa: BLE001 — el correo nunca debe tumbar la solicitud
         log.exception("No se pudo enviar la notificación «%s»", asunto)
 
@@ -247,7 +287,8 @@ def acta_registrada(acta):
     if acta.ticket:
         destinatarios += correos_cliente(acta.ticket)
     fecha = timezone.localtime(acta.fecha)
-    intervenidos = ", ".join(e.equipo for e in acta.equipos_intervenidos if e.equipo)
+    intervenidos = ", ".join(e.equipo + (f" ({e.get_trabajo_display().lower()})" if e.trabajo else "")
+                             for e in acta.equipos_intervenidos if e.equipo)
     utilizados = ", ".join(e.equipo + (f" ({e.cantidad})" if e.cantidad else "") for e in acta.equipos_utilizados if e.equipo)
     retirados = ", ".join(e.equipo + (f" ({e.get_propiedad_display().split(':')[0].lower()})" if e.propiedad else "")
                           for e in acta.equipos_retirados if e.equipo)
