@@ -243,6 +243,23 @@ def informe_para_aprobar(borrador, autor):
     )
 
 
+def informe_urgente(ticket, autor, motivo, destino):
+    """A dirección: coordinación entregó el informe técnico sin su aprobación por urgencia; lo revisa después."""
+    from accounts.models import Usuario
+
+    direccion = Usuario.objects.filter(rol=Usuario.Rol.DIRECCION, is_active=True).values_list("email", flat=True)
+    a_quien = "pasó a comercial para la propuesta" if destino == "comercial" else "se entregó al cliente"
+    _enviar(
+        f"[{ticket.radicado}] Informe entregado con urgencia, sin su aprobación: {ticket.asunto}",
+        "\n".join([f"{autor.get_full_name() or autor.username} entregó el informe técnico sin su aprobación y {a_quien}.",
+                    "", f"Motivo de la urgencia: {motivo}", "",
+                    f"Empresa: {ticket.empresa}" + (f" · Sede: {ticket.sede}" if ticket.sede else ""), "",
+                    "Revíselo cuando pueda; si hay que corregir algo, avise a coordinación.",
+                    "", f"Ver el ticket: {_enlace(ticket)}"]),
+        list(direccion),
+    )
+
+
 def informe_revisado(borrador, autor, aprobado, motivo=""):
     """A coordinación (y a quien generó el informe): dirección lo aprobó o lo devolvió con observaciones."""
     from accounts.models import Usuario

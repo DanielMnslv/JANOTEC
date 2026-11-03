@@ -272,6 +272,7 @@ class FlujoComercialTests(BaseFlujos):
         self.client.force_login(self.jguana)
         mail.outbox.clear()
         self.client.post(reverse("entregar_informe", args=[t.radicado]), {"nota": "Cotizar alarma", "destino": "comercial",
+                                                                  "urgente": "1", "motivo_urgencia": "Propuesta pedida para hoy",
                                                                   "servicios": "1 Instalación de alarma", "materiales": "1 Panel de alarma\n4 Sensor PIR"})
         t.refresh_from_db()
         self.assertEqual((t.area, t.ficha.etapa), (Ticket.Area.COMERCIAL, "elaborando"))

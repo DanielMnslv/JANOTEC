@@ -1111,14 +1111,27 @@ class EtapasEInformeTests(ActaBase):
     def test_informe_al_cliente(self):
         self.ticket.estado = E.INFORME
         self.ticket.save()
+        Usuario.objects.create_user("miguel", "dir@x.co", "Clave-segura-1", rol="direccion")
+        url = reverse("entregar_informe", args=[self.ticket.radicado])
+        pdf = lambda: SimpleUploadedFile("informe.pdf", b"%PDF-1.4 prueba", content_type="application/pdf")
+        datos = {"nota": "Se requieren 4 cámaras", "destino": "cliente"}
+        # Sin aprobación de dirección no sale, aunque se adjunte el PDF a mano
         self.client.force_login(self.agente)
-        pdf = SimpleUploadedFile("informe.pdf", b"%PDF-1.4 prueba", content_type="application/pdf")
+        self.client.post(url, {**datos, "informe": [pdf()], "urgente": "1", "motivo_urgencia": "El cliente lo necesita hoy"})
+        self.client.force_login(self.supervisor)
+        self.client.post(url, {**datos, "informe": [pdf()]})
+        self.client.post(url, {**datos, "informe": [pdf()], "urgente": "1", "motivo_urgencia": "hoy"})  # motivo muy corto
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.estado, E.INFORME)
+        # Coordinación lo entrega como urgente: queda el motivo y dirección recibe el aviso
         mail.outbox.clear()
-        self.client.post(reverse("entregar_informe", args=[self.ticket.radicado]),
-                         {"informe": [pdf], "nota": "Se requieren 4 cámaras", "destino": "cliente"})
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(url, {**datos, "informe": [pdf()], "urgente": "1", "motivo_urgencia": "El cliente lo necesita hoy"})
         self.ticket.refresh_from_db()
         self.assertEqual(self.ticket.estado, E.VISITA_EJECUTADA)
         self.assertTrue(Adjunto.objects.filter(ticket=self.ticket, es_informe=True).exists())
+        self.assertTrue(self.ticket.seguimientos.filter(interno=True, mensaje__contains="El cliente lo necesita hoy").exists())
+        self.assertTrue(any("dir@x.co" in m.to and "urgencia" in m.subject for m in mail.outbox))
         # Solo registrada, en proceso y cerrada le llegan al cliente por correo; el informe lo ve en su solicitud
         self.assertFalse(any("portero@a.co" in m.to for m in mail.outbox))
 
@@ -1126,7 +1139,7 @@ class EtapasEInformeTests(ActaBase):
         from . import etapas
         self.ticket.estado, self.ticket.tipo = E.INFORME, Ticket.Tipo.REQUERIMIENTO
         self.ticket.save()
-        self.client.force_login(self.supervisor)
+        self.client.force_login(Usuario.objects.create_user("miguel", "dir@x.co", "Clave-segura-1", rol="direccion"))
         # Sin servicios ni materiales no pasa: con ellos se arma la propuesta y bodega alista lo aprobado
         r = self.client.post(reverse("entregar_informe", args=[self.ticket.radicado]),
                              {"nota": "Cotizar 4 cámaras IP", "destino": "comercial"}, follow=True)

@@ -18,6 +18,21 @@
             <div class="form-text">Lo que bodega alista si el cliente aprueba. Vacío si solo hay servicios.</div></div>
         </div>
       </details>
+      {% if not borrador.aprobado and not user.es_direccion %}
+        {% if user.es_supervisor %}
+          <div class="border border-warning rounded p-2 mb-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="urgente" value="1" id="inf-urgente"
+                     onchange="document.getElementById('inf-motivo').classList.toggle('d-none', !this.checked)">
+              <label class="form-check-label small fw-semibold" for="inf-urgente">Entrega urgente, sin esperar la aprobación de dirección</label>
+            </div>
+            <textarea name="motivo_urgencia" id="inf-motivo" class="form-control form-control-sm mt-2 d-none" rows="2" maxlength="500"
+                      placeholder="Motivo de la urgencia (dirección lo recibe por correo y queda en el historial)"></textarea>
+          </div>
+        {% else %}
+          <div class="alert alert-warning small py-2">El informe se entrega cuando dirección lo aprueba. Si es urgente, coordinación puede entregarlo.</div>
+        {% endif %}
+      {% endif %}
       <div class="d-flex flex-wrap gap-2">
         <button class="btn btn-accent" name="destino" value="cliente"><i class="bi bi-send"></i> Entregar al cliente</button>
         <button class="btn btn-outline-primary" name="destino" value="comercial" onclick="return confirm('El ticket pasará al área comercial para elaborar la propuesta. ¿Continuar?')"><i class="bi bi-briefcase"></i> Pasar a comercial para la propuesta</button>

@@ -1303,10 +1303,20 @@ def entregar_informe(request, radicado):
     from . import informe as inf
 
     borrador = inf.vigente(ticket)
-    if borrador and not borrador.aprobado and not archivos:
-        messages.error(request, "El borrador del informe todavía no está aprobado por coordinación. Apruébelo (pasar a limpio) "
-                                "o adjunte el informe en PDF.")
-        return redirect(ticket)
+    # Ningún informe sale sin la aprobación de dirección. La excepción es la entrega urgente: coordinación la hace
+    # con un motivo, queda en el historial y dirección recibe el aviso para revisarla después.
+    urgente = request.POST.get("urgente") == "1"
+    motivo_urgencia = " ".join(request.POST.get("motivo_urgencia", "").split())[:500]
+    if not (borrador and borrador.aprobado) and not request.user.es_direccion:
+        if not (urgente and request.user.es_supervisor):
+            messages.error(request, "El informe debe estar aprobado por dirección antes de entregarlo. Si es urgente, "
+                                    "coordinación puede entregarlo marcando «Entrega urgente» con el motivo.")
+            return redirect(ticket)
+        if len(motivo_urgencia) < 10:
+            messages.error(request, "Escriba el motivo de la entrega urgente (mínimo 10 caracteres).")
+            return redirect(ticket)
+    else:
+        urgente = False
     aprobado = borrador if borrador and borrador.aprobado and borrador.archivo and not archivos else None
     if not archivos and not nota and not aprobado:
         messages.error(request, "Adjunte el informe (PDF) o escriba sus conclusiones.")
@@ -1318,6 +1328,10 @@ def entregar_informe(request, radicado):
     with transaction.atomic():
         seg = Seguimiento.objects.create(ticket=ticket, autor=request.user, tipo=Seguimiento.Tipo.COMENTARIO,
                                          mensaje="Informe técnico" + (f": {nota}" if nota else " entregado."))
+        if urgente:
+            Seguimiento.objects.create(ticket=ticket, autor=request.user, tipo=Seguimiento.Tipo.NOTA_INTERNA, interno=True,
+                                       mensaje=f"Entrega urgente sin aprobación de dirección. Motivo: {motivo_urgencia}")
+            transaction.on_commit(lambda: notificaciones.informe_urgente(ticket, request.user, motivo_urgencia, destino))
         for a in archivos:
             Adjunto.objects.create(ticket=ticket, seguimiento=seg, archivo=a, nombre_original=a.name[:255], tamano=a.size,
                                    subido_por=request.user, es_informe=True)
