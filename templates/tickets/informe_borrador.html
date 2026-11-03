@@ -49,8 +49,8 @@
     {% include "tickets/_campo.html" with campo=form.actividades %}
 
     {% if borrador.es_estudio %}
-      <h2 class="h6 mt-4 mb-1"><i class="bi bi-camera"></i> Resultados del trabajo: zonas</h2>
-      <p class="small text-muted-jn mb-2">Cada zona o punto (Parqueadero, Báscula, Bodega…) con la foto de lo que verá la cámara y qué se hará ahí.</p>
+      <h2 class="h6 mt-4 mb-1"><i class="bi bi-camera"></i> Zonas o puntos</h2>
+      <p class="small text-muted-jn mb-2">Cada zona o punto (Parqueadero, Báscula, Bodega…) con la foto de lo que verá la cámara y qué se hará ahí. Van en el anexo de evidencias fotográficas.</p>
       {% for z in zonas %}
         <div class="border rounded p-2 mb-2">
           <div class="row g-2">
@@ -82,14 +82,14 @@
         </div>
         <div class="form-text">Al guardar se agrega; luego puede agregar otra.</div>
       </div>
-      {% include "tickets/_campo.html" with campo=form.suministros %}
-      {% include "tickets/_campo.html" with campo=form.servicios %}
-      <div class="form-text mt-n2 mb-3">La imagen de referencia de cada equipo sale del catálogo de precios (área comercial).</div>
-      {% include "tickets/_campo.html" with campo=form.garantia %}
     {% endif %}
+    {# Mismo orden del informe: tabla de equipos y materiales requeridos, justificación y conclusiones #}
+    {% include "tickets/_campo.html" with campo=form.suministros %}
+    {% include "tickets/_campo.html" with campo=form.servicios %}
     {% include "tickets/_campo.html" with campo=form.justificacion %}
     {% include "tickets/_campo.html" with campo=form.conclusiones %}
     {% include "tickets/_campo.html" with campo=form.recomendaciones %}
+    {% include "tickets/_campo.html" with campo=form.garantia %}
   </fieldset>
   {% if not borrador.aprobado and en_informe %}
   <div class="card-footer d-flex flex-wrap justify-content-between gap-2">

@@ -1739,6 +1739,30 @@ class InformeBorradorTests(BaseTickets):
         self.assertTrue(r.content.startswith(b"%PDF"))
         self.assertContains(self.client.get(self.url), "Informe de requerimientos técnicos")
 
+    def test_tabla_de_requeridos_y_alcance_en_las_conclusiones(self):
+        from . import informe
+        from .models import InformeBorrador
+        b = InformeBorrador(suministros="3 Cámara bala IP 4 MP | DS-2CD1043G0E-I | Hikvision\n80 m Cable UTP | Linkedpro\nNVR",
+                            servicios="1 Instalación y configuración")
+        self.assertEqual(b.filas_requeridas(), [
+            {"cantidad": "3", "descripcion": "Cámara bala IP 4 MP", "referencia": "DS-2CD1043G0E-I", "marca": "Hikvision"},
+            {"cantidad": "80 m", "descripcion": "Cable UTP", "referencia": "", "marca": "Linkedpro"},
+            {"cantidad": "1", "descripcion": "NVR", "referencia": "", "marca": ""},
+            {"cantidad": "1", "descripcion": "Instalación y configuración", "referencia": "", "marca": "JANOTEC"}])
+        self.assertEqual(b.materiales_para_comercial().splitlines()[0], "3 Cámara bala IP 4 MP DS-2CD1043G0E-I Hikvision")
+        # Una visita que propone algo dice en las conclusiones qué se propone y su alcance
+        self.client.force_login(self.agente)
+        self.client.post(self.url, {"accion": "generar"})
+        visita = informe.vigente(self.ticket)
+        self.assertNotIn(informe.ALCANCE, visita.conclusiones)
+        visita.suministros = "2 Sensor de movimiento | NV5 | Paradox"
+        visita.save()
+        visita = informe.generar(self.ticket, self.agente, borrador=visita)
+        self.assertIn(informe.ALCANCE, visita.conclusiones)
+        r = self.client.get(reverse("informe_borrador_pdf", args=[self.ticket.radicado]))
+        self.assertTrue(r.content.startswith(b"%PDF"))
+        self.assertContains(self.client.get(self.url), "Tabla de equipos y materiales requeridos")
+
     def test_tecnico_corrige_pero_solo_coordinacion_aprueba(self):
         self.client.force_login(self.agente)
         self.client.post(self.url, {"accion": "generar"})

@@ -2,6 +2,10 @@
 
 El texto sale de frases fijas llenadas con los datos del acta; las tablas de equipos y el anexo
 fotográfico se toman de las actas al momento de generar el PDF. Coordinación lo aprueba y se pasa a limpio.
+
+Todo informe sigue el formato de JANOTEC, en este orden: introducción, actividades realizadas (lo que dice el acta),
+tabla de equipos y materiales requeridos (lo que se propone), justificación, anexo de evidencias fotográficas y
+conclusiones (qué se hizo, qué se propone y su alcance, con las recomendaciones y la garantía).
 """
 from io import BytesIO
 
@@ -170,6 +174,11 @@ def textos(ticket):
     }
 
 
+# Va en las conclusiones cuando el informe propone equipos, materiales o servicios
+ALCANCE = ("Se propone el suministro e instalación de los equipos, materiales y servicios relacionados en la tabla de equipos "
+           "y materiales requeridos. El alcance comprende únicamente lo relacionado en ella; cualquier trabajo adicional se "
+           "cotiza por aparte.")
+
 GARANTIA = ("Vida útil: la vida útil de los equipos es de un (1) año, contado a partir de la fecha de entrega a satisfacción. "
             "JANOTEC S.A.S. reemplazará a sus expensas los equipos, materiales o partes que resulten de mala calidad o con "
             "defecto de fabricación durante el periodo de garantía; si el equipo no puede ser reparado, será restituido por "
@@ -228,6 +237,7 @@ def textos_estudio(ticket):
                           f"implementar el sistema de {sistema_txt} con la cobertura requerida por {ticket.empresa}."),
         "conclusiones": "\n".join([
             "Con la visita se definieron las zonas a cubrir y la ubicación de cada equipo.",
+            ALCANCE,
             "Los equipos, materiales y servicios relacionados son la base de la propuesta económica que enviará el área comercial."]),
         "recomendaciones": "\n".join(recomendaciones),
         "garantia": GARANTIA,
@@ -259,6 +269,9 @@ def generar(ticket, autor, borrador=None, tipo=None):
     """
     tipo = tipo or (borrador.tipo if borrador else tipo_sugerido(ticket))
     datos = textos_estudio(ticket) if tipo == InformeBorrador.Tipo.ESTUDIO else textos(ticket)
+    # Una visita que ya tiene equipos o servicios requeridos también dice qué se propone y su alcance
+    if borrador is not None and (borrador.suministros.strip() or borrador.servicios.strip()) and ALCANCE not in datos["conclusiones"]:
+        datos["conclusiones"] += "\n" + ALCANCE
     if borrador is None:
         borrador = InformeBorrador.objects.create(ticket=ticket, creado_por=autor, tipo=tipo, **datos)
     else:
@@ -352,47 +365,26 @@ def imagenes_del_catalogo(descripciones):
     return salida
 
 
-def _cuerpo_estudio(borrador, ancho):
-    """Resultados por zona (fotos de la visual), tabla de lo que se va a suministrar, servicios y garantía."""
-    h = []
-    zonas = list(borrador.zonas.prefetch_related("fotos"))
-    if zonas:
-        h.append(Paragraph("RESULTADOS DEL TRABAJO", E_TITULO))
-    for z in zonas:
-        bloque = [_barra(z.nombre.upper(), ancho, GRIS)]
-        imagenes = [i for i in (_foto(f, ancho / 3 - 8) for f in z.fotos.all()) if i]
-        if imagenes:
-            celdas = [[i, Paragraph("Visual", E_PIE_FOTO)] for i in imagenes]
-            filas = [celdas[i:i + 3] + [""] * (3 - len(celdas[i:i + 3])) for i in range(0, len(celdas), 3)]
-            tabla = Table(filas, colWidths=[ancho / 3] * 3)
-            tabla.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                                       ("TOPPADDING", (0, 0), (-1, -1), 6)]))
-            bloque.append(tabla)
-        if z.descripcion.strip():
-            bloque += [Spacer(1, 3), Paragraph(_esc(z.descripcion), E_TEXTO)]
-        h += [KeepTogether(bloque), Spacer(1, 8)]
+def _tabla_equipos(titulo, filas, ancho):
+    """Tabla de equipos con las columnas del formato de JANOTEC: NUM, CANT, DESCRIPCIÓN, REFERENCIA, MARCA e IMAGEN DE
+    REFERENCIA. Cada fila es {cantidad, descripcion, referencia, marca}; la imagen sale del catálogo de precios."""
+    imagenes = imagenes_del_catalogo([f["descripcion"] for f in filas])
+    cuerpo = [[_p(x, E_ETIQUETA) for x in ("NUM", "CANT", "DESCRIPCIÓN", "REFERENCIA", "MARCA", "IMAGEN DE REFERENCIA")]]
+    for i, f in enumerate(filas, 1):
+        imagen = _imagen(imagenes[f["descripcion"]], ancho * 0.16) if f["descripcion"] in imagenes else None
+        cuerpo.append([_p(i), _p(f["cantidad"] or "1"), _p(f["descripcion"]), _p(f["referencia"] or "N/A"),
+                       _p(f["marca"] or "N/A"), imagen or ""])
+    tabla = Table(cuerpo, colWidths=[ancho * x for x in (0.06, 0.07, 0.33, 0.2, 0.14, 0.2)], repeatRows=1)
+    tabla.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, BORDE), ("BACKGROUND", (0, 0), (-1, 0), TINTE_VERDE),
+                               ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (5, 1), (5, -1), "CENTER")]))
+    return [Spacer(1, 10), _barra(titulo, ancho), tabla]
 
-    filas = borrador.filas_suministros()
-    if filas:
-        # La imagen de referencia sale del catálogo de precios; la columna solo aparece si algún ítem la tiene
-        imagenes = imagenes_del_catalogo([d for _, d, _ in filas])
-        cuerpo = [[_p(x, E_ETIQUETA) for x in ("N.º", "Cant.", "Equipos y materiales", "Marca")]]
-        cuerpo += [[_p(i), _p(c), _p(d), _p(m or "N/A")] for i, (c, d, m) in enumerate(filas, 1)]
-        anchos = (0.07, 0.12, 0.59, 0.22)
-        if imagenes:
-            cuerpo[0].append(_p("Imagen de referencia", E_ETIQUETA))
-            for fila, (_, d, _) in zip(cuerpo[1:], filas):
-                fila.append((_imagen(imagenes[d], ancho * 0.16) if d in imagenes else None) or "")
-            anchos = (0.06, 0.09, 0.47, 0.18, 0.2)
-        tabla = Table(cuerpo, colWidths=[ancho * x for x in anchos], repeatRows=1)
-        tabla.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, BORDE), ("BACKGROUND", (0, 0), (-1, 0), TINTE_VERDE),
-                                   ("VALIGN", (0, 0), (-1, -1), "TOP")]))
-        h += [Spacer(1, 6), _barra(f"TABLA DE EQUIPOS Y MATERIALES A SUMINISTRAR · {borrador.ticket.empresa}".upper(), ancho), tabla]
-    if borrador.servicios.strip():
-        h += [Paragraph("SERVICIOS", E_TITULO), *_vinetas(borrador.servicios)]
-    if borrador.garantia.strip():
-        h += [Paragraph("GARANTÍA Y VIDA ÚTIL", E_TITULO), Paragraph(_esc(borrador.garantia), E_TEXTO)]
-    return h
+
+def _fila_de_equipo(e):
+    """Un equipo del acta como fila de la tabla; el serial y la placa van con la referencia para su seguimiento."""
+    referencia = " · ".join(x for x in (e.referencia, f"S/N {e.serial}" if e.serial else "",
+                                        f"Placa {e.placa}" if e.placa else "") if x)
+    return {"cantidad": e.cantidad, "descripcion": e.equipo, "referencia": referencia, "marca": e.marca}
 
 
 def tablas_de_equipos(actas):
@@ -432,28 +424,28 @@ def pdf(borrador, definitivo=False):
          Paragraph("INTRODUCCIÓN", E_TITULO), Paragraph(_esc(borrador.introduccion), E_TEXTO),
          Paragraph("ACTIVIDADES REALIZADAS", E_TITULO), *_vinetas(borrador.actividades)]
 
-    if borrador.es_estudio:
-        h += _cuerpo_estudio(borrador, ancho)
-    # Tablas de equipos (el estudio usa sus zonas y su tabla)
-    for nombre, sistema, equipos in ([] if borrador.es_estudio else tablas_de_equipos(actas)):
-        cabeza = Table([[Paragraph(f"TABLA DE {nombre.upper()}" + (f" · SISTEMA DE {sistema}" if sistema else ""), E_SECCION)]],
-                       colWidths=[ancho])
-        cabeza.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), VERDE)]))
-        filas = [[_p(x, E_ETIQUETA) for x in ("N.º", "Cant.", "Descripción", "Referencia", "Marca", "Serial / placa")]]
-        for i, e in enumerate(equipos, 1):
-            filas.append([_p(i), _p(e.cantidad or "1"), _p(e.equipo), _p(e.referencia or "Sin referencia"),
-                          _p(e.marca or "No registrada"), _p(" · ".join(x for x in (e.serial, e.placa) if x) or "—")])
-        tabla = Table(filas, colWidths=[ancho * x for x in (0.06, 0.08, 0.3, 0.2, 0.16, 0.2)], repeatRows=1)
-        tabla.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, BORDE), ("BACKGROUND", (0, 0), (-1, 0), TINTE_VERDE),
-                                   ("VALIGN", (0, 0), (-1, -1), "TOP")]))
-        h += [Spacer(1, 10), cabeza, tabla]
+    # Orden fijo de JANOTEC: introducción, actividades realizadas (lo que dice el acta), tabla de equipos y materiales
+    # requeridos (lo que se propone), justificación, anexo de evidencias fotográficas y conclusiones (con el alcance).
+    requeridas = borrador.filas_requeridas()
+    if requeridas:
+        h += _tabla_equipos("TABLA DE EQUIPOS Y MATERIALES REQUERIDOS", requeridas, ancho)
+    elif not borrador.es_estudio:  # sin nada que proponer, la tabla muestra lo que se hizo con los equipos del acta
+        for nombre, sistema, equipos in tablas_de_equipos(actas):
+            titulo = f"TABLA DE {nombre.upper()}" + (f" · SISTEMA DE {sistema}" if sistema else "")
+            h += _tabla_equipos(titulo, [_fila_de_equipo(e) for e in equipos], ancho)
 
     if borrador.justificacion.strip():
         h += [Paragraph("JUSTIFICACIÓN", E_TITULO), Paragraph(_esc(borrador.justificacion), E_TEXTO)]
 
-    # Anexo fotográfico: tres fotos por fila con su descripción
+    # Anexo fotográfico, tres fotos por fila con su descripción: la visual de cada zona y lo registrado en el acta
     celdas = []
-    for a in ([] if borrador.es_estudio else actas):
+    for z in borrador.zonas.prefetch_related("fotos"):
+        pie = z.nombre + (f": {z.descripcion.strip()}" if z.descripcion.strip() else "")
+        for foto in z.fotos.all():
+            imagen = _foto(foto, ancho / 3 - 8)
+            if imagen:
+                celdas.append([imagen, Paragraph(_esc(pie[:160]), E_PIE_FOTO)])
+    for a in ([] if borrador.es_estudio else actas):  # en el estudio las fotos del acta ya son las zonas
         for e in a.equipos.all():
             for foto in e.fotos.all():
                 imagen = _foto(foto, ancho / 3 - 8)
@@ -472,9 +464,12 @@ def pdf(borrador, definitivo=False):
                                    ("BOTTOMPADDING", (0, 0), (-1, -1), 8)]))
         h.append(anexo)
 
+    # Conclusiones: qué se hizo, qué se propone y su alcance; dentro van las recomendaciones y la garantía
     h += [Paragraph("CONCLUSIONES", E_TITULO), *_vinetas(borrador.conclusiones)]
     if borrador.recomendaciones.strip():
-        h += [Paragraph("RECOMENDACIONES", E_TITULO), *_vinetas(borrador.recomendaciones)]
+        h += [Spacer(1, 4), Paragraph("<b>Recomendaciones:</b>", E_TEXTO), *_vinetas(borrador.recomendaciones)]
+    if borrador.garantia.strip():
+        h += [Spacer(1, 4), Paragraph(f"<b>Garantía y vida útil:</b> {_esc(borrador.garantia)}", E_TEXTO)]
 
     tecnicos = _y([a.tecnico.get_full_name() if a.tecnico else a.tecnico_texto for a in actas]) or \
         ((borrador.creado_por.get_full_name() or borrador.creado_por.username) if borrador.creado_por else "Área técnica")

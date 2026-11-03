@@ -1046,19 +1046,40 @@ class InformeBorrador(models.Model):
         """Si es un informe de estudio (levantamiento)."""
         return self.tipo == self.Tipo.ESTUDIO
 
+    @staticmethod
+    def _fila(linea):
+        """Una línea de equipos o servicios en sus columnas: «cantidad descripción | referencia | marca».
+
+        La referencia y la marca son opcionales; con una sola «|» lo que sigue es la marca.
+        «3 m Cable UTP | Hikvision» → {"cantidad": "3 m", "descripcion": "Cable UTP", "referencia": "", "marca": "Hikvision"}.
+        """
+        texto, *resto = [p.strip() for p in linea.split("|")]
+        m = re.match(r"^(\d+(?:[.,]\d+)?)\s*(m|mt|mts|mtrs|metros|und|un|rollo|rollos)?\.?\s+(.*)$", texto, re.I)
+        cantidad, descripcion = ((m.group(1) + (f" {m.group(2)}" if m.group(2) else "")), m.group(3)) if m else ("1", texto)
+        referencia = resto[0] if len(resto) > 1 else ""
+        marca = resto[-1] if resto else ""
+        return {"cantidad": cantidad, "descripcion": descripcion.strip(), "referencia": referencia, "marca": marca}
+
     def filas_suministros(self):
-        """[(cantidad, descripción, marca)] de «3 m Cable UTP | Hikvision» → ("3 m", "Cable UTP", "Hikvision")."""
-        filas = []
-        for linea in self.lineas(self.suministros):
-            texto, _, marca = linea.partition("|")
-            m = re.match(r"^(\d+(?:[.,]\d+)?)\s*(m|mt|mts|mtrs|metros|und|un|rollo|rollos)?\.?\s+(.*)$", texto.strip(), re.I)
-            cantidad, descripcion = ((m.group(1) + (f" {m.group(2)}" if m.group(2) else "")), m.group(3)) if m else ("1", texto.strip())
-            filas.append((cantidad, descripcion.strip(), marca.strip()))
+        """[(cantidad, descripción, marca)] de los equipos y materiales: «3 m Cable UTP | Hikvision» → ("3 m", "Cable UTP", "Hikvision")."""
+        return [(f["cantidad"], f["descripcion"], f["marca"]) for f in map(self._fila, self.lineas(self.suministros))]
+
+    def filas_requeridas(self):
+        """Las filas de la tabla «Equipos y materiales requeridos»: los equipos y materiales y, después, los servicios
+        (mano de obra), que van como una fila más con marca JANOTEC."""
+        filas = [self._fila(l) for l in self.lineas(self.suministros)]
+        for linea in self.lineas(self.servicios):
+            fila = self._fila(linea)
+            filas.append({**fila, "marca": fila["marca"] or "JANOTEC"})
         return filas
 
     def materiales_para_comercial(self):
         """Los suministros en el formato de «Materiales y equipos a suministrar» (uno por línea, con cantidad)."""
-        return "\n".join(f"{c} {d}" + (f" {m}" if m and m.lower() not in d.lower() else "") for c, d, m in self.filas_suministros())
+        lineas = []
+        for f in map(self._fila, self.lineas(self.suministros)):
+            texto = " ".join(x for x in (f["cantidad"], f["descripcion"], f["referencia"]) if x)
+            lineas.append(texto + (f" {f['marca']}" if f["marca"] and f["marca"].lower() not in texto.lower() else ""))
+        return "\n".join(lineas)
 
 
 class ZonaInforme(models.Model):

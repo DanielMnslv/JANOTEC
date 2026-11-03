@@ -1123,12 +1123,23 @@ class InformeBorradorForm(BootstrapMixin, forms.ModelForm):
         fields = ["destinatario", "asunto", "introduccion", "actividades", "justificacion", "conclusiones", "recomendaciones",
                   "suministros", "servicios", "garantia"]
         widgets = {"introduccion": forms.Textarea(attrs={"rows": 4}), "actividades": forms.Textarea(attrs={"rows": 6}),
-                   "suministros": forms.Textarea(attrs={"rows": 8, "placeholder": "3 Cámara IP 4 MP bala DS-2CD1043G0E-I | Hikvision\n"
-                                                        "1 NVR 8 canales PoE DS-7608NI-Q1/8P | Hikvision\n120 m Cable UTP cat 6 exterior | Hikvision"}),
+                   "suministros": forms.Textarea(attrs={"rows": 8, "placeholder": "3 Cámara IP 4 MP bala | DS-2CD1043G0E-I | Hikvision\n"
+                                                        "1 NVR 8 canales PoE | DS-7608NI-Q1/8P | Hikvision\n120 m Cable UTP cat 6 exterior | Hikvision"}),
                    "servicios": forms.Textarea(attrs={"rows": 3}), "garantia": forms.Textarea(attrs={"rows": 3}),
                    "justificacion": forms.Textarea(attrs={"rows": 3}), "conclusiones": forms.Textarea(attrs={"rows": 5}),
                    "recomendaciones": forms.Textarea(attrs={"rows": 3})}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Nombres y ayudas según las secciones del informe de JANOTEC
+        self.fields["suministros"].label = "Tabla de equipos y materiales requeridos"
+        self.fields["suministros"].help_text = ("Lo que se propone, uno por línea: cantidad descripción | referencia | marca. "
+                                                "La imagen de referencia sale del catálogo de precios. Déjelo vacío si no se "
+                                                "propone nada: la tabla muestra entonces los equipos del acta.")
+        self.fields["servicios"].label = "Servicios requeridos (mano de obra)"
+        self.fields["servicios"].help_text = "Uno por línea. Van en la misma tabla, con marca JANOTEC. Ej.: 1 Instalación y configuración"
+        self.fields["conclusiones"].help_text = ("Una por línea: qué se hizo y, si se propone algo, qué se propone y su alcance "
+                                                 "(qué incluye y qué no).")
+        self.fields["recomendaciones"].help_text = "Una por línea. Opcional; van dentro de las conclusiones."
+        self.fields["garantia"].help_text = "Opcional; va al final de las conclusiones."
         self._aplicar_estilos()
