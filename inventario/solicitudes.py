@@ -687,6 +687,17 @@ def confirmar_recibido(acta, usuario, firma=None):
     return acta
 
 
+def material_para_instalacion(ticket):
+    """Lo que bodega ya entregó para el ticket (actas de entrega), una línea por ítem, y si falta algo por entregar o
+    por confirmar. Es lo que lleva el técnico a la instalación: al programarla no se vuelve a pedir a bodega."""
+    solicitudes = ticket.solicitudes_material.exclude(estado=S.CANCELADA)
+    actas = ActaEntrega.objects.filter(solicitud__in=solicitudes).order_by("creado")
+    lineas = [f"{x['cantidad']} {x['descripcion']}" + (f" [{x['codigo']}]" if x.get("codigo") else "")
+              for a in actas for x in a.detalle]
+    pendiente = solicitudes.exclude(estado=S.ENTREGADA).exists() or actas.filter(recibido_en__isnull=True).exists()
+    return {"texto": "\n".join(lineas), "pendiente": pendiente, "hay": solicitudes.exists()}
+
+
 def _a_instalacion_si_listo(acta, usuario):
     """Con todo el material entregado y cada acta de entrega confirmada, la instalación pasa sola al área técnica:
     «Recepcionado», asignada al técnico que recibió el material, y coordinación recibe el aviso para programarla."""

@@ -99,6 +99,9 @@ def guardar(actividad, autor, horario_anterior=None, tecnicos_antes=None):
     autorización, hay que volver a pedirla (los enlaces anteriores dejan de valer).
     """
     actividad.calcular_choque()
+    material = actividad.material_de_bodega
+    if material is not None:
+        actividad.insumos = material["texto"]  # lo que bodega entregó; lo que falte va como adicional en su lista
     reprogramada = horario_anterior is not None and horario_anterior != (
         actividad.fecha, actividad.hora_inicio, actividad.hora_fin)
     if reprogramada:
@@ -136,9 +139,11 @@ def guardar(actividad, autor, horario_anterior=None, tecnicos_antes=None):
                               [f"La visita de levantamiento de «{ticket.asunto}» se movió para el {cuando(actividad)}."])
         if actividad.choque:
             _seguimiento(ticket, autor, f"Programada pese a la restricción del cliente: {actividad.choque}", interno=True)
-        # El material planeado en la visita se pide a bodega (validación, compra si falta y firmas)
-        from inventario.solicitudes import desde_actividad
-        desde_actividad(actividad, autor)
+        # El material planeado se pide a bodega (validación, compra si falta y firmas). No en la 1.ª visita
+        # (levantamiento: aún no se sabe qué se instalará) ni en la instalación que ya alistó bodega.
+        if actividad.tipo != actividad.Tipo.VISITA and material is None:
+            from inventario.solicitudes import desde_actividad
+            desde_actividad(actividad, autor)
     return actividad
 
 

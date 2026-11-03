@@ -55,7 +55,8 @@
             <div class="mt-1">
               {% if t.estado == 'pendiente_visita' %}<span class="badge text-bg-warning">Nueva visita</span>{% endif %}
               {% include "tickets/_aplazado.html" %}
-              {% include "tickets/_levantamiento.html" %}
+              {% if t.clase_visita == 'levantamiento' %}<span class="badge text-bg-info" title="Primera visita: el técnico levanta lo que necesita el cliente para la propuesta"><i class="bi bi-rulers"></i> 1.ª visita · levantamiento</span>
+              {% elif t.clase_visita == 'instalacion' %}{% if not t.material.hay %}<span class="badge text-bg-success"><i class="bi bi-tools"></i> Instalación · solo servicios</span>{% elif t.material.pendiente %}<span class="badge text-bg-warning" title="Bodega aún no entrega todo o el técnico no ha confirmado el acta de entrega"><i class="bi bi-box-seam"></i> Instalación · material pendiente</span>{% else %}<span class="badge text-bg-success"><i class="bi bi-box-seam"></i> Instalación · material entregado</span>{% endif %}{% endif %}
               {% if t.trabajo_alturas %}<span class="badge text-bg-danger">Alturas</span>{% endif %}
               {% if t.acompanamiento_sst %}<span class="badge text-bg-warning">SST</span>{% endif %}
               {% if t.jornada %}<span class="badge text-bg-light border"><i class="bi {% if t.jornada == 'manana' %}bi-sunrise{% else %}bi-sunset{% endif %}"></i> {{ t.get_jornada_display }}</span>{% endif %}
@@ -144,8 +145,9 @@
           <div class="col-md-6" id="bloque-tipo"><label class="form-label small mb-1">Tipo</label>{{ form.tipo }}</div>
           <div class="col-md-6"><label class="form-label small mb-1">Línea / solución</label>{{ form.linea }}</div>
           <div class="col-12"><label class="form-label small mb-1">Personal técnico encargado</label><div class="lista-tecnicos" id="lista-encargados">{% for op in form.encargados %}<div class="form-check">{{ op.tag }} <label class="form-check-label small" for="{{ op.id_for_label }}">{{ op.choice_label }}</label></div>{% endfor %}</div></div>
-          <div class="col-12"><label class="form-label small mb-1">Insumos y equipos</label>
-            {% include "cronograma/_selector_inventario.html" %}{{ form.insumos }}</div>
+          <div class="col-12"><label class="form-label small mb-1" id="titulo-insumos">Insumos y equipos</label>
+            <div id="bloque-selector">{% include "cronograma/_selector_inventario.html" %}</div>{{ form.insumos }}
+            <div class="form-text" id="ayuda-insumos"></div></div>
           <div class="col-12" id="aviso-interna" hidden><div class="alert alert-secondary small py-2 mb-0"><i class="bi bi-building"></i> <b>Actividad interna</b> (sin ticket): se le avisa al técnico, pero no lleva autorización ni se le envía nada a ningún cliente.</div></div>
           <div class="col-12" id="bloque-notificar"><label class="form-label small mb-1">Notificar a</label>{{ form.notificar_a }}<div class="form-text">{{ form.notificar_a.help_text }}</div>
             {% if contactos_dir %}<div class="d-flex flex-wrap gap-1 mt-1">{% for c in contactos_dir %}<button type="button" class="btn btn-sm btn-light border py-0 agregar-destino" data-email="{{ c.email }}" title="{{ c.email }}">+ {{ c.nombre }}</button>{% endfor %}</div>{% endif %}</div>
@@ -234,6 +236,8 @@
     document.getElementById('bloque-notificar').hidden = interna;
     document.getElementById('aviso-interna').hidden = !interna;
     if (interna) campo('tipo').value = 'interna';
+    form.dataset.bodega = v.bodega ? '1' : '';
+    modoInsumos();
     sst();
     modal.show();
   }
@@ -243,6 +247,20 @@
     llenar(v, 'Programar ' + v.radicado);
   }
   function sst() { document.getElementById('bloque-sst').hidden = !campo('sst').checked; }
+  // Los insumos dependen del tipo de visita: la 1.ª visita no pide a bodega y la instalación lleva lo ya entregado
+  function modoInsumos() {
+    const tipo = campo('tipo').value, caja = campo('insumos');
+    const deBodega = tipo === 'instalacion' && form.dataset.bodega === '1';
+    caja.readOnly = deBodega;
+    document.getElementById('bloque-selector').hidden = deBodega || tipo === 'visita';
+    document.getElementById('titulo-insumos').textContent = deBodega ? 'Material entregado por bodega'
+      : tipo === 'visita' ? 'Herramientas y equipos para la visita' : 'Insumos y equipos';
+    document.getElementById('ayuda-insumos').textContent = deBodega
+      ? 'Es lo que el técnico recibió en las actas de entrega. Si falta algo, agréguelo como adicional en la lista de bodega del ticket.'
+      : tipo === 'visita' ? 'Primera visita (levantamiento): es solo para el técnico, no se pide nada a bodega.'
+      : 'Lo que escriba aquí se le pide a bodega.';
+  }
+  campo('tipo').addEventListener('change', modoInsumos);
   campo('sst').addEventListener('change', sst);
 
   document.querySelectorAll('.agregar-destino').forEach(function (b) {

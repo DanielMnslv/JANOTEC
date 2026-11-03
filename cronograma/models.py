@@ -259,6 +259,23 @@ class Actividad(models.Model):
                 return linea
         return "Otro"
 
+    @staticmethod
+    def clase_visita(ticket):
+        """«levantamiento» (1.ª visita, antes de la propuesta), «instalacion» (propuesta aprobada) o «servicio»."""
+        ficha = getattr(ticket, "ficha", None) if ticket else None
+        if ficha is None:
+            return "servicio"
+        return "instalacion" if ficha.etapa == "instalacion" else "levantamiento"
+
+    @property
+    def material_de_bodega(self):
+        """Instalación con material alistado por bodega: los insumos son lo entregado, no se escriben ni se piden."""
+        if self.tipo != self.Tipo.INSTALACION or not self.ticket_id:
+            return None
+        from inventario.solicitudes import material_para_instalacion
+        material = material_para_instalacion(self.ticket)
+        return material if material["hay"] else None
+
     @classmethod
     def valores_desde_ticket(cls, ticket):
         """Lo que se llena solo al arrastrar el ticket al cronograma."""
@@ -267,7 +284,7 @@ class Actividad(models.Model):
             tipo = cls.Tipo.INSTALACION if ficha.etapa == "instalacion" else cls.Tipo.VISITA
         else:
             tipo = cls.TIPO_POR_TICKET.get(ticket.tipo, cls.Tipo.SOPORTE)
-        return {
+        valores = {
             "cliente": ticket.empresa.razon_social, "sede": ticket.sede.nombre if ticket.sede else "",
             "actividad": ticket.descripcion, "tipo": tipo, "linea": cls.linea_para(ticket.categoria),
             "notificar_a": " ; ".join(ticket.correos_respuesta), "trabajo_alturas": ticket.trabajo_alturas,
@@ -276,6 +293,12 @@ class Actividad(models.Model):
             "hora_inicio": "14:00" if ticket.jornada == "tarde" else "08:00",
             "hora_fin": "17:00" if ticket.jornada == "tarde" else "12:00",
         }
+        if tipo == cls.Tipo.INSTALACION:
+            from inventario.solicitudes import material_para_instalacion
+            material = material_para_instalacion(ticket)
+            if material["hay"]:
+                valores.update(insumos=material["texto"], bodega=True)
+        return valores
 
 
 class Contacto(models.Model):

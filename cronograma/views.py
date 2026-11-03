@@ -70,6 +70,11 @@ def semana(request):
                                                               estado__in=Ticket.ESTADOS_PROGRAMABLES)
                         .select_related("ficha").prefetch_related("rangos_no_disponible", "aplazamientos")
                         .order_by("-prioridad", "creado"))
+        for t in programables:  # 1.ª visita o instalación (y si bodega ya entregó el material)
+            t.clase_visita = Actividad.clase_visita(t)
+            if t.clase_visita == "instalacion":
+                from inventario.solicitudes import material_para_instalacion
+                t.material = material_para_instalacion(t)
         # Lo que se llena solo al soltar el ticket en un día (cliente, sede, actividad, tipo, notificar a…)
         valores = {t.pk: dict(Actividad.valores_desde_ticket(t), radicado=t.radicado,
                               jornada=t.get_jornada_display(),
@@ -84,7 +89,7 @@ def semana(request):
                 datos.update(fecha=a.fecha.isoformat(), hora_inicio=a.hora_inicio.strftime("%H:%M"),
                              hora_fin=a.hora_fin.strftime("%H:%M"), ticket=a.ticket_id or "",
                              radicado=a.ticket.radicado if a.ticket else "",
-                             encargados=[u.pk for u in a.encargados.all()])
+                             encargados=[u.pk for u in a.encargados.all()], bodega=a.material_de_bodega is not None)
                 actividades_json[a.pk] = datos
         cambio = semanal.cambios(lunes)
         contexto["cambios_pendientes"] = bool(cambio and cambio["hay"])

@@ -159,6 +159,17 @@ class AutorizacionTests(BaseCronograma):
     def enlace(self, correo):
         return re.search(r"http://testserver(/cronograma/autorizacion/[^/\s]+/)", correo.body).group(1)
 
+    def test_primera_visita_no_pide_material_a_bodega(self):
+        from inventario.models import SolicitudMaterial
+        self.programar(proximo(1), tipo="visita", insumos="1 Escalera de tijera, 1 Medidor láser")
+        self.assertEqual(Actividad.objects.get().insumos, "1 Escalera de tijera, 1 Medidor láser")
+        self.assertFalse(SolicitudMaterial.objects.exists())
+        otro = Ticket.objects.create(empresa=self.emp, solicitante=self.cli, categoria=self.cat, asunto="s",
+                                     descripcion="Mantenimiento", tipo="mantenimiento", estado=E.RECEPCIONADO,
+                                     contacto_email="a@llano.co")
+        self.programar(proximo(2), ticket=otro, tipo="mantenimiento", insumos="2 Batería 12V")  # un servicio sí pide a bodega
+        self.assertTrue(SolicitudMaterial.objects.exists())
+
     def test_envia_correo_con_documentos_y_botones(self):
         self.programar(proximo(1), encargados=[self.tec.pk, self.tec2.pk])
         a = Actividad.objects.get()

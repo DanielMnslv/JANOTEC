@@ -472,6 +472,21 @@ class SolicitudesDeMaterialTests(BaseInventario):
         self.ticket.refresh_from_db()
         self.assertEqual((self.ticket.estado, self.ticket.asignado_a), (Ticket.Estado.RECEPCIONADO, self.agente))
         self.assertTrue(any("instalación por programar" in m.subject for m in mail.outbox))
+        # 6. Al programarla, el coordinador ve que es la instalación y los insumos son lo entregado (no se vuelve a pedir)
+        from cronograma.models import Actividad
+        self.client.force_login(self.supervisor)
+        self.assertContains(self.client.get(reverse("cronograma:semana")), "Instalación · material entregado")
+        valores = Actividad.valores_desde_ticket(self.ticket)
+        self.assertEqual(valores["tipo"], "instalacion")
+        self.assertIn("40 Cable UTP exterior [CAB-UTP-EXT]", valores["insumos"])
+        self.client.post(reverse("cronograma:crear"), {
+            **{k: v for k, v in valores.items() if k not in ("trabajo_alturas", "sst", "bodega")}, "ticket": self.ticket.pk,
+            "fecha": timezone.localdate().isoformat(), "encargados": [self.agente.pk], "insumos": "99 Otra cosa",
+            "sst_duracion": "medio día"})
+        actividad = Actividad.objects.get(ticket=self.ticket)
+        self.assertIn("40 Cable UTP exterior", actividad.insumos)
+        self.assertNotIn("Otra cosa", actividad.insumos)
+        self.assertEqual(SolicitudMaterial.objects.filter(ticket=self.ticket).count(), 1)
 
     def test_el_informe_separa_servicios_de_materiales(self):
         """Acta → informe → propuesta: los servicios se cotizan; a bodega solo llegan los materiales y equipos."""
