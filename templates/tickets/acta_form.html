@@ -104,12 +104,12 @@
             </div>
             <div class="col-12">
               <details class="firma-bloque" {% if form.acompanante_nombre.value %}open{% endif %}>
-                <summary class="fw-semibold">Agregar acompañante (otro técnico que asistió)</summary>
+                <summary class="fw-semibold">Agregar técnico encargado 2 (otro técnico que asistió)</summary>
                 <div class="row mt-2">
                   {% include "tickets/_campo.html" with campo=form.acompanante_nombre clase="col-md-6" %}
                   {% include "tickets/_campo.html" with campo=form.acompanante_cargo clase="col-md-6" %}
                 </div>
-                {% include "tickets/_firma.html" with campo=form.firma_acompanante titulo="Firma del acompañante" %}
+                {% include "tickets/_firma.html" with campo=form.firma_acompanante titulo="Firma del técnico encargado 2" %}
               </details>
             </div>
           </div>

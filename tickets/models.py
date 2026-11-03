@@ -948,12 +948,12 @@ class EvidenciaActa(models.Model):
 
 
 class FirmaActa(models.Model):
-    """Firma de quien interviene en el acta: técnico, acompañantes y representante del cliente."""
+    """Firma de quien interviene en el acta: técnico, técnico encargado 2 y representante del cliente."""
 
     class Rol(models.TextChoices):
         """Quién firma el acta."""
         TECNICO = "tecnico", "Técnico"
-        ACOMPANANTE = "acompanante", "Acompañante"
+        ACOMPANANTE = "acompanante", "Técnico encargado 2"
         CLIENTE = "cliente", "Representante del cliente"
 
     acta = models.ForeignKey(ActaSoporte, on_delete=models.CASCADE, related_name="firmas")

@@ -913,8 +913,8 @@ class ActaForm(BootstrapMixin, forms.Form):
     # Asistentes
     cargo_tecnico = forms.CharField(label="Cargo del técnico", max_length=150)
     firma_tecnico = forms.CharField(widget=forms.HiddenInput, required=False)
-    acompanante_nombre = forms.CharField(label="Acompañante (opcional)", max_length=150, required=False)
-    acompanante_cargo = forms.CharField(label="Cargo del acompañante", max_length=150, required=False)
+    acompanante_nombre = forms.CharField(label="Técnico encargado 2 (opcional)", max_length=150, required=False)
+    acompanante_cargo = forms.CharField(label="Cargo del técnico encargado 2", max_length=150, required=False)
     firma_acompanante = forms.CharField(widget=forms.HiddenInput, required=False)
     # Cliente
     recibio = forms.CharField(label="Apellidos y nombres del representante del cliente", max_length=150)
@@ -980,7 +980,7 @@ class ActaForm(BootstrapMixin, forms.Form):
         """Valida las firmas del acta.
 
         La del técnico siempre es obligatoria; la del cliente también, salvo en soporte virtual, donde no está presente
-        (y tampoco se guarda la ubicación, que sería la del técnico). Si firma un acompañante debe ir su nombre.
+        (y tampoco se guarda la ubicación, que sería la del técnico). Si firma el técnico encargado 2 debe ir su nombre.
         """
         datos = super().clean()
         # En virtual el cliente no está para firmar, y la ubicación sería la del técnico, no la de la sede
@@ -989,13 +989,13 @@ class ActaForm(BootstrapMixin, forms.Form):
             datos.update(firma_cliente="", latitud=None, longitud=None)
         for campo, obligatoria, etiqueta in (("firma_tecnico", True, "del técnico"),
                                              ("firma_cliente", not virtual, "del representante del cliente"),
-                                             ("firma_acompanante", False, "del acompañante")):
+                                             ("firma_acompanante", False, "del técnico encargado 2")):
             try:
                 datos[campo] = leer_firma(datos.get(campo), obligatoria, etiqueta)
             except forms.ValidationError as e:
                 self.add_error(None, e)
         if datos.get("firma_acompanante") and not datos.get("acompanante_nombre"):
-            self.add_error("acompanante_nombre", "Escriba el nombre de quien firma como acompañante.")
+            self.add_error("acompanante_nombre", "Escriba el nombre del técnico encargado 2 que firma.")
         return datos
 
 

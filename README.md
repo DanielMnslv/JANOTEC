@@ -27,7 +27,7 @@ sin disponibilidad**, foto de la novedad, teléfono, **varios correos** para las
 
 **3. Cronograma semanal** (menú *Cronograma*, reemplaza cronogramajanotec.netlify.app). Los tickets recepcionados
 se **arrastran a un día**: se llenan solos cliente, sede, actividad, tipo y «notificar a». Se eligen horario,
-encargados, acompañantes, insumos, SST, vehículo y viáticos. Si el horario cae cuando el cliente dijo que no puede,
+personal técnico encargado, insumos, SST, vehículo y viáticos. Si el horario cae cuando el cliente dijo que no puede,
 **sale una alerta y la actividad queda en rojo** (también si no tiene correo o si el cliente la rechaza).
 Con **«Enviar autorización»** le llega al cliente un correo con día, hora, técnicos y los botones **Aceptar / Rechazar**,
 con la **cédula y los aportes a seguridad social** de cada técnico adjuntos (y los **certificados de alturas** si la
@@ -69,7 +69,7 @@ El cliente sigue todo con una **barra de progreso** y una **línea de tiempo**; 
 ### Acta de soporte desde el ticket
 El técnico diligencia el **acta de soporte** desde el ticket, con los mismos campos del formato
 «Acta de Soporte, Instalación, Desinstalación V1»: actividad, sistema, diagnóstico, relación de equipos con
-fotos, resultado, observaciones, **firmas táctiles** (técnico, acompañante y representante del cliente),
+fotos, resultado, observaciones, **firmas táctiles** (técnico, técnico encargado 2 y representante del cliente),
 copia por correo y ubicación GPS. Queda en el historial de la sede y el cliente la ve en su solicitud.
 Las actas de la plataforma se numeran desde **100001** (las de SafetyTrack conservan su número).
 
