@@ -37,10 +37,12 @@ PERIODOS = [("mes", "Este mes"), ("mes_anterior", "Mes anterior"), ("trimestre",
 
 
 def _inicio(dia):
+    """El inicio del día (00:00) en la zona horaria de la plataforma."""
     return timezone.make_aware(datetime.combine(dia, time.min))
 
 
 def _fecha(texto):
+    """Convierte un texto AAAA-MM-DD en fecha; None si no es válido."""
     try:
         return date.fromisoformat(texto)
     except (TypeError, ValueError):
@@ -78,10 +80,12 @@ def periodo(params, hoy=None):
 
 
 def _pct(parte, total):
+    """Porcentaje con un decimal; None si no hay total."""
     return round(100 * parte / total, 1) if total else None
 
 
 def _horas(delta):
+    """Duración en horas."""
     return delta.total_seconds() / 3600
 
 
@@ -94,6 +98,7 @@ def _dias_de_solucion(cerrados):
 
 @dataclass
 class Indicador:
+    """Un indicador del periodo: valor, unidad, fórmula, meta, si más alto es mejor y el valor del periodo anterior."""
     clave: str
     nombre: str
     valor: float | None
@@ -106,6 +111,7 @@ class Indicador:
 
     @property
     def cumple(self):
+        """Si el valor cumple la meta (None si no hay valor o no tiene meta)."""
         if self.valor is None or self.meta is None:
             return None
         return self.valor >= self.meta if self.mayor_es_mejor else self.valor <= self.meta
@@ -285,6 +291,7 @@ def por_responsable(tickets, desde, hasta):
 
 
 def por_cliente(tickets, desde, hasta, limite=10):
+    """Los clientes con más solicitudes del periodo (sin canceladas), con sus cerradas y su satisfacción promedio."""
     ini, fin = _inicio(desde), _inicio(hasta + timedelta(days=1))
     return list(
         tickets.filter(creado__gte=ini, creado__lt=fin).exclude(estado=E.CANCELADO)
@@ -295,6 +302,7 @@ def por_cliente(tickets, desde, hasta, limite=10):
 
 
 def por_tipo(tickets, desde, hasta):
+    """Cuántas solicitudes llegaron de cada tipo en el periodo y qué porcentaje son del total."""
     ini, fin = _inicio(desde), _inicio(hasta + timedelta(days=1))
     recibidos = tickets.filter(creado__gte=ini, creado__lt=fin).exclude(estado=E.CANCELADO)
     conteo = dict(recibidos.values_list("tipo").annotate(n=Count("id")))

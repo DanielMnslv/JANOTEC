@@ -1,3 +1,20 @@
+"""Vistas de la plataforma de tickets.
+
+Organización del archivo (cada bloque tiene su separador):
+- Ayudantes comunes y el inicio, que lleva a cada rol a su bandeja.
+- Portal del cliente: sus solicitudes, radicar, responder, confirmar la solución, calificar y cancelar.
+- Detalle del ticket (compartido por todos los roles) y descarga de adjuntos.
+- Panel del área técnica: bandeja, gestión del ticket, salud de procesos, hallazgos y reportes.
+- Historial de servicio: consulta de actas y sus evidencias.
+- Acta de soporte: diligenciarla en la visita, vincularla o desvincularla del ticket y sus archivos.
+- Oportunidades comerciales detectadas en campo.
+- Recepción, verificación y edición del ticket por el área técnica.
+- Etapas del servicio, informe técnico (borrador por zonas y PDF) y pasos omitidos.
+- Aplazamiento de una visita programada.
+
+Quién puede ver o hacer qué se decide en tickets/permisos.py; las vistas solo lo aplican.
+"""
+
 import os
 import re
 from datetime import date, datetime, time, timedelta
@@ -54,6 +71,7 @@ def _inicio_del_dia(dia):
 
 
 def _guardar_adjuntos(ticket, archivos, usuario, seguimiento=None):
+    """Guarda los archivos subidos como adjuntos del ticket, y de la respuesta del historial si viene."""
     for archivo in archivos:
         Adjunto.objects.create(
             ticket=ticket,
@@ -69,6 +87,9 @@ ESTADOS_POR_ATENDER = [E.EN_CRONOGRAMA, E.AUTORIZADO]
 
 
 def _filtrar(qs, form, usuario):
+    """Aplica a la bandeja los filtros del formulario: texto, estado (o los grupos «abiertos» y «por atender»),
+    tipo, prioridad, cliente y responsable («mios» o «sin» asignar).
+    """
     if not form.is_valid():
         return qs
     d = form.cleaned_data
@@ -102,6 +123,9 @@ def _filtrar(qs, form, usuario):
 
 @login_required
 def inicio(request):
+    """Lleva a cada rol a su bandeja: personal técnico al panel, bodega al inventario, comercial a su bandeja y
+    el cliente o la central de atención a sus solicitudes.
+    """
     if request.user.es_personal:
         return redirect("panel")
     if request.user.es_bodega:  # también la de bodega que atiende lo comercial (tiene el enlace en la barra)
@@ -123,6 +147,7 @@ def asignados_a_mi(request):
 
 @login_required
 def buscar_radicado(request):
+    """Abre el ticket del radicado escrito, si está entre los que el usuario puede ver."""
     radicado = request.GET.get("radicado", "").strip().upper()
     if not radicado:
         return redirect("inicio")
@@ -206,6 +231,7 @@ def nuevo_ticket(request):
 @cliente_requerido
 @require_POST
 def responder_cliente(request, radicado):
+    """El cliente agrega información o responde en su ticket abierto; se avisa al área técnica."""
     ticket = obtener_ticket(request.user, radicado)
     if not ticket.abierto:
         messages.error(request, "Esta solicitud ya está cerrada. Radique una nueva si lo necesita.")
@@ -254,6 +280,7 @@ def confirmar_solucion(request, radicado):
 @cliente_requerido
 @require_POST
 def calificar(request, radicado):
+    """El cliente califica de 1 a 10 la atención de su ticket cerrado (una sola vez)."""
     ticket = obtener_ticket(request.user, radicado)
     if ticket.estado != E.CERRADO or ticket.calificacion:
         raise Http404
@@ -271,6 +298,7 @@ def calificar(request, radicado):
 @cliente_requerido
 @require_POST
 def cancelar(request, radicado):
+    """El cliente cancela su solicitud mientras no esté en el cronograma (generada o recepcionada)."""
     ticket = obtener_ticket(request.user, radicado)
     if ticket.estado not in (E.GENERADO, E.RECEPCIONADO):
         messages.error(request, "Solo se puede cancelar una solicitud que aún no está en el cronograma.")
@@ -285,6 +313,10 @@ def cancelar(request, radicado):
 # ============================================================================
 @login_required
 def ticket_detalle(request, radicado):
+    """Ficha del ticket: historial, adjuntos, actas, informe, etapas y las acciones que el rol puede hacer.
+
+    El área comercial, si no gestiona el ticket, trabaja desde su propia vista y se redirige allá.
+    """
     cierre.revisar_si_toca()
     ticket = obtener_ticket(request.user, radicado)
     gestiona = gestiona_ticket(request.user, ticket)
@@ -427,6 +459,11 @@ def hallazgo_revisar(request, pk):
 @login_required
 @personal_requerido
 def panel(request):
+    """Bandeja del área técnica.
+
+    Sin filtros, el coordinador ve los tickets abiertos y el técnico lo que tiene programado y aún no atiende.
+    Al entrar se revisan, si toca, el cierre automático, el diagnóstico de procesos y las alertas de inventario.
+    """
     cierre.revisar_si_toca()
     diagnostico.revisar_si_toca()
     from inventario import alertas
@@ -483,6 +520,12 @@ def panel(request):
 @login_required
 @require_POST
 def gestionar(request, radicado):
+    """Coordinación o el técnico encargado gestionan el ticket en un solo envío: responsable, prioridad, estado
+    y mensaje (visible al cliente o nota interna), con sus notificaciones.
+
+    Si el ticket pasa al área comercial se crea su ficha y el informe del requerimiento. Al cerrar se avisa si quedó
+    material sin cuadrar, sin bloquear el cierre.
+    """
     ticket = obtener_ticket(request.user, radicado)
     if not gestiona_ticket(request.user, ticket):
         raise PermissionDenied
@@ -608,6 +651,7 @@ def reportes(request):
 # ============================================================================
 @login_required
 def actas_lista(request):
+    """Consulta de actas de soporte con filtros (texto, número, cliente, sede, sistema, resultado y año)."""
     base = actas_visibles(request.user)
     form = FiltroActasForm(request.GET or None, actas=base, mostrar_empresa=request.user.es_personal)
     qs = base
@@ -645,6 +689,7 @@ def actas_lista(request):
 
 @login_required
 def acta_detalle(request, numero):
+    """Detalle del acta: equipos, evidencias, material del inventario descontado y otras actas de la misma sede."""
     acta = get_object_or_404(actas_visibles(request.user).prefetch_related("equipos"), numero=numero)
     anteriores = actas_visibles(request.user).filter(empresa=acta.empresa).exclude(pk=acta.pk)
     anteriores = anteriores.filter(sede=acta.sede) if acta.sede_id else anteriores.filter(sede_texto=acta.sede_texto)
@@ -660,6 +705,7 @@ def acta_detalle(request, numero):
 
 
 def _puede_subir_evidencias(usuario, acta):
+    """Coordinación o el técnico que firmó el acta pueden agregarle evidencias."""
     return usuario.es_supervisor or (acta.tecnico_id is not None and acta.tecnico_id == usuario.pk)
 
 
@@ -712,6 +758,7 @@ def _puede_diligenciar_acta(usuario, ticket, ignorar_pasos=False):
 
 
 def _puede_vincular_acta(usuario, ticket):
+    """Coordinación o el técnico encargado del ticket pueden vincularle un acta ya registrada."""
     return usuario.es_supervisor or (usuario.es_personal and ticket.asignado_a_id == usuario.pk)
 
 
@@ -780,6 +827,9 @@ def desvincular_acta(request, radicado, numero):
 @login_required
 @personal_requerido
 def acta_nueva(request, radicado):
+    """Diligenciar el acta de la visita del ticket. Paso a paso: solo cuando el ticket tiene técnico y la visita
+    está en el cronograma, salvo que coordinación haya omitido esos pasos.
+    """
     ticket = obtener_ticket(request.user, radicado)
     if not _puede_diligenciar_acta(request.user, ticket):
         if _puede_diligenciar_acta(request.user, ticket, ignorar_pasos=True):
@@ -811,6 +861,12 @@ def acta_sin_programar(request):
 
 
 def _diligenciar_acta(request, empresa, sede, ticket=None):
+    """Formulario del acta de soporte, con o sin ticket (trabajo no programado).
+
+    Al guardar registra el acta con sus equipos (intervenidos, utilizados y retirados), descuenta el material del
+    inventario en poder del técnico, avanza el ticket (solucionado, pendiente de nueva visita o informe; en un
+    levantamiento vuelve al área comercial) y notifica al cliente y a soporte.
+    """
     if request.method == "POST":
         form = ActaForm(request.POST, request.FILES)
         equipos = EquipoActaFormSet(request.POST, request.FILES, prefix="equipos")
@@ -992,6 +1048,7 @@ def archivo_acta(request, tipo, pk):
 @login_required
 @comercial_o_supervisor
 def oportunidades(request):
+    """Oportunidades comerciales detectadas en campo, filtradas por estado y servicio."""
     qs = OportunidadComercial.objects.select_related("empresa", "sede", "detectada_por", "acta", "acta__ticket")
     estado = request.GET.get("estado", "abiertas")
     if estado == "abiertas":
@@ -1016,6 +1073,9 @@ def oportunidades(request):
 @comercial_o_supervisor
 @require_POST
 def oportunidad_actualizar(request, pk):
+    """Cambia el estado de una oportunidad y agrega una nota fechada a su seguimiento.
+    Solo se vuelve a páginas de la propia plataforma.
+    """
     o = get_object_or_404(OportunidadComercial, pk=pk)
     nuevo = request.POST.get("estado")
     nota = request.POST.get("nota", "").strip()
@@ -1037,6 +1097,7 @@ def oportunidad_actualizar(request, pk):
 # Paso 2: recepción y verificación (área técnica)
 # ============================================================================
 def _recepcionar(ticket, usuario):
+    """Pasa el ticket a recepcionado y le avisa al cliente que se está validando su solicitud."""
     seg = ticket.cambiar_estado(
         E.RECEPCIONADO, usuario,
         "Recibimos su solicitud: estamos validando el requerimiento y pronto la asignaremos al cronograma de visitas.",
@@ -1203,7 +1264,7 @@ def editar_ticket(request, radicado):
 
 
 # ============================================================================
-# Etapas del servicio e informe técnico (unificación de janotecsas.netlify.app)
+# Etapas del servicio e informe técnico
 # ============================================================================
 @login_required
 @supervisor_requerido
@@ -1223,6 +1284,7 @@ def guardar_etapas(request, radicado):
 
 
 def _puede_entregar_informe(usuario, ticket):
+    """Coordinación, o quien puede diligenciar el acta del ticket, entrega el informe técnico."""
     return usuario.es_supervisor or _puede_diligenciar_acta(usuario, ticket)
 
 
@@ -1288,6 +1350,7 @@ def entregar_informe(request, radicado):
 
 
 def _borrador_o_404(ticket):
+    """El borrador vigente del informe del ticket; si no tiene, la página no existe."""
     from . import informe as inf
 
     borrador = inf.vigente(ticket)
@@ -1308,6 +1371,7 @@ def _guardar_zonas(request, borrador):
     errores = []
 
     def fotos(campo, zona):
+        """Guarda las fotos de una zona del informe; las que no son imagen se reportan como error."""
         for f in request.FILES.getlist(campo):
             if os.path.splitext(f.name)[1].lower() not in (".jpg", ".jpeg", ".png", ".webp"):
                 errores.append(f"«{f.name}» no es una foto (jpg, png, webp).")

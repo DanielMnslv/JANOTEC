@@ -1,3 +1,14 @@
+"""Formularios de la plataforma de tickets.
+
+Organización del archivo:
+- Adjuntos: campo de varios archivos con límite de tamaño y extensiones, y estilos de Bootstrap.
+- Disponibilidad del cliente: días, franjas y rangos de fechas en que no puede atender.
+- Radicación: el formulario con que cliente, central o coordinación radican (o editan) un ticket.
+- Respuesta, calificación y gestión del ticket por el área técnica.
+- Filtros de las bandejas de tickets y de actas.
+- Acta de soporte: datos de la visita, evidencias, firmas y equipos intervenidos, utilizados o retirados.
+"""
+
 import os
 
 from django import forms
@@ -15,16 +26,21 @@ from .models import (
 
 # --- Carga múltiple de archivos (patrón oficial de Django 5) ------------------
 class MultipleFileInput(forms.ClearableFileInput):
+    """Selector de archivos que permite elegir varios a la vez."""
     allow_multiple_selected = True
 
 
 class MultipleFileField(forms.FileField):
+    """Campo de varios adjuntos. Opcional por defecto; valida tamaño y extensión de cada archivo según
+    ADJUNTO_MAX_MB y ADJUNTO_EXTENSIONES de la configuración.
+    """
     def __init__(self, *args, **kwargs):
         kwargs.setdefault("widget", MultipleFileInput(attrs={"class": "form-control"}))
         kwargs.setdefault("required", False)
         super().__init__(*args, **kwargs)
 
     def clean(self, data, initial=None):
+        """Devuelve la lista de archivos válidos (vacía si no se subió nada) o el error del primero que no cumple."""
         if not data:
             return []
         archivos = data if isinstance(data, (list, tuple)) else [data]
@@ -47,6 +63,7 @@ class MultipleFileField(forms.FileField):
 
 
 def ayuda_adjuntos():
+    """Texto de ayuda de los adjuntos, con el tamaño máximo y las extensiones permitidas."""
     return (
         f"Opcional. Hasta 5 archivos de máximo {settings.ADJUNTO_MAX_MB} MB "
         f"({', '.join(settings.ADJUNTO_EXTENSIONES)})."
@@ -57,6 +74,9 @@ class BootstrapMixin:
     """Agrega las clases de Bootstrap a todos los campos."""
 
     def _aplicar_estilos(self):
+        """Pone a cada campo la clase de Bootstrap que le corresponde (form-select, form-check-input o
+        form-control) sin pisar la que ya tenga.
+        """
         for campo in self.fields.values():
             w = campo.widget
             if isinstance(w, (forms.Select,)):
@@ -83,6 +103,7 @@ class RangoNoDisponibleForm(forms.Form):
     )
 
     def clean(self):
+        """El rango necesita inicio y fin, y el fin debe ser posterior al inicio."""
         datos = super().clean()
         desde, hasta = datos.get("desde"), datos.get("hasta")
         if bool(desde) != bool(hasta):
@@ -105,6 +126,11 @@ def agregar_dias_no_disponible(form):
 
 
 def iniciales_no_disponible(form, no_disponible):
+    """Carga en el formulario los días en que el cliente no puede atender (todo el día, mañana o tarde).
+
+    El sábado solo se trabaja en la mañana, así que cualquier restricción del sábado se muestra como todo el día.
+    Las franjas por horas no tienen casilla y se conservan como están.
+    """
     for clave, valor in (no_disponible or {}).items():
         tipo = leer_franja(valor)[0]
         if clave == "sabado" and tipo:
@@ -119,6 +145,7 @@ def leer_no_disponible(form, datos):
 
 
 def dias_para_plantilla(form):
+    """Los campos «no disponible» de lunes a sábado, en orden, para dibujarlos en la plantilla."""
     return [form[f"nd_{c}"] for c, _ in DIAS_LABORALES]
 
 
@@ -147,6 +174,7 @@ class ConSugerencias(forms.TextInput):
         self.opciones = list(opciones)
 
     def render(self, name, value, attrs=None, renderer=None):
+        """Dibuja la caja de texto con su lista de sugerencias (datalist): se puede elegir de la lista o escribir libre."""
         from django.utils.html import escape
         from django.utils.safestring import mark_safe
 
@@ -211,6 +239,7 @@ SISTEMA_DESCONOCIDO = "Diagnóstico técnico"
 
 
 def _sin_tildes(texto):
+    """El texto en minúsculas, sin tildes y con los espacios normalizados, para comparar lo que escribe la gente."""
     import unicodedata
 
     texto = unicodedata.normalize("NFD", (texto or "").lower())
@@ -218,6 +247,7 @@ def _sin_tildes(texto):
 
 
 def es_no_se(texto):
+    """Si el cliente escribió que no sabe («No sé», «no estoy seguro», «?»…); ese dato queda por confirmar."""
     return _sin_tildes(texto) in ("no se", "nose", "no estoy seguro", "no sabe", "ns", "?")
 
 
@@ -378,6 +408,10 @@ class RadicacionForm(BootstrapMixin, forms.ModelForm):
         self._aplicar_estilos()
 
     def _valores_iniciales(self, edicion):
+        """Valores iniciales del formulario: al editar, los datos del ticket en los campos de texto libre (empresa,
+        sede, sistema, falla, alturas, SST, ubicación); al radicar, el tipo «soporte» y, si radica un cliente, él mismo
+        como contacto y los datos de su última solicitud.
+        """
         if edicion:
             t = self.instance
             self.initial.update(empresa_nombre=t.empresa.razon_social if t.empresa_id else "",
@@ -404,15 +438,19 @@ class RadicacionForm(BootstrapMixin, forms.ModelForm):
 
     # --- Ayudas para la plantilla -----------------------------------------------------
     def opciones_tipo(self):
+        """Cada tipo de solicitud con su explicación, para mostrarlas como tarjetas."""
         return [(op, Ticket.AYUDA_TIPO[op.data["value"]]) for op in self["tipo"]]
 
     def opciones_impacto(self):
+        """Cada nivel de impacto con su explicación, para mostrarlo como tarjetas."""
         return [(op, Ticket.AYUDA_IMPACTO[op.data["value"]]) for op in self["impacto"]]
 
     def dias_no_disponible(self):
+        """Los días de la semana en que el cliente puede marcar que no atiende."""
         return dias_para_plantilla(self)
 
     def municipios_coordenadas(self):
+        """Municipios del Meta con sus coordenadas, para ubicar el mapa al elegir la ciudad."""
         return [[nombre, lat, lon] for nombre, (lat, lon) in COORDENADAS_META.items()]
 
     def fallas_por_servicio(self):
@@ -426,6 +464,7 @@ class RadicacionForm(BootstrapMixin, forms.ModelForm):
         """{empresa en minúscula: [[sede, departamento, municipio, dirección, contacto, teléfono, correo], ...]}:
         sugiere la sede y llena la ubicación y el contacto de quien recibe."""
         def fila(s):
+            """Datos de una sede que se autocompletan al elegirla."""
             return [s.nombre, s.departamento, s.ciudad, s.direccion, s.contacto_nombre, s.contacto_telefono, s.contacto_email]
         mapa = {}
         if self.elige_empresa:
@@ -452,6 +491,7 @@ class RadicacionForm(BootstrapMixin, forms.ModelForm):
 
     # --- Validación -------------------------------------------------------------------
     def clean_contacto_email(self):
+        """Valida cada correo de contacto y los deja separados por «;»."""
         return " ; ".join(validar_correos(self.cleaned_data["contacto_email"]))
 
     def _id(self, nombre):
@@ -460,6 +500,13 @@ class RadicacionForm(BootstrapMixin, forms.ModelForm):
         return int(valor) if valor.isdigit() else None
 
     def clean(self):
+        """Resuelve lo escrito a mano en registros reales y valida la radicación.
+
+        - Empresa y sede: se eligen de la lista o se escriben; la sede debe ser de la empresa (una nueva se crea al guardar).
+        - Sistema y falla: de la lista o con sus palabras; si el cliente no sabe, queda «por confirmar» por el técnico.
+        - Trabajo en alturas y acompañamiento SST: obligatorios (Sí / No).
+        - Los rangos en que no puede atender deben ser válidos.
+        """
         datos = super().clean()
         # Empresa: el cliente radica para la suya; los demás la escriben o la eligen de la lista
         if self.elige_empresa:
@@ -535,6 +582,7 @@ class RadicacionForm(BootstrapMixin, forms.ModelForm):
         return datos
 
     def rangos_validos(self):
+        """Los rangos de fecha y hora en que el cliente no puede atender, ya validados (vacío si no marcó ninguno)."""
         if self.sin_rangos:
             return []
         return [(f.cleaned_data["desde"], f.cleaned_data["hasta"]) for f in self.rangos.forms
@@ -595,6 +643,7 @@ TicketClienteForm = RadicacionForm
 
 
 class RespuestaClienteForm(BootstrapMixin, forms.Form):
+    """Mensaje (con adjuntos) que el cliente agrega a su ticket."""
     mensaje = forms.CharField(
         label="Agregar información o responder",
         widget=forms.Textarea(attrs={"rows": 3, "placeholder": "Escriba su mensaje para el área de soporte…"}),
@@ -608,6 +657,7 @@ class RespuestaClienteForm(BootstrapMixin, forms.Form):
 
 
 class CalificacionForm(BootstrapMixin, forms.Form):
+    """Calificación de 1 a 10 que el cliente da a la atención al cerrar el ticket, con su comentario."""
     calificacion = forms.TypedChoiceField(
         label="¿Cómo califica la atención recibida?",
         choices=[(i, str(i)) for i in range(10, 0, -1)],
@@ -634,6 +684,7 @@ class ResponsableField(forms.ModelChoiceField):
     """Cada persona con su área: «Freyder Gordillo · Encargado», «Alejandra Vargas · Administración y bodega»…"""
 
     def label_from_instance(self, u):
+        """Cada responsable con su nombre y su rol corto."""
         return f"{u.get_full_name() or u.username} · {u.rol_corto}"
 
 
@@ -700,6 +751,9 @@ class GestionForm(BootstrapMixin, forms.Form):
         self._aplicar_estilos()
 
     def clean(self):
+        """Una nota interna con adjuntos debe llevar mensaje, y la visita no se marca como ejecutada sin su acta
+        (paso a paso), salvo que coordinación haya omitido el paso «Visita y acta».
+        """
         datos = super().clean()
         if datos.get("visibilidad") == "interno" and not (datos.get("mensaje") or "").strip():
             if datos.get("archivos"):
@@ -715,6 +769,7 @@ class GestionForm(BootstrapMixin, forms.Form):
 
 
 class FiltroTicketsForm(BootstrapMixin, forms.Form):
+    """Filtros de la bandeja de tickets: texto, estado, tipo, prioridad, cliente y responsable."""
     q = forms.CharField(label="Buscar", required=False,
                         widget=forms.TextInput(attrs={"placeholder": "Radicado, asunto, descripción…"}))
     estado = forms.ChoiceField(
@@ -742,6 +797,7 @@ class FiltroTicketsForm(BootstrapMixin, forms.Form):
 
 
 class FiltroActasForm(BootstrapMixin, forms.Form):
+    """Filtros de la consulta de actas: texto, cliente, sede, sistema, resultado y año."""
     q = forms.CharField(label="Buscar", required=False,
                         widget=forms.TextInput(attrs={"placeholder": "N° de acta, diagnóstico, equipo, técnico…"}))
     empresa = forms.ModelChoiceField(required=False, queryset=Empresa.objects.none(), empty_label="Todos los clientes")
@@ -809,6 +865,7 @@ EXTENSIONES_EVIDENCIA = ("jpg", "jpeg", "png", "webp", "heic", "mp4", "pdf")
 
 
 def validar_evidencias(archivos):
+    """Solo se aceptan como evidencia fotos, videos MP4 y PDF."""
     for f in archivos:
         if os.path.splitext(f.name)[1].lower().lstrip(".") not in EXTENSIONES_EVIDENCIA:
             raise forms.ValidationError(f"«{f.name}»: suba fotos, video mp4 o PDF.")
@@ -827,6 +884,7 @@ class EvidenciasActaForm(BootstrapMixin, forms.Form):
         self._aplicar_estilos()
 
     def clean_archivos(self):
+        """Debe venir al menos un archivo y todos deben ser evidencias válidas."""
         archivos = validar_evidencias(self.cleaned_data["archivos"])
         if not archivos:
             raise forms.ValidationError("Elija al menos un archivo.")
@@ -891,9 +949,11 @@ class ActaForm(BootstrapMixin, forms.Form):
         self._aplicar_estilos()
 
     def clean_evidencias_proceso(self):
+        """Evidencias tomadas durante el trabajo: fotos, videos MP4 o PDF."""
         return validar_evidencias(self.cleaned_data["evidencias_proceso"])
 
     def clean_evidencias_resultado(self):
+        """Evidencias del resultado final: fotos, videos MP4 o PDF."""
         return validar_evidencias(self.cleaned_data["evidencias_resultado"])
 
     def clean_sistema(self):
@@ -905,6 +965,7 @@ class ActaForm(BootstrapMixin, forms.Form):
         return texto[:60]
 
     def clean_copia_correo(self):
+        """Valida cada correo al que se envía copia del acta y los deja separados por «;»."""
         from django.core.validators import validate_email
 
         correos = [c.strip() for c in self.cleaned_data["copia_correo"].replace(",", ";").split(";") if c.strip()]
@@ -916,6 +977,11 @@ class ActaForm(BootstrapMixin, forms.Form):
         return " ; ".join(correos)
 
     def clean(self):
+        """Valida las firmas del acta.
+
+        La del técnico siempre es obligatoria; la del cliente también, salvo en soporte virtual, donde no está presente
+        (y tampoco se guarda la ubicación, que sería la del técnico). Si firma un acompañante debe ir su nombre.
+        """
         datos = super().clean()
         # En virtual el cliente no está para firmar, y la ubicación sería la del técnico, no la de la sede
         virtual = datos.get("modalidad") == ActaSoporte.Modalidad.VIRTUAL
@@ -992,6 +1058,9 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
     @property
     def changed_data(self):
         # Una fila sin fotos no cuenta como diligenciada solo por el campo de archivos (llega como lista vacía)
+        """Qué campos se diligenciaron. Una fila solo cuenta si se escribió el equipo: el campo de fotos vacío o
+        haber elegido «qué se hizo» o «de quién es» no la vuelven una fila diligenciada.
+        """
         cambios = super().changed_data
         if "fotos" in cambios and not self.files.getlist(self.add_prefix("fotos")):
             cambios = [c for c in cambios if c != "fotos"]
@@ -1002,9 +1071,13 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
 
     @property
     def es_retiro(self):
+        """Si el equipo se está retirando (en la lista de retirados o marcado como retirado)."""
         return self.clase == "retirado" or (self.cleaned_data or {}).get("accion") == "retirado"
 
     def clean(self):
+        """Cada equipo dice de quién es. Si es de JANOTEC lleva placa o serial: con ella se le hace seguimiento
+        en la hoja de vida del activo y, si se retira, se devuelve al inventario.
+        """
         datos = super().clean()
         if "propiedad" in self.fields and datos.get("equipo"):
             if not datos.get("propiedad"):
@@ -1015,6 +1088,7 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
         return datos
 
     def clean_fotos(self):
+        """Las fotos del equipo deben ser imágenes (jpg, png, webp o heic)."""
         fotos = self.cleaned_data["fotos"]
         for f in fotos:
             if os.path.splitext(f.name)[1].lower().lstrip(".") not in ("jpg", "jpeg", "png", "webp", "heic"):

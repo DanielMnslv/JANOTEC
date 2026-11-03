@@ -1,3 +1,7 @@
+"""Rutas de la plataforma de tickets: portal del cliente, consulta pública por radicado, panel técnico,
+actas, informes, oportunidades, reportes y configuración de clientes.
+"""
+
 from django.urls import path
 
 from . import calificacion, clientes, consulta, views

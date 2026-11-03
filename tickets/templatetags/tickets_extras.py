@@ -1,3 +1,5 @@
+"""Filtros y etiquetas propios para las plantillas: fechas al estilo del correo y casos de «Salud de los procesos»."""
+
 from datetime import timedelta
 
 from django import template

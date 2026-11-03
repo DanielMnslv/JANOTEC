@@ -29,24 +29,29 @@ CLASES = [(EquipoActa.Clase.RETIRADO, "equipos retirados"), (EquipoActa.Clase.IN
 
 
 def _fecha_larga(valor):
+    """La fecha en palabras: «3 de noviembre de 2026»."""
     return f"{valor.day} de {MESES[valor.month - 1]} de {valor.year}"
 
 
 def _y(partes):
+    """Une las partes sin repetir ni vacías: «a, b y c»."""
     partes = [p for p in dict.fromkeys(partes) if p]
     return " y ".join([", ".join(partes[:-1]), partes[-1]]) if len(partes) > 1 else (partes[0] if partes else "")
 
 
 def actas_del_ticket(ticket):
+    """Las actas del ticket en orden de fecha, con sus equipos y fotos."""
     return list(ticket.actas.prefetch_related("equipos__fotos").order_by("fecha"))
 
 
 def _sistemas(actas):
+    """Los sistemas intervenidos en las actas, en palabras (CCTV y GPS en mayúscula, los demás en minúscula)."""
     return _y([a.get_sistema_display_corto() if a.sistema in ("CCTV", "GPS") else a.get_sistema_display_corto().lower()
                for a in actas if a.sistema])
 
 
 def _trabajos(actas):
+    """Los trabajos hechos en las actas, en palabras; si no hay ninguno, «visita técnica»."""
     return _y([TRABAJOS.get(x.strip().lower(), x.strip().lower()) for a in actas for x in a.actividad.split(",") if x.strip()]) \
         or "visita técnica"
 
@@ -57,10 +62,12 @@ def _minuscula(texto):
 
 
 def _n(cantidad, singular, plural):
+    """Cantidad con el sustantivo en singular o plural: «1 cámara», «3 cámaras»."""
     return f"{cantidad} {singular if cantidad == 1 else plural}"
 
 
 def _lista_equipos(equipos):
+    """Los equipos en una línea con su cantidad (hasta 15; si hay más, termina en «…»)."""
     return ", ".join(_minuscula(e.equipo) + (f" ({e.cantidad})" if e.cantidad and e.cantidad not in ("1", "01") else "")
                      for e in equipos[:15]) + ("…" if len(equipos) > 15 else "")
 
@@ -169,6 +176,7 @@ def tipo_sugerido(ticket):
 
 
 def _sistema_ticket(ticket, actas):
+    """El sistema del informe: el de las actas o, si no, el del ticket; por defecto «seguridad electrónica»."""
     return _sistemas(actas) or (ticket.sistema_display if hasattr(ticket, "sistema_display") else "") or "seguridad electrónica"
 
 
@@ -257,6 +265,7 @@ def copia_pdf(borrador):
 
 
 def vigente(ticket):
+    """El borrador de informe más reciente del ticket (o None si no tiene)."""
     return ticket.informes_borrador.select_related("aprobado_por", "creado_por").first()
 
 
@@ -284,11 +293,13 @@ def _foto(foto, ancho):
 
 
 def _vinetas(texto):
+    """Cada línea del texto como viñeta del PDF."""
     return [Paragraph(f"•&nbsp;&nbsp;{_esc(l)}", ParagraphStyle("vineta", parent=E_TEXTO, leftIndent=10, firstLineIndent=-8,
                                                                     spaceAfter=2)) for l in InformeBorrador.lineas(texto)]
 
 
 def _barra(texto, ancho, fondo=VERDE):
+    """Barra de color con el título de una sección del PDF."""
     barra = Table([[Paragraph(_esc(texto), E_SECCION)]], colWidths=[ancho])
     barra.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), fondo)]))
     return barra
@@ -408,6 +419,7 @@ def pdf(borrador, definitivo=False):
                                             colWidths=[ancho / 2, ancho / 2]))]
 
     def pagina(canvas, documento):
+        """Pie de página en cada hoja y, mientras no esté aprobado, la marca de agua «BORRADOR»."""
         canvas.saveState()
         canvas.setFont("Helvetica", 7)
         canvas.setFillColor(GRIS)

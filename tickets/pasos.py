@@ -105,6 +105,7 @@ def puede_hacer_visita(ticket):
 
 
 def omitir(ticket, clave, motivo, autor):
+    """Coordinación salta un paso del área técnica: queda registrado con su motivo y una nota interna en el historial."""
     from .models import Seguimiento
 
     nombre = dict((p[0], p[1]) for p in PASOS)[clave]

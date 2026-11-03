@@ -23,6 +23,7 @@ VENTANA = 15 * 60
 
 
 def _digitos(texto):
+    """Solo los dígitos de un teléfono, sin el indicativo 57 de Colombia."""
     d = re.sub(r"\D", "", texto or "")
     return d[2:] if len(d) == 12 and d.startswith("57") else d
 
@@ -37,20 +38,26 @@ def telefono_coincide(ticket, telefono):
 
 
 def enlace_consulta(ticket):
+    """Enlace firmado del correo para que el cliente vea su solicitud sin usuario ni contraseña."""
     firma = signing.dumps(ticket.radicado, salt=SAL)
     return f"{settings.SITIO_URL.rstrip('/')}{reverse('consulta_token', args=[firma])}"
 
 
 def _ip(request):
+    """Dirección IP de quien consulta (para limitar los intentos)."""
     return request.META.get("REMOTE_ADDR", "")
 
 
 def _clave_intentos(request):
+    """Clave de caché con los intentos fallidos de consulta desde esa IP."""
     return f"consulta-intentos:{_ip(request)}"
 
 
 @require_http_methods(["GET", "POST"])
 def consulta(request):
+    """Consulta pública con radicado y teléfono de contacto. Tras 10 intentos fallidos en 15 minutos se bloquea
+    esa IP un rato; si coincide, lleva al enlace firmado de la solicitud.
+    """
     if request.method == "POST":
         clave = _clave_intentos(request)
         intentos = cache.get(clave, 0)
@@ -69,6 +76,7 @@ def consulta(request):
 
 
 def consulta_token(request, firma):
+    """Lo que ve el cliente de su solicitud con el enlace firmado: etapas, fechas y las últimas notas visibles."""
     try:
         radicado = signing.loads(firma, salt=SAL, max_age=VIGENCIA)
     except signing.BadSignature:

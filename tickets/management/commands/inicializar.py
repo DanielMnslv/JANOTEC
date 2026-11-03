@@ -1,3 +1,8 @@
+"""Comando «inicializar»: crea los sistemas a intervenir (categorías) y sus fallas base.
+
+Se puede ejecutar varias veces: solo agrega lo que falta y no borra ni cambia lo editado en la plataforma.
+"""
+
 from django.core.management.base import BaseCommand
 
 from tickets.models import Categoria, TipoFalla

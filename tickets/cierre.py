@@ -14,6 +14,10 @@ INTERVALO_SEGUNDOS = 600
 
 
 def cerrar_vencidos():
+    """Cierra los tickets resueltos que vencieron sin respuesta del cliente y le avisa a cada cliente.
+
+    Devuelve la lista de tickets cerrados.
+    """
     cerrados = Ticket.cerrar_resueltos_vencidos()
     for ticket, seguimiento in cerrados:
         notificaciones.actualizacion_para_cliente(ticket, seguimiento)
@@ -22,5 +26,6 @@ def cerrar_vencidos():
 
 def revisar_si_toca():
     # cache.add solo guarda si la clave no existe: así se ejecuta una vez por intervalo
+    """Ejecuta el cierre automático si no se ha hecho en los últimos 10 minutos (red de seguridad del cron)."""
     if cache.add("tickets:cierre_automatico", True, INTERVALO_SEGUNDOS):
         cerrar_vencidos()

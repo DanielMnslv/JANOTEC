@@ -46,6 +46,7 @@ CON_VISITA = {E.VISITA_EJECUTADA, E.INFORME}
 
 @dataclass
 class Regla:
+    """Una regla de salud de procesos: qué revisa, de qué área es, qué tan grave es, qué conviene mejorar y los casos encontrados."""
     clave: str
     nombre: str
     area: str
@@ -55,19 +56,23 @@ class Regla:
 
 
 def _url(ticket):
+    """Enlace a la ficha del ticket."""
     return reverse("ticket_detalle", args=[ticket.radicado])
 
 
 def _caso(clave, titulo, detalle="", ticket=None, usuario=None, url=""):
+    """Un caso encontrado por una regla, con título y detalle recortados al tamaño de la base de datos."""
     return {"clave": clave, "titulo": titulo[:250], "detalle": detalle[:1000], "ticket": ticket, "usuario": usuario,
             "url": url or (_url(ticket) if ticket else "")}
 
 
 def _hora(h):
+    """Hora en formato de 12 horas en español: «8:30 a. m.»."""
     return h.strftime("%I:%M %p").lstrip("0").replace("AM", "a. m.").replace("PM", "p. m.")
 
 
 def _nombre(u):
+    """El nombre de la persona; si no hay, «el sistema»."""
     return (u.get_full_name() or u.username) if u else "el sistema"
 
 
@@ -346,6 +351,7 @@ def revisar():
 
 
 def reglas():
+    """Las reglas por su clave."""
     return {r.clave: r for _, r in REGLAS}
 
 
@@ -377,6 +383,10 @@ def casos_para(usuario, areas=None):
 
 
 def marcar_revisado(hallazgo, usuario, motivo):
+    """Marca un hallazgo como revisado sin acción, con su motivo (queda guardado).
+
+    Solo lo hace alguien del área del hallazgo, y el motivo debe tener al menos 5 caracteres.
+    """
     from django.core.exceptions import PermissionDenied, ValidationError
 
     if hallazgo.area not in areas_de(usuario):

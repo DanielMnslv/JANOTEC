@@ -20,6 +20,7 @@ E = Ticket.Estado
 
 
 class Deshacer(Exception):
+    """Se lanza a propósito para revertir la transacción: las muestras no dejan datos en la plataforma."""
     pass
 
 
@@ -46,6 +47,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"{len(enviados)} correos de muestra enviados a {destino}. No quedó ningún dato."))
 
     def _muestras(self, destino, enviados, solo_estados=False):
+        """Crea un ticket de muestra y lo pasa por sus etapas, enviando cada correo que
+        recibe el cliente al destino indicado.
+        """
         from cronograma import servicios as crono
         from cronograma.models import Actividad
 
@@ -63,6 +67,7 @@ class Command(BaseCommand):
             no_disponible={"viernes": "tarde"},
         )
         def paso(estado, mensaje, nombre):
+            """Cambia el estado del ticket de muestra y envía el correo de esa etapa (solo las que le llegan al cliente)."""
             seg = t.cambiar_estado(estado, coord, mensaje)
             notif.actualizacion_para_cliente(t, seg)
             if estado in notif.ETAPAS_CLIENTE:  # las demás etapas no le llegan al cliente por correo

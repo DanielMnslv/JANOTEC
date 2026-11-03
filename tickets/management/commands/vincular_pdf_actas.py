@@ -24,11 +24,15 @@ SINONIMOS = {"MOCREDITO": "MOTOCREDITO", "CUSIANAGAS": "CUSIANA", "INCOEQUIPOS":
 
 
 def palabras(texto):
+    """Las palabras significativas de un texto (sin tildes, en mayúscula, de 4 letras o más, con sinónimos
+    unificados y sin palabras vacías), para comprobar que el PDF corresponde al cliente del acta.
+    """
     t = unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode().upper().replace("MOTO CREDITO", "MOTOCREDITO").replace("JANO TEC", "JANOTEC")
     return {SINONIMOS.get(w, w) for w in re.findall(r"[A-Z0-9]{4,}", t)} - PALABRAS_VACIAS
 
 
 def numero_de(nombre):
+    """El número de acta (5 dígitos) en el nombre del archivo; None si no lo tiene."""
     m = re.match(r"^\s*(\d{5})\b", nombre) or re.search(r"ACTA[^0-9]{0,30}?(\d{5})\b", nombre, re.I)
     return int(m.group(1)) if m else None
 

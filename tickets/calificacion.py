@@ -22,6 +22,7 @@ ESCALA = Ticket.ESCALA_CALIFICACION
 
 
 def enlace(ticket, nota=None):
+    """Enlace firmado para calificar el ticket desde el correo; con `nota` lleva la estrella que tocó el cliente."""
     firma = signing.dumps(ticket.radicado, salt=SAL)
     url = f"{settings.SITIO_URL.rstrip('/')}{reverse('calificar_correo', args=[firma])}"
     return f"{url}?n={nota}" if nota else url
@@ -58,6 +59,7 @@ def agregar_comentario(ticket, texto):
 
 
 def _nota(valor):
+    """La nota recibida como número entero de 1 a la escala, o None si no es válida."""
     try:
         n = int(valor)
     except (TypeError, ValueError):
@@ -67,6 +69,9 @@ def _nota(valor):
 
 @require_http_methods(["GET", "POST"])
 def calificar_correo(request, firma):
+    """Página pública de calificación: valida el enlace firmado, registra la nota (sola si llegó desde una
+    estrella del correo) y permite agregar un comentario. Solo se califican tickets cerrados.
+    """
     try:
         radicado = signing.loads(firma, salt=SAL, max_age=VIGENCIA)
     except signing.BadSignature:

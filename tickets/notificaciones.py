@@ -11,10 +11,12 @@ log = logging.getLogger(__name__)
 
 
 def _enlace(ticket):
+    """Enlace completo a la ficha del ticket en la plataforma (SITIO_URL)."""
     return f"{settings.SITIO_URL.rstrip('/')}{ticket.get_absolute_url()}"
 
 
 def _consulta(ticket):
+    """Enlace con que el cliente consulta su ticket sin usuario ni contraseña."""
     from .consulta import enlace_consulta
     return enlace_consulta(ticket)
 
@@ -65,6 +67,7 @@ def html_desde_texto(asunto, cuerpo):
 
 
 def _enviar(asunto, cuerpo, destinatarios):
+    """Envía un correo interno en texto y HTML; si falla, solo queda en el registro y la operación sigue."""
     destinatarios = [d for d in set(destinatarios) if d]
     if not destinatarios:
         return
@@ -121,11 +124,13 @@ def enviar_al_cliente(asunto, destinatarios, titulo, parrafos, saludo="", datos=
 
 
 def _saludo(ticket):
+    """Saludo con el nombre del contacto (si viene todo en mayúsculas se pasa a nombre propio)."""
     nombre = (ticket.contacto_nombre or "").strip()
     return f"Cordial saludo, {nombre.title() if nombre.isupper() else nombre}." if nombre else "Cordial saludo."
 
 
 def _datos_solicitud(ticket):
+    """Los datos básicos de la solicitud que van en los correos al cliente."""
     return [("Solicitud", ticket.asunto), ("Cliente", str(ticket.empresa) + (f" · {ticket.sede}" if ticket.sede else "")),
             ("Tipo de servicio", f"{ticket.get_tipo_display()} · {ticket.sistema_display}")]
 
@@ -149,6 +154,7 @@ ETAPAS_CLIENTE = {
 
 
 def ticket_creado(ticket):
+    """Correo al cliente con su radicado cuando registra la solicitud."""
     enviar_al_cliente(
         f"[{ticket.radicado}] Solicitud registrada: {ticket.asunto}",
         correos_cliente(ticket),
@@ -211,6 +217,7 @@ def actualizacion_para_cliente(ticket, seguimiento):
 
 
 def respuesta_del_cliente(ticket, seguimiento):
+    """Avisa al técnico encargado (o a soporte, si no tiene) que el cliente respondió en el ticket."""
     destino = ticket.asignado_a.email if ticket.asignado_a else settings.NOTIFICAR_SOPORTE_EMAIL
     _enviar(
         f"[{ticket.radicado}] El cliente respondió: {ticket.asunto}",

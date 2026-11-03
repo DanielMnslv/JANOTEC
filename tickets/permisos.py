@@ -1,3 +1,5 @@
+"""Quién ve y quién gestiona cada ticket, y los decoradores de acceso por rol para las vistas."""
+
 from functools import wraps
 
 from django.core.exceptions import PermissionDenied
@@ -76,6 +78,7 @@ def gestiona_ticket(usuario, ticket):
 
 
 def personal_requerido(vista):
+    """Solo el personal JANOTEC (técnicos, coordinación, comercial, bodega y dirección)."""
     @wraps(vista)
     def envoltura(request, *args, **kwargs):
         if not request.user.es_personal:
@@ -119,6 +122,7 @@ def radicador_requerido(vista):
 
 
 def cliente_requerido(vista):
+    """Solo usuarios cliente."""
     @wraps(vista)
     def envoltura(request, *args, **kwargs):
         if not request.user.es_cliente:

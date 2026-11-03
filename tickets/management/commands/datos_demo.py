@@ -26,6 +26,7 @@ class Command(BaseCommand):
         call_command("inicializar")
 
         def usuario(username, nombre, apellido, rol, empresa=None, **extra):
+            """Crea el usuario de ejemplo si no existe, con la contraseña de demostración."""
             u, creado = Usuario.objects.get_or_create(
                 username=username,
                 defaults=dict(first_name=nombre, last_name=apellido, rol=rol, empresa=empresa,

@@ -29,6 +29,7 @@ ARCHIVO = Path(settings.BASE_DIR) / "datos_iniciales" / "cuentas_de_prueba.txt"
 
 
 def clave_aleatoria():
+    """Contraseña aleatoria segura para una cuenta de prueba («Jt-» y 12 letras o números)."""
     letras = string.ascii_letters + string.digits
     return "Jt-" + "".join(secrets.choice(letras) for _ in range(12))
 
@@ -78,6 +79,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Cuentas de prueba listas. Usuarios y contraseñas en: {ARCHIVO}"))
 
     def _eliminar(self):
+        """Borra la empresa de prueba, sus usuarios y lo que se haya practicado con ellos, aunque sea sobre un
+        cliente real; las actas de prueba asociadas a esos tickets se desvinculan antes de borrar.
+        """
         from django.db.models import Q
 
         empresa = Empresa.objects.filter(codigo=CODIGO).first()

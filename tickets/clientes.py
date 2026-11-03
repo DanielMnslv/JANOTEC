@@ -17,6 +17,7 @@ from .permisos import supervisor_requerido
 
 
 class EmpresaForm(BootstrapMixin, forms.ModelForm):
+    """Datos del cliente (empresa). La razón social no se repite y el NIT vacío queda como «sin NIT»."""
     class Meta:
         model = Empresa
         fields = ["razon_social", "nit", "sector", "ciudad", "direccion", "telefono", "email_contacto", "es_del_grupo", "activa"]
@@ -27,6 +28,7 @@ class EmpresaForm(BootstrapMixin, forms.ModelForm):
         self._aplicar_estilos()
 
     def clean_razon_social(self):
+        """Quita espacios de más y evita crear dos clientes con el mismo nombre."""
         nombre = " ".join(self.cleaned_data["razon_social"].split())
         otro = Empresa.objects.filter(razon_social__iexact=nombre).exclude(pk=self.instance.pk).first()
         if otro:
@@ -34,10 +36,12 @@ class EmpresaForm(BootstrapMixin, forms.ModelForm):
         return nombre
 
     def clean_nit(self):
+        """NIT sin espacios; vacío se guarda como nulo (varios clientes pueden no tenerlo)."""
         return (self.cleaned_data.get("nit") or "").strip() or None
 
 
 class SedeForm(BootstrapMixin, forms.ModelForm):
+    """Datos de una sede del cliente, con su contacto. El nombre no se repite dentro del mismo cliente."""
     class Meta:
         model = Sede
         fields = ["nombre", "departamento", "ciudad", "direccion", "abonado", "contacto_nombre", "contacto_cargo",
@@ -50,6 +54,7 @@ class SedeForm(BootstrapMixin, forms.ModelForm):
         self._aplicar_estilos()
 
     def clean_nombre(self):
+        """Quita espacios de más y evita dos sedes con el mismo nombre en el cliente."""
         nombre = " ".join(self.cleaned_data["nombre"].split())
         if self.empresa.sedes.filter(nombre__iexact=nombre).exclude(pk=self.instance.pk).exists():
             raise forms.ValidationError("Este cliente ya tiene una sede con ese nombre.")
@@ -72,6 +77,9 @@ def _usos(objeto, ignorar=()):
 @login_required
 @supervisor_requerido
 def clientes(request):
+    """Listado de clientes con sus sedes activas y número de tickets; filtra por estado y busca por nombre,
+    NIT, ciudad o sede. Los prospectos de comercial no aparecen.
+    """
     q = request.GET.get("q", "").strip()
     estado = request.GET.get("estado", "activos")
     lista = Empresa.objects.filter(es_prospecto=False).annotate(
@@ -91,6 +99,7 @@ def clientes(request):
 @login_required
 @supervisor_requerido
 def cliente_form(request, pk=None):
+    """Crear o editar un cliente; al crearlo lleva a su ficha para agregarle las sedes."""
     empresa = get_object_or_404(Empresa, pk=pk) if pk else None
     form = EmpresaForm(request.POST or None, instance=empresa)
     if request.method == "POST" and form.is_valid():
@@ -104,6 +113,7 @@ def cliente_form(request, pk=None):
 @login_required
 @supervisor_requerido
 def cliente_detalle(request, pk):
+    """Ficha del cliente con sus sedes; el mismo formulario agrega una sede nueva o edita la elegida (?sede=)."""
     empresa = get_object_or_404(Empresa, pk=pk)
     # Con ?sede=<id> (o el campo «sede» al guardar) el formulario edita esa sede; sin él, agrega una nueva
     id_sede = request.POST.get("sede") or request.GET.get("sede")
@@ -129,6 +139,7 @@ def cliente_detalle(request, pk):
 @supervisor_requerido
 @require_POST
 def cliente_eliminar(request, pk):
+    """Elimina el cliente si no tiene historial; si lo tiene, solo lo deja inactivo para conservarlo."""
     empresa = get_object_or_404(Empresa, pk=pk)
     usos = _usos(empresa, ignorar=("sedes",)) + [u for s in empresa.sedes.all() for u in _usos(s)]
     if usos:
@@ -147,6 +158,7 @@ def cliente_eliminar(request, pk):
 @supervisor_requerido
 @require_POST
 def sede_eliminar(request, pk):
+    """Elimina la sede si no tiene historial; si lo tiene, solo la deja inactiva."""
     sede = get_object_or_404(Sede, pk=pk)
     usos = _usos(sede)
     if usos:

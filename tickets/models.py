@@ -1,3 +1,16 @@
+"""Modelos de la plataforma de tickets.
+
+Organización del archivo:
+- Catálogos: sistemas a intervenir (Categoria) y sus fallas (TipoFalla).
+- Disponibilidad del cliente: franjas horarias y horario laboral.
+- Ticket: la solicitud del cliente, con su radicado consecutivo, estados, aplazamientos, etapas visibles al
+  cliente, rangos en que no puede atender, historial (Seguimiento) y adjuntos.
+- Acta de soporte: lo que se hizo en la visita, con equipos, fotos, evidencias y firmas.
+- Informe al cliente: borrador del informe de visita o de estudio, por zonas con fotos.
+- Oportunidades comerciales y hallazgos detectados en campo.
+- Pasos del área técnica que coordinación decide omitir.
+"""
+
 import os
 import re
 import uuid
@@ -12,7 +25,12 @@ from django.utils import timezone
 from accounts.models import Empresa, Sede
 
 
+# --- Catálogos: sistemas a intervenir y fallas ----------------------------------------------------
 class Categoria(models.Model):
+    """Sistema a intervenir que el cliente elige al radicar (CCTV, alarma, control de acceso…).
+
+    Las inactivas no se ofrecen al radicar, pero se conservan por los tickets y actas que las usan.
+    """
     nombre = models.CharField(max_length=100, unique=True)
     descripcion = models.CharField("descripción", max_length=255, blank=True)
     activa = models.BooleanField(default=True)
@@ -55,6 +73,7 @@ FRANJAS_NO_DISPONIBLE = [("manana", "No en la mañana"), ("tarde", "No en la tar
 FRANJAS_SABADO = [("todo", "No puede el sábado")]
 
 
+# --- Disponibilidad del cliente y horario laboral -------------------------------------------------
 def fuera_de_horario(inicio, fin=None):
     """Explica si la actividad cae fuera del horario de trabajo de JANOTEC."""
     if not inicio:
@@ -77,10 +96,12 @@ def leer_franja(valor):
 
 
 def texto_franja(valor):
+    """La franja guardada en palabras para el cliente: «mañana», «tarde», «todo el día» o «de 08:00 a 10:00»."""
     tipo, desde, hasta = leer_franja(valor)
     return {"manana": "mañana", "tarde": "tarde", "todo": "todo el día"}.get(tipo, f"de {desde} a {hasta}" if desde else "")
 
 
+# --- Ticket: radicado, estados, historial y adjuntos ----------------------------------------------
 class ContadorRadicado(models.Model):
     """Lleva el consecutivo de radicados por año (se reinicia cada año)."""
 
@@ -93,6 +114,9 @@ class ContadorRadicado(models.Model):
 
     @classmethod
     def siguiente(cls, anio=None):
+        """Reserva el siguiente número de radicado del año, bloqueando la fila para que dos tickets
+        simultáneos nunca reciban el mismo. Devuelve (año, número).
+        """
         anio = anio or timezone.localdate().year
         with transaction.atomic():
             cls.objects.get_or_create(anio=anio)
@@ -105,8 +129,16 @@ class ContadorRadicado(models.Model):
 
 
 class Ticket(models.Model):
+    """Solicitud del cliente (soporte, mantenimiento, instalación, requerimiento o cotización).
+
+    Es el hilo de todo el servicio: un solo radicado acompaña al cliente desde que radica hasta el cierre, pasando por
+    el área técnica, el área comercial y bodega. Su estado define la bandeja en que aparece y lo que se puede hacer.
+    """
     class Estado(models.TextChoices):
         # Flujo técnico: generado → recepcionado → en cronograma → autorizado → visita ejecutada → cerrado
+        """Estados del ticket. El flujo técnico es: generado → recepcionado → en cronograma → autorizado → visita
+        ejecutada → cerrado; los demás cubren el informe, la propuesta, bodega, aplazamientos y cancelación.
+        """
         GENERADO = "generado", "Generado"
         RECEPCIONADO = "recepcionado", "Recepcionado"
         EN_CRONOGRAMA = "en_cronograma", "En cronograma"
@@ -123,12 +155,14 @@ class Ticket(models.Model):
         CANCELADO = "cancelado", "Cancelado"
 
     class Prioridad(models.TextChoices):
+        """Urgencia con que el área técnica atiende el ticket."""
         BAJA = "baja", "Baja"
         MEDIA = "media", "Media"
         ALTA = "alta", "Alta"
         CRITICA = "critica", "Crítica"
 
     class Tipo(models.TextChoices):
+        """Qué pide el cliente; define el área que lo atiende y las etapas que ve."""
         MANTENIMIENTO = "mantenimiento", "Mantenimiento"
         SOPORTE = "soporte", "Servicio técnico"
         INSTALACION = "instalacion", "Instalación"
@@ -295,6 +329,7 @@ class Ticket(models.Model):
         return f"{self.radicado} · {self.asunto}"
 
     def save(self, *args, **kwargs):
+        """Asigna el radicado (JNT-AAAA-NNNNNN) al crear y valida que la sede sea de la misma empresa."""
         if not self.radicado:
             anio, numero = ContadorRadicado.siguiente()
             self.radicado = f"{settings.RADICADO_PREFIJO}-{anio}-{numero:06d}"
@@ -310,6 +345,7 @@ class Ticket(models.Model):
             self.prioridad = self.PRIORIDAD_POR_TIPO.get(self.tipo, self.Prioridad.MEDIA)
 
     def get_absolute_url(self):
+        """Ficha del ticket en la plataforma."""
         return reverse("ticket_detalle", args=[self.radicado])
 
     @property
@@ -321,14 +357,17 @@ class Ticket(models.Model):
 
     @property
     def por_confirmar_display(self):
+        """Los datos que el cliente marcó como «por confirmar», en palabras."""
         return [self.POR_CONFIRMAR.get(c, c) for c in (self.por_confirmar or [])]
 
     @property
     def sistema_display(self):
+        """El sistema a intervenir: el escrito a mano o, si no, la categoría elegida."""
         return self.sistema_texto or (str(self.categoria) if self.categoria_id else "")
 
     @property
     def falla_display(self):
+        """La falla elegida de la lista o, si no, la que escribió el cliente."""
         return str(self.falla) if self.falla_id else self.falla_texto
 
     @property
@@ -345,6 +384,7 @@ class Ticket(models.Model):
 
     @property
     def ubicacion(self):
+        """Dirección, municipio y departamento en una sola línea."""
         return " · ".join(x for x in (self.direccion, self.municipio, self.departamento) if x)
 
     # --- Cierre automático tras la visita ejecutada ----------------------------------
@@ -378,6 +418,7 @@ class Ticket(models.Model):
 
     @property
     def tiene_restricciones(self):
+        """Si el cliente indicó días, horas o fechas en que no puede atender la visita."""
         return bool(self.no_disponible) or bool(self.restricciones) or self.rangos_no_disponible.exists()
 
     @property
@@ -422,6 +463,7 @@ class Ticket(models.Model):
     # --- Ayudas de presentación ---------------------------------------------
     @property
     def abierto(self):
+        """Si el ticket sigue en curso (no está cerrado ni cancelado)."""
         return self.estado not in self.ESTADOS_FINALES
 
     @property
@@ -440,6 +482,7 @@ class Ticket(models.Model):
 
     @property
     def color_estado(self):
+        """Color de Bootstrap con que se muestra el estado en las bandejas."""
         return {
             "generado": "secondary",
             "recepcionado": "info",
@@ -457,6 +500,7 @@ class Ticket(models.Model):
 
     @property
     def icono_tipo(self):
+        """Icono de Bootstrap Icons que identifica el tipo de ticket."""
         return {
             "mantenimiento": "bi-wrench-adjustable",
             "soporte": "bi-tools",
@@ -468,6 +512,7 @@ class Ticket(models.Model):
     @property
     def color_prioridad(self):
         # Colores de Bootstrap equivalentes (los badges usan .prioridad-<valor> en janotec.css)
+        """Color de Bootstrap equivalente a la prioridad."""
         return {"baja": "success", "media": "warning", "alta": "danger", "critica": "danger"}[self.prioridad]
 
     # --- Transiciones --------------------------------------------------------
@@ -508,6 +553,7 @@ class Aplazamiento(models.Model):
     """La visita programada se aplazó: el ticket vuelve a «Por programar» y queda el porqué (trazabilidad)."""
 
     class Motivo(models.TextChoices):
+        """Por qué se aplazó la visita; alimenta los indicadores de aplazamientos."""
         CLIENTE = "cliente", "Lo solicitó el cliente"
         TECNICO = "tecnico", "Inconveniente técnico"
         PERSONAL = "personal", "Disponibilidad del personal técnico"
@@ -575,6 +621,7 @@ class Seguimiento(models.Model):
     """Cada movimiento del ticket: respuestas, notas internas, cambios."""
 
     class Tipo(models.TextChoices):
+        """Clase de registro en el historial del ticket."""
         CREACION = "creacion", "Creación"
         COMENTARIO = "comentario", "Comentario"
         NOTA_INTERNA = "nota_interna", "Nota interna"
@@ -605,20 +652,24 @@ class Seguimiento(models.Model):
 
     @property
     def estado_anterior_display(self):
+        """El estado anterior en palabras (también para estados que ya no existen)."""
         return dict(Ticket.Estado.choices).get(self.estado_anterior, self.estado_anterior)
 
     @property
     def estado_nuevo_display(self):
+        """El estado nuevo en palabras (también para estados que ya no existen)."""
         return dict(Ticket.Estado.choices).get(self.estado_nuevo, self.estado_nuevo)
 
 
 def ruta_adjunto(instancia, nombre):
+    """Ruta del adjunto en media/: carpeta por año y mes y nombre aleatorio (el original se guarda aparte)."""
     ext = os.path.splitext(nombre)[1].lower()
     hoy = timezone.localdate()
     return f"adjuntos/{hoy:%Y/%m}/{uuid.uuid4().hex}{ext}"
 
 
 class Adjunto(models.Model):
+    """Archivo adjunto al ticket o a una respuesta del historial; si la respuesta es interna, el cliente no lo ve."""
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="adjuntos")
     seguimiento = models.ForeignKey(
         Seguimiento, on_delete=models.CASCADE, null=True, blank=True, related_name="adjuntos"
@@ -641,13 +692,16 @@ class Adjunto(models.Model):
 
     @property
     def interno(self):
+        """Si el adjunto va en una nota interna (no lo ve el cliente)."""
         return bool(self.seguimiento and self.seguimiento.interno)
 
     @property
     def es_imagen(self):
+        """Si el archivo es una imagen que se puede mostrar en miniatura."""
         return self.nombre_original.lower().rsplit(".", 1)[-1] in ("jpg", "jpeg", "png", "webp", "gif")
 
 
+# --- Acta de soporte: visita, equipos, fotos, evidencias y firmas ---------------------------------
 class ActaSoporte(models.Model):
     """Acta de servicio técnico realizada en campo (historial de cada sede).
 
@@ -658,6 +712,7 @@ class ActaSoporte(models.Model):
     """
 
     class Origen(models.TextChoices):
+        """De dónde viene el acta: la plataforma o el histórico importado de SafetyTrack."""
         SAFETYTRACK = "safetytrack", "SafetyTrack (histórica)"
         PLATAFORMA = "plataforma", "Plataforma de tickets"
 
@@ -669,11 +724,13 @@ class ActaSoporte(models.Model):
     PRIMER_NUMERO_PLATAFORMA = 100001
 
     class Resultado(models.TextChoices):
+        """Cómo quedó el servicio al terminar la visita."""
         SOLUCIONADO = "solucionado", "Solucionado"
         PARCIAL = "parcial", "Solucionado parcialmente"
         RECOMENDACIONES = "recomendaciones", "Recomendaciones"
 
     class Modalidad(models.TextChoices):
+        """Si la visita fue en el sitio o remota."""
         PRESENCIAL = "presencial", "Presencial"
         VIRTUAL = "virtual", "Virtual"
 
@@ -730,41 +787,51 @@ class ActaSoporte(models.Model):
             return contador.ultimo
 
     def get_sistema_display_corto(self):
+        """El sistema intervenido en palabras cortas."""
         return dict(self.SISTEMAS).get(self.sistema, self.sistema.title())
 
     @property
     def es_virtual(self):
+        """Si el soporte se hizo de forma remota."""
         return self.modalidad == self.Modalidad.VIRTUAL
 
     @property
     def firma_tecnico(self):
+        """La firma del técnico que diligenció el acta."""
         return self.firmas.filter(rol=FirmaActa.Rol.TECNICO).first()
 
     @property
     def firma_cliente(self):
+        """La firma de quien recibió el servicio por parte del cliente."""
         return self.firmas.filter(rol=FirmaActa.Rol.CLIENTE).first()
 
     def get_absolute_url(self):
+        """Detalle del acta en la plataforma."""
         return reverse("acta_detalle", args=[self.numero])
 
     @property
     def color_resultado(self):
+        """Color de Bootstrap con que se muestra el resultado."""
         return {"solucionado": "success", "parcial": "warning", "recomendaciones": "info"}.get(self.resultado, "secondary")
 
     @property
     def lugar(self):
+        """Dónde fue la visita: la sede, o el texto de la sede o la ciudad en actas históricas."""
         return str(self.sede) if self.sede else (self.sede_texto or self.ciudad)
 
     @property
     def equipos_intervenidos(self):
+        """Equipos que se revisaron, repararon o configuraron."""
         return [e for e in self.equipos.all() if e.clase == EquipoActa.Clase.INTERVENIDO]
 
     @property
     def equipos_utilizados(self):
+        """Material o equipos que se instalaron o gastaron para dejar el servicio funcionando."""
         return [e for e in self.equipos.all() if e.clase == EquipoActa.Clase.UTILIZADO]
 
     @property
     def equipos_retirados(self):
+        """Equipos que se retiraron (desmonte)."""
         return [e for e in self.equipos.all() if e.clase == EquipoActa.Clase.RETIRADO]
 
 
@@ -772,16 +839,21 @@ class EquipoActa(models.Model):
     """Equipo o material de un acta: lo que se intervino o lo que se usó para dejar el servicio funcionando."""
 
     class Clase(models.TextChoices):
+        """En qué lista del acta va el equipo: intervenido, utilizado o retirado."""
         INTERVENIDO = "intervenido", "Equipo intervenido"  # del cliente: se revisó, reparó, configuró o retiró
         UTILIZADO = "utilizado", "Material o equipo utilizado"  # se instaló o gastó para que el servicio funcione
         RETIRADO = "retirado", "Equipo retirado"  # desmonte: se entrega al cliente o vuelve a bodega si es de JANOTEC
 
     class Trabajo(models.TextChoices):
+        """Qué se le hizo a un equipo intervenido."""
         REVISADO = "revisado", "Revisado"
         REPARADO = "reparado", "Reparado"
         CONFIGURADO = "configurado", "Configurado"
 
     class Propiedad(models.TextChoices):
+        """De quién es el equipo. Define el seguimiento: lo de JANOTEC queda en la hoja de vida del activo
+        y, si se retira, vuelve a bodega; lo del cliente se le entrega.
+        """
         CLIENTE = "cliente", "Del cliente"
         JANOTEC = "janotec", "De JANOTEC"
 
@@ -817,6 +889,7 @@ class ContadorActa(models.Model):
 
 
 def ruta_acta(instancia, nombre):
+    """Ruta de firmas, fotos y evidencias de actas en media/: carpeta por año y mes y nombre aleatorio."""
     ext = os.path.splitext(nombre)[1].lower() or ".png"
     hoy = timezone.localdate()
     return f"actas/{hoy:%Y/%m}/{uuid.uuid4().hex}{ext}"
@@ -840,6 +913,7 @@ class EvidenciaActa(models.Model):
     """Fotos, videos o documentos del trabajo en sí: cómo se hizo y cómo quedó (no de un equipo en particular)."""
 
     class Etapa(models.TextChoices):
+        """En qué momento se tomó la evidencia: durante el trabajo o del resultado final."""
         PROCESO = "proceso", "Durante el trabajo"
         RESULTADO = "resultado", "Resultado final"
 
@@ -859,14 +933,17 @@ class EvidenciaActa(models.Model):
 
     @property
     def extension(self):
+        """Extensión del archivo en minúsculas (de su nombre original)."""
         return os.path.splitext(self.nombre_original or self.archivo.name)[1].lower()
 
     @property
     def es_imagen(self):
+        """Si la evidencia es una foto."""
         return self.extension in self.IMAGENES
 
     @property
     def es_video(self):
+        """Si la evidencia es un video MP4."""
         return self.extension == ".mp4"
 
 
@@ -874,6 +951,7 @@ class FirmaActa(models.Model):
     """Firma de quien interviene en el acta: técnico, acompañantes y representante del cliente."""
 
     class Rol(models.TextChoices):
+        """Quién firma el acta."""
         TECNICO = "tecnico", "Técnico"
         ACOMPANANTE = "acompanante", "Acompañante"
         CLIENTE = "cliente", "Representante del cliente"
@@ -894,7 +972,9 @@ class FirmaActa(models.Model):
         return f"{self.get_rol_display()}: {self.nombre}"
 
 
+# --- Informe al cliente: borrador por zonas con fotos ---------------------------------------------
 def ruta_informe(instancia, nombre):
+    """Ruta del PDF del informe en media/: carpeta por año y mes y nombre aleatorio."""
     return f"informes/{timezone.localdate():%Y/%m}/{uuid.uuid4().hex}.pdf"
 
 
@@ -906,10 +986,12 @@ class InformeBorrador(models.Model):
     """
 
     class Estado(models.TextChoices):
+        """Si el informe sigue en borrador o ya se pasó a limpio."""
         BORRADOR = "borrador", "Borrador"
         APROBADO = "aprobado", "Aprobado (pasado a limpio)"
 
     class Tipo(models.TextChoices):
+        """Informe de una visita, o de estudio (levantamiento para preparar la propuesta)."""
         VISITA = "visita", "Informe de visita (soporte, instalación o desmonte)"
         ESTUDIO = "estudio", "Informe de estudio (levantamiento para la propuesta)"
 
@@ -947,14 +1029,17 @@ class InformeBorrador(models.Model):
 
     @property
     def aprobado(self):
+        """Si el informe ya se aprobó y pasó a limpio."""
         return self.estado == self.Estado.APROBADO
 
     @staticmethod
     def lineas(texto):
+        """Las líneas no vacías de un texto, sin viñetas ni guiones al inicio."""
         return [x.strip(" •-\t") for x in (texto or "").splitlines() if x.strip(" •-\t")]
 
     @property
     def es_estudio(self):
+        """Si es un informe de estudio (levantamiento)."""
         return self.tipo == self.Tipo.ESTUDIO
 
     def filas_suministros(self):
@@ -990,6 +1075,7 @@ class ZonaInforme(models.Model):
 
 
 class FotoZona(models.Model):
+    """Foto de una zona del informe."""
     zona = models.ForeignKey(ZonaInforme, on_delete=models.CASCADE, related_name="fotos")
     archivo = models.FileField(upload_to=ruta_acta)
     nombre_original = models.CharField(max_length=255, blank=True)
@@ -999,6 +1085,7 @@ class FotoZona(models.Model):
         ordering = ["pk"]
 
 
+# --- Oportunidades comerciales y hallazgos detectados en campo ------------------------------------
 class OportunidadComercial(models.Model):
     """Necesidad u oportunidad de venta que el técnico detecta en la visita («una venta jala otra»).
 
@@ -1015,6 +1102,7 @@ class OportunidadComercial(models.Model):
     ]
 
     class Estado(models.TextChoices):
+        """Avance de la oportunidad en el área comercial."""
         NUEVA = "nueva", "Nueva"
         CONTACTADO = "contactado", "Contactado"
         COTIZADO = "cotizado", "Cotizado"
@@ -1043,11 +1131,13 @@ class OportunidadComercial(models.Model):
 
     @property
     def servicios_display(self):
+        """Los servicios de la oportunidad, en palabras."""
         nombres = dict(self.SERVICIOS)
         return [nombres.get(s, s) for s in self.servicios]
 
     @property
     def color_estado(self):
+        """Color de Bootstrap con que se muestra el estado."""
         return {"nueva": "primary", "contactado": "info", "cotizado": "warning", "ganada": "success",
                 "descartada": "secondary"}[self.estado]
 
@@ -1056,6 +1146,7 @@ class Hallazgo(models.Model):
     """Algo que la plataforma detectó sola en el uso real y que no sigue la lógica del proceso (ver diagnostico.py)."""
 
     class Gravedad(models.TextChoices):
+        """Qué tan grave es el hallazgo encontrado en la visita."""
         ALTA = "alta", "Alta"
         MEDIA = "media", "Media"
         BAJA = "baja", "Baja"
@@ -1089,6 +1180,7 @@ class Hallazgo(models.Model):
         return self.titulo
 
 
+# --- Pasos del área técnica omitidos por coordinación ---------------------------------------------
 class PasoSaltado(models.Model):
     """Coordinación omitió un paso del área técnica (p. ej. visita sin programar en el cronograma), con su motivo."""
 

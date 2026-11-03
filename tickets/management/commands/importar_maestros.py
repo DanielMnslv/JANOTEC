@@ -29,15 +29,18 @@ class Simulacion(Exception):
 
 
 def si(valor):
+    """Si la celda del Excel dice que sí («SI», «SÍ», «TRUE», «1» o «X»)."""
     return str(valor or "").strip().upper() in ("SI", "SÍ", "TRUE", "1", "X")
 
 
 def texto(valor, largo=None):
+    """La celda como texto sin espacios a los lados, recortado al largo del campo si se indica."""
     t = "" if valor is None else str(valor).strip()
     return t[:largo] if largo else t
 
 
 def decimal(valor):
+    """La celda como número decimal; None si está vacía o no es un número."""
     try:
         return Decimal(str(valor).strip()) if str(valor or "").strip() else None
     except InvalidOperation:
@@ -65,6 +68,7 @@ class Command(BaseCommand):
                 raise CommandError(f"Al Excel le falta la hoja «{hoja}».")
 
         def filas(nombre):
+            """Cada fila no vacía de la hoja como diccionario {encabezado en minúscula: valor}."""
             it = libro[nombre].iter_rows(values_only=True)
             cab = [texto(c).lower() for c in next(it)]
             for f in it:
@@ -91,10 +95,12 @@ class Command(BaseCommand):
 
     # ------------------------------------------------------------------
     def _contar(self, clave, creado):
+        """Lleva la cuenta de creados y actualizados por tipo de dato, para el resumen final."""
         c, a = self.conteo.get(clave, (0, 0))
         self.conteo[clave] = (c + 1, a) if creado else (c, a + 1)
 
     def _empresas(self, filas):
+        """Crea o actualiza las empresas por su clave. Devuelve {clave: empresa}."""
         mapa = {}
         for f in filas:
             codigo = texto(f.get("clave"), 40)
@@ -122,6 +128,7 @@ class Command(BaseCommand):
         return mapa
 
     def _sedes(self, filas, empresas):
+        """Crea o actualiza las sedes de cada empresa por su nombre. Devuelve {(clave, sede): sede}."""
         mapa = {}
         for f in filas:
             empresa = empresas.get(texto(f.get("clave empresa")))
@@ -138,6 +145,7 @@ class Command(BaseCommand):
         return mapa
 
     def _personal(self, filas):
+        """Crea o actualiza el personal técnico con su rol (dirección, supervisor o agente). Devuelve {usuario: usuario}."""
         mapa = {}
         for f in filas:
             usuario = texto(f.get("usuario"), 150)
@@ -164,6 +172,7 @@ class Command(BaseCommand):
         return mapa
 
     def _actas(self, filas, empresas, sedes, personal):
+        """Importa las actas históricas por su número, con su empresa, sede y técnico. Devuelve {número: acta}."""
         mapa = {}
         zona = timezone.get_current_timezone()
         for f in filas:
@@ -205,6 +214,7 @@ class Command(BaseCommand):
         return mapa
 
     def _equipos(self, filas, actas):
+        """Reemplaza los equipos de cada acta importada por los de la hoja de equipos."""
         por_acta = {}
         for f in filas:
             try:

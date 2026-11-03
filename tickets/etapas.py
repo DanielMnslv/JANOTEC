@@ -17,19 +17,23 @@ SISTEMA_DIAGNOSTICO = "Diagnóstico técnico"
 
 
 def _ficha(ticket):
+    """La ficha comercial del ticket, si la tiene."""
     return getattr(ticket, "ficha", None) if ticket.pk else None
 
 
 def lleva_informe(ticket):
+    """Si el cliente debe ver la etapa «Informe en elaboración» (requerimientos, diagnósticos y comerciales)."""
     return bool(ticket.tipo == Ticket.Tipo.REQUERIMIENTO or _ficha(ticket) or ticket.estado == E.INFORME
                 or (ticket.categoria_id and ticket.categoria.nombre == SISTEMA_DIAGNOSTICO))
 
 
 def lleva_propuesta(ticket):
+    """Si el cliente debe ver la etapa «Propuesta enviada» (tickets con ficha comercial o requerimientos)."""
     return bool(_ficha(ticket) or ticket.tipo == Ticket.Tipo.REQUERIMIENTO)
 
 
 def claves_de(ticket):
+    """Las etapas que aplican a este ticket, en orden."""
     claves = ["recibida", "programada", "inspeccion"]
     if lleva_informe(ticket):
         claves.append("informe")
@@ -39,6 +43,7 @@ def claves_de(ticket):
 
 
 def etapa_actual(ticket, claves):
+    """En qué etapa está el ticket según su estado y la etapa de la ficha comercial."""
     ficha = _ficha(ticket)
     if ticket.estado in (E.CERRADO, E.CANCELADO):
         return "cierre"
@@ -54,6 +59,7 @@ def etapa_actual(ticket, claves):
 
 
 def _fecha_real(ticket, clave):
+    """Cuándo se cumplió de verdad esa etapa (radicación, visita, acta, envío de la propuesta o cierre)."""
     ficha = _ficha(ticket)
     if clave == "recibida":
         return timezone.localtime(ticket.creado).date() if ticket.creado else None
