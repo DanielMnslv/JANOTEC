@@ -299,7 +299,7 @@ def ticket_detalle(request, radicado):
                 "actas_ticket": actas_visibles(request.user).filter(ticket=ticket).order_by("-fecha"),
                 "puede_acta": _puede_diligenciar_acta(request.user, ticket),
                 "es_levantamiento": _es_levantamiento(ticket), "ficha": getattr(ticket, "ficha", None),
-                "actividades": ticket.actividades.prefetch_related("encargados", "acompanantes").order_by("-fecha"),
+                "actividades": ticket.actividades.prefetch_related("encargados").order_by("-fecha"),
                 "rangos": ticket.rangos_no_disponible.all(), "etapas": etapas.etapas_cliente(ticket),
                 "visitas_previas": reincidencia.visitas_previas(ticket) if request.user.es_personal else [],
                 "puede_informe": ticket.estado == E.INFORME and _puede_entregar_informe(request.user, ticket),
@@ -708,7 +708,7 @@ def _puede_diligenciar_acta(usuario, ticket, ignorar_pasos=False):
         return False
     if usuario.es_supervisor or ticket.asignado_a_id == usuario.pk:
         return True
-    return ticket.actividades.filter(Q(encargados=usuario) | Q(acompanantes=usuario)).exists()
+    return ticket.actividades.filter(encargados=usuario).exists()
 
 
 def _puede_vincular_acta(usuario, ticket):

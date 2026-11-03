@@ -83,7 +83,7 @@ class ProgramarTests(BaseCronograma):
         self.assertIn("fernando@llano.co ; admin@llano.co", html)  # «notificar a» se llena solo
         mail.outbox.clear()
         martes = proximo(1)
-        self.programar(martes, acompanantes=[self.tec2.pk])
+        self.programar(martes, encargados=[self.tec.pk, self.tec2.pk])
         a = Actividad.objects.get()
         self.ticket.refresh_from_db()
         self.assertEqual((self.ticket.estado, self.ticket.asignado_a), (E.EN_CRONOGRAMA, self.tec))
@@ -160,7 +160,7 @@ class AutorizacionTests(BaseCronograma):
         return re.search(r"http://testserver(/cronograma/autorizacion/[^/\s]+/)", correo.body).group(1)
 
     def test_envia_correo_con_documentos_y_botones(self):
-        self.programar(proximo(1), acompanantes=[self.tec2.pk])
+        self.programar(proximo(1), encargados=[self.tec.pk, self.tec2.pk])
         a = Actividad.objects.get()
         # Sin documentos no se envía (salvo que se confirme)
         r = self.enviar(a)
@@ -319,7 +319,7 @@ class SemanalTests(BaseCronograma):
     def test_envio_semanal_a_tecnicos_y_administrativa(self):
         sin_correo = Usuario.objects.create_user("carlos", "", "Clave-segura-1", rol="agente", first_name="Carlos")
         a = Actividad.objects.get(ticket=self.ticket)
-        a.acompanantes.add(sin_correo)
+        a.encargados.add(sin_correo)
         url = reverse("cronograma:correos") + f"?d={self.lunes:%Y-%m-%d}"
         self.client.force_login(self.coord)
         self.assertContains(self.client.get(url + "&ver=0"), "Vista previa")
@@ -851,7 +851,7 @@ class CorreoAlTecnicoTests(BaseCronograma):
         mail.outbox.clear()
         datos = {"ticket": self.ticket.pk, "fecha": a.fecha.isoformat(), "hora_inicio": "13:00", "hora_fin": "17:00",
                  "cliente": a.cliente, "sede": a.sede, "actividad": a.actividad, "tipo": a.tipo, "linea": a.linea,
-                 "encargados": [self.tec.pk], "acompanantes": [self.tec2.pk], "notificar_a": a.notificar_a,
+                 "encargados": [self.tec.pk, self.tec2.pk], "notificar_a": a.notificar_a,
                  "sst_duracion": "medio día"}
         with self.captureOnCommitCallbacks(execute=True):
             self.client.post(reverse("cronograma:editar", args=[a.pk]), datos)

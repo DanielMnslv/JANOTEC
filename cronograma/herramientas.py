@@ -35,8 +35,7 @@ def respaldo(lunes):
         filas.append({
             "fecha": a.fecha.isoformat(), "hi": a.hora_inicio.strftime("%H:%M"), "hf": a.hora_fin.strftime("%H:%M"),
             "cliente": a.cliente, "sede": a.sede, "actividad": a.actividad, "tipo": TIPOS_INV.get(a.tipo, "Visita Técnica"),
-            "linea": a.linea, "enc": [semanal.nombre(u) for u in a.encargados.all()],
-            "aco": [semanal.nombre(u) for u in a.acompanantes.all()], "ins": a.insumos, "dest": a.correos,
+            "linea": a.linea, "enc": [semanal.nombre(u) for u in a.encargados.all()], "aco": [], "ins": a.insumos, "dest": a.correos,
             "sst": {"req": a.sst}, "veh": a.vehiculo, "via": a.viaticos, "sstPersona": a.sst_persona,
             "sstTrabajo": a.sst_trabajo, "sstDuracion": a.sst_duracion, "alturas": a.trabajo_alturas,
             "radicado": a.ticket.radicado if a.ticket else "",
@@ -129,7 +128,7 @@ def importar(datos, autor):
             trabajo_alturas=bool(r.get("alturas")), creado_por=autor,
         )
         sin_usuario = []
-        for campo, relacion, rol in (("enc", actividad.encargados, "Encargado"), ("aco", actividad.acompanantes, "Acompañante")):
+        for campo, relacion, rol in (("enc", actividad.encargados, "Encargado"), ("aco", actividad.encargados, "Acompañante")):
             for nombre in r.get(campo) or []:
                 u = _buscar_tecnico(nombre, tecnicos)
                 if u:
@@ -163,7 +162,7 @@ def rango_rapido(clave, hoy=None):
 
 def historial(desde, hasta):
     actividades = list(Actividad.objects.filter(fecha__range=(desde, hasta))
-                       .select_related("ticket").prefetch_related("encargados", "acompanantes"))
+                       .select_related("ticket").prefetch_related("encargados"))
     ind = semanal.indicadores(actividades)
     semanas = {}
     for a in actividades:

@@ -170,7 +170,7 @@ def aplazar_visita(ticket, autor, motivo, detalle, informar_cliente=False):
     filtro = Q(fecha__gte=timezone.localdate())
     if visita:
         filtro |= Q(fecha=timezone.localtime(visita).date())
-    actividades = list(ticket.actividades.filter(filtro).prefetch_related("encargados", "acompanantes"))
+    actividades = list(ticket.actividades.filter(filtro).prefetch_related("encargados"))
     tecnicos = {t for a in actividades for t in a.tecnicos()}
     programacion = " · ".join(
         f"{cuando(a)}" + (f" con {', '.join(t.get_full_name() or t.username for t in a.tecnicos())}" if a.tecnicos() else "")

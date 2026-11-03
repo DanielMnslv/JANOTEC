@@ -90,7 +90,7 @@
                 {% if a.sede %}<div class="small text-muted-jn">{{ a.sede }}{% if a.ticket.enlace_mapa %} · <a href="{{ a.ticket.enlace_mapa }}" target="_blank" rel="noopener" title="Cómo llegar"><i class="bi bi-geo-alt"></i></a>{% endif %}</div>{% endif %}
                 <div class="small"><span class="pill-tipo">{{ a.get_tipo_display }}</span> {% if a.ticket %}<a class="radicado small" href="{{ a.ticket.get_absolute_url }}">{{ a.ticket.radicado }}</a>{% endif %}</div>
                 <div class="small mt-1">{{ a.actividad|truncatechars:90 }}</div>
-                <div class="small mt-1"><i class="bi bi-person-gear"></i> {% for u in a.encargados.all %}{{ u.first_name|default:u.username }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}{% if a.acompanantes.all %} <span class="text-muted-jn">+ {% for u in a.acompanantes.all %}{{ u.first_name|default:u.username }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</div>
+                <div class="small mt-1"><i class="bi bi-person-gear"></i> {% for u in a.encargados.all %}{{ u.first_name|default:u.username }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</div>
                 {% if a.insumos %}<div class="small text-muted-jn mt-1"><i class="bi bi-box-seam"></i> {{ a.insumos|truncatechars:70 }}</div>{% endif %}
                 <div class="mt-1">
                   {% if a.trabajo_alturas %}<span class="badge text-bg-danger">Alturas</span>{% endif %}
@@ -143,8 +143,7 @@
           <div class="col-12"><label class="form-label small mb-1">Actividad</label>{{ form.actividad }}</div>
           <div class="col-md-6" id="bloque-tipo"><label class="form-label small mb-1">Tipo</label>{{ form.tipo }}</div>
           <div class="col-md-6"><label class="form-label small mb-1">Línea / solución</label>{{ form.linea }}</div>
-          <div class="col-md-6"><label class="form-label small mb-1">Encargado(s)</label><div class="lista-tecnicos" id="lista-encargados">{% for op in form.encargados %}<div class="form-check">{{ op.tag }} <label class="form-check-label small" for="{{ op.id_for_label }}">{{ op.choice_label }}</label></div>{% endfor %}</div></div>
-          <div class="col-md-6"><label class="form-label small mb-1">Acompañante(s)</label><div class="lista-tecnicos" id="lista-acompanantes">{% for op in form.acompanantes %}<div class="form-check">{{ op.tag }} <label class="form-check-label small" for="{{ op.id_for_label }}">{{ op.choice_label }}</label></div>{% endfor %}</div></div>
+          <div class="col-12"><label class="form-label small mb-1">Personal técnico encargado</label><div class="lista-tecnicos" id="lista-encargados">{% for op in form.encargados %}<div class="form-check">{{ op.tag }} <label class="form-check-label small" for="{{ op.id_for_label }}">{{ op.choice_label }}</label></div>{% endfor %}</div></div>
           <div class="col-12"><label class="form-label small mb-1">Insumos y equipos</label>
             {% include "cronograma/_selector_inventario.html" %}{{ form.insumos }}</div>
           <div class="col-12" id="aviso-interna" hidden><div class="alert alert-secondary small py-2 mb-0"><i class="bi bi-building"></i> <b>Actividad interna</b> (sin ticket): se le avisa al técnico, pero no lleva autorización ni se le envía nada a ningún cliente.</div></div>
@@ -221,7 +220,7 @@
     campo('ticket').value = v.ticket || '';
     textos.forEach(function (n) { if (v[n] !== undefined && campo(n)) campo(n).value = v[n]; });
     casillas.forEach(function (n) { campo(n).checked = !!v[n]; });
-    ['encargados', 'acompanantes'].forEach(function (n) {
+    ['encargados'].forEach(function (n) {
       form.querySelectorAll('[name=' + n + ']').forEach(function (c) { c.checked = (v[n] || []).includes(parseInt(c.value, 10)); });
     });
     const aviso = document.getElementById('aviso-restricciones');

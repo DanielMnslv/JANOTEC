@@ -2,7 +2,7 @@
 <div class="card mb-3 tabla-ancha">
   <div class="table-responsive">
     <table class="table table-sm table-hover mb-0 align-top tabla-cronograma">
-      <thead><tr><th>#</th><th>Fecha</th><th>Inicio</th><th>Fin</th><th>Cliente</th><th>Sede</th><th>Actividad</th><th>Tipo</th><th>Encargado(s)</th><th>Insumos y equipos</th><th>Notificar a</th>{% if editable %}<th class="no-imprimir"></th>{% endif %}</tr></thead>
+      <thead><tr><th>#</th><th>Fecha</th><th>Inicio</th><th>Fin</th><th>Cliente</th><th>Sede</th><th>Actividad</th><th>Tipo</th><th>Personal técnico encargado</th><th>Insumos y equipos</th><th>Notificar a</th>{% if editable %}<th class="no-imprimir"></th>{% endif %}</tr></thead>
       <tbody>
       {% for a in todas %}
         <tr class="{% if a.en_rojo %}table-danger{% elif a.es_interna %}fila-interna{% endif %}">
@@ -15,7 +15,7 @@
           <td class="small">{{ a.actividad }}{% if a.en_rojo %}<div class="text-danger fw-semibold"><i class="bi bi-exclamation-triangle"></i> {{ a.motivo_rojo }}</div>{% endif %}</td>
           <td class="small"><span class="pill-tipo">{{ a.get_tipo_display }}</span>
             <div class="mt-1">{% if a.trabajo_alturas %}<span class="badge text-bg-danger">Alturas</span> {% endif %}{% if a.sst %}<span class="badge text-bg-warning">SST</span> {% endif %}{% if a.vehiculo %}<span class="badge text-bg-light border">Vehículo</span> {% endif %}{% if a.viaticos %}<span class="badge text-bg-light border">Viáticos</span>{% endif %}</div></td>
-          <td class="small">{% for u in a.encargados.all %}{{ u.get_full_name|default:u.username }}<br>{% endfor %}{% for u in a.acompanantes.all %}<span class="text-muted-jn">+ {{ u.get_full_name|default:u.username }}</span><br>{% endfor %}</td>
+          <td class="small">{% for u in a.encargados.all %}{{ u.get_full_name|default:u.username }}<br>{% endfor %}</td>
           <td class="small">{{ a.insumos|default:"—" }}</td>
           <td class="small">{% if a.es_interna %}<span class="badge text-bg-dark"><i class="bi bi-building"></i> Actividad interna</span><div class="text-muted-jn">Sin autorización del cliente</div>
             {% else %}{% for c in a.correos %}<div>{{ c }}</div>{% empty %}<span class="text-danger">Sin correo</span>{% endfor %}

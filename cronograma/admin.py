@@ -8,7 +8,7 @@ class ActividadAdmin(admin.ModelAdmin):
     list_display = ("fecha", "hora_inicio", "cliente", "sede", "tipo", "autorizacion", "ticket")
     list_filter = ("tipo", "autorizacion", "fecha")
     search_fields = ("cliente", "sede", "actividad", "ticket__radicado")
-    filter_horizontal = ("encargados", "acompanantes")
+    filter_horizontal = ("encargados",)
     raw_id_fields = ("ticket",)
 
 

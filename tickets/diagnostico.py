@@ -126,7 +126,7 @@ def acta_por_otra_persona():
     desde = timezone.now() - timedelta(days=30)
     casos = []
     for acta in ActaSoporte.objects.filter(origen=ActaSoporte.Origen.PLATAFORMA, fecha__gte=desde, ticket__isnull=False).select_related("ticket", "tecnico"):
-        fueron = {u.pk for a in acta.ticket.actividades.prefetch_related("encargados", "acompanantes") for u in a.tecnicos()}
+        fueron = {u.pk for a in acta.ticket.actividades.prefetch_related("encargados") for u in a.tecnicos()}
         if acta.tecnico_id and fueron and acta.tecnico_id not in fueron:
             nombres = ", ".join(sorted({_nombre(u) for a in acta.ticket.actividades.all() for u in a.tecnicos()}))
             casos.append(_caso(f"acta{acta.pk}", f"Acta {acta.numero} ({acta.ticket.radicado}) quedó a nombre de {acta.tecnico_texto}",

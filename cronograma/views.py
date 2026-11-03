@@ -47,10 +47,10 @@ def semana(request):
     lunes = _lunes(request)
     domingo = lunes + timedelta(days=6)
     actividades = (Actividad.objects.filter(fecha__range=(lunes, domingo))
-                   .select_related("ticket", "ticket__empresa").prefetch_related("encargados", "acompanantes"))
+                   .select_related("ticket", "ticket__empresa").prefetch_related("encargados"))
     editable = request.user.es_supervisor
     if not editable:
-        actividades = actividades.filter(Q(encargados=request.user) | Q(acompanantes=request.user)).distinct()
+        actividades = actividades.filter(encargados=request.user).distinct()
     por_dia = {lunes + timedelta(days=i): [] for i in range(7)}
     for a in actividades:
         por_dia[a.fecha].append(a)
@@ -84,8 +84,7 @@ def semana(request):
                 datos.update(fecha=a.fecha.isoformat(), hora_inicio=a.hora_inicio.strftime("%H:%M"),
                              hora_fin=a.hora_fin.strftime("%H:%M"), ticket=a.ticket_id or "",
                              radicado=a.ticket.radicado if a.ticket else "",
-                             encargados=[u.pk for u in a.encargados.all()],
-                             acompanantes=[u.pk for u in a.acompanantes.all()])
+                             encargados=[u.pk for u in a.encargados.all()])
                 actividades_json[a.pk] = datos
         cambio = semanal.cambios(lunes)
         contexto["cambios_pendientes"] = bool(cambio and cambio["hay"])
@@ -168,7 +167,7 @@ def eliminar(request, pk):
 @supervisor_requerido
 @require_POST
 def enviar_autorizacion(request, pk):
-    actividad = get_object_or_404(Actividad.objects.prefetch_related("encargados", "acompanantes"), pk=pk)
+    actividad = get_object_or_404(Actividad.objects.prefetch_related("encargados"), pk=pk)
     if actividad.es_interna:
         messages.error(request, "Es una actividad interna: no se le envía autorización a ningún cliente.")
         return _volver(actividad)
@@ -529,7 +528,7 @@ def compartido(request, token):
 @require_POST
 def enviar_actividad(request, pk):
     """El correo de una sola actividad: a sus técnicos y a la administrativa."""
-    actividad = get_object_or_404(Actividad.objects.prefetch_related("encargados", "acompanantes"), pk=pk)
+    actividad = get_object_or_404(Actividad.objects.prefetch_related("encargados"), pk=pk)
     enviados, faltan = semanal.enviar_actividad(actividad)
     messages.success(request, f"Correo de la actividad enviado ({enviados}).")
     if faltan:
@@ -541,7 +540,7 @@ def enviar_actividad(request, pk):
 @supervisor_requerido
 def correo_sst(request, pk):
     """Ver (y enviar ya, sin esperar la aceptación del cliente) la solicitud de acompañamiento HSE."""
-    actividad = get_object_or_404(Actividad.objects.prefetch_related("encargados", "acompanantes"), pk=pk)
+    actividad = get_object_or_404(Actividad.objects.prefetch_related("encargados"), pk=pk)
     destino = servicios.correo_sst()
     if request.method == "POST":
         if not destino:

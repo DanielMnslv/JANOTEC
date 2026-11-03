@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 def actividades_de(lunes):
     return (Actividad.objects.filter(fecha__range=(lunes, lunes + timedelta(days=6)))
-            .select_related("ticket").prefetch_related("encargados", "acompanantes"))
+            .select_related("ticket").prefetch_related("encargados"))
 
 
 MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
@@ -176,8 +176,7 @@ def _filas_tecnico(actividades, tecnico):
     filas = []
     for a in actividades:
         if tecnico in a.tecnicos():
-            filas.append({"a": a, "rol": "Encargado" if tecnico in a.encargados.all() else "Apoyo",
-                          "insumos": parse_insumos(a.insumos)})
+            filas.append({"a": a, "insumos": parse_insumos(a.insumos)})
     return filas
 
 
@@ -342,9 +341,8 @@ def enviar_actividad(actividad):
         if not t.email:
             faltan.append(nombre(t))
             continue
-        rol = "Encargado" if t in actividad.encargados.all() else "Apoyo"
         correos.append({"tipo": "Técnico", "nombre": nombre(t), "email": t.email, "asunto": asunto,
-                        "html": render_to_string("cronograma/correo_actividad.html", dict(base, destinatario=nombre(t), rol=rol))})
+                        "html": render_to_string("cronograma/correo_actividad.html", dict(base, destinatario=nombre(t)))})
     admin = correo_administrativa()
     if admin:
         correos.append({"tipo": "Administrativa", "nombre": "Área administrativa", "email": admin,

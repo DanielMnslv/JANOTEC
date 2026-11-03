@@ -306,7 +306,7 @@ def panel(request):
     from cronograma.models import Actividad
     hoy = servicios.timezone.localdate()
     proximas = list(Actividad.objects.filter(fecha__range=(hoy, hoy + servicios.timedelta(days=14))).exclude(insumos="")
-                    .select_related("ticket").prefetch_related("encargados", "acompanantes").order_by("fecha", "hora_inicio"))
+                    .select_related("ticket").prefetch_related("encargados").order_by("fecha", "hora_inicio"))
     entregadas = servicios.entregas_de(proximas)
     for a in proximas:
         a.entregado = entregadas.get(a.pk)

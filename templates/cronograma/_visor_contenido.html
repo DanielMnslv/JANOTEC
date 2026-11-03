@@ -2,7 +2,7 @@
 <div class="text-muted-jn mb-3">Semana del {{ lunes|date:"j \d\e F" }} al {{ domingo|date:"j \d\e F \d\e Y" }} · solo lectura{% if actualizado %} · actualizado a las {{ actualizado|time:"g:i:s a" }}{% endif %}</div>
 <div class="card mb-4"><div class="table-responsive">
   <table class="table table-sm mb-0 align-top">
-    <thead><tr><th>Fecha</th><th>Hora</th><th>Cliente / sede</th><th>Actividad</th><th>Tipo</th><th>Encargado(s)</th><th>Insumos y equipos</th>{% if compartido %}<th>Autorización</th>{% endif %}</tr></thead>
+    <thead><tr><th>Fecha</th><th>Hora</th><th>Cliente / sede</th><th>Actividad</th><th>Tipo</th><th>Personal técnico encargado</th><th>Insumos y equipos</th>{% if compartido %}<th>Autorización</th>{% endif %}</tr></thead>
     <tbody>
     {% for a in actividades %}
       <tr>

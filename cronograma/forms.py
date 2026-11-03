@@ -21,7 +21,7 @@ class ActividadForm(BootstrapMixin, forms.ModelForm):
     class Meta:
         model = Actividad
         fields = ["ticket", "fecha", "hora_inicio", "hora_fin", "cliente", "sede", "actividad", "tipo", "linea",
-                  "encargados", "acompanantes", "insumos", "notificar_a", "trabajo_alturas", "sst", "sst_persona",
+                  "encargados", "insumos", "notificar_a", "trabajo_alturas", "sst", "sst_persona",
                   "sst_trabajo", "sst_duracion", "vehiculo", "viaticos"]
         widgets = {
             "fecha": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
@@ -31,7 +31,6 @@ class ActividadForm(BootstrapMixin, forms.ModelForm):
             "insumos": forms.Textarea(attrs={"rows": 2, "placeholder": "Busque arriba en el inventario o escriba: 3 batería 12V 7.5 A, 1 PIR sensor, 20 m UTP"}),
             "notificar_a": forms.TextInput(attrs={"placeholder": "correo@cliente.com; otro@cliente.com"}),
             "encargados": forms.CheckboxSelectMultiple,
-            "acompanantes": forms.CheckboxSelectMultiple,
         }
 
     def __init__(self, *args, **kwargs):
@@ -48,13 +47,10 @@ class ActividadForm(BootstrapMixin, forms.ModelForm):
         personas = (Actividad.objects.exclude(sst_persona="").order_by().values_list("sst_persona", flat=True).distinct()[:50])
         self.fields["sst_persona"].widget = ConSugerencias(personas, attrs={"placeholder": "Ej.: Javier Jaramillo"})
         self.fields["encargados"].queryset = tecnicos_queryset()
-        self.fields["acompanantes"].queryset = tecnicos_queryset()
-        self.fields["acompanantes"].required = False
         self.fields["sst_duracion"].required = False
         self.fields["notificar_a"].help_text = "Reciben la autorización de ingreso. Sin correo, la actividad queda en rojo."
         self._aplicar_estilos()
-        for nombre in ("encargados", "acompanantes"):
-            self.fields[nombre].widget.attrs["class"] = "form-check-input"
+        self.fields["encargados"].widget.attrs["class"] = "form-check-input"
 
     def clean_notificar_a(self):
         return " ; ".join(validar_correos(self.cleaned_data["notificar_a"]))

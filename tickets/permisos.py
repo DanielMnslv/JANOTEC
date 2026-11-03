@@ -28,7 +28,7 @@ def tickets_visibles(usuario):
         return qs.filter(area=Ticket.Area.TECNICA)
     if usuario.es_personal:
         return qs.filter(
-            Q(asignado_a=usuario) | Q(actividades__encargados=usuario) | Q(actividades__acompanantes=usuario)
+            Q(asignado_a=usuario) | Q(actividades__encargados=usuario)
         ).distinct()
     if usuario.es_comercial:
         return qs.filter(Q(ficha__isnull=False) | Q(radicado_por=usuario) | Q(asignado_a=usuario))

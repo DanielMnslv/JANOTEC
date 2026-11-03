@@ -140,9 +140,7 @@ class Actividad(models.Model):
     # LINEAS son sugerencias: se puede escribir otra línea o solución
     linea = models.CharField("línea / solución", max_length=60, default="Otro")
     encargados = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="actividades_encargado",
-                                        verbose_name="encargado(s)")
-    acompanantes = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="actividades_apoyo", blank=True,
-                                          verbose_name="acompañante(s)")
+                                        verbose_name="personal técnico encargado")
     insumos = models.TextField("insumos y equipos", blank=True)
     notificar_a = models.CharField("notificar a", max_length=500, blank=True,
                                    help_text="Correos del cliente que reciben la autorización de ingreso (separados por «;»).")
@@ -243,13 +241,8 @@ class Actividad(models.Model):
         return {"sin_enviar": "secondary", "enviada": "warning", "aceptada": "success", "rechazada": "danger"}[self.autorizacion]
 
     def tecnicos(self):
-        """Encargados y acompañantes, sin repetir."""
-        vistos, lista = set(), []
-        for u in list(self.encargados.all()) + list(self.acompanantes.all()):
-            if u.pk not in vistos:
-                vistos.add(u.pk)
-                lista.append(u)
-        return lista
+        """El personal técnico encargado de la actividad."""
+        return list(self.encargados.all())
 
     # --- Valores iniciales desde el ticket -----------------------------------------
     TIPO_POR_TICKET = {"mantenimiento": Tipo.MANTENIMIENTO, "soporte": Tipo.SOPORTE, "requerimiento": Tipo.VISITA,
