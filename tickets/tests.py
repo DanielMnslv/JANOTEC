@@ -1678,6 +1678,67 @@ class InformeBorradorTests(BaseTickets):
         self.assertTrue(r.content.startswith(b"%PDF"))
         self.assertIn("BORRADOR", r["Content-Disposition"])
 
+    def test_el_informe_se_titula_segun_lo_que_se_hizo(self):
+        from . import informe
+        acta = self.ticket.actas.get()
+        for actividad, titulo, frase in (("Mantenimiento preventivo", "Mantenimiento preventivo del sistema",
+                                          "se realizó el mantenimiento preventivo"),
+                                         ("Instalación", "Instalación del sistema", "se realizó la instalación"),
+                                         ("Reubicación o traslado", "Reubicación del sistema", "se realizó la reubicación"),
+                                         ("Soporte , Desinstalación", "Soporte técnico y desmonte del sistema",
+                                          "se realizó el soporte técnico y el desmonte")):
+            acta.actividad = actividad
+            acta.save()
+            textos = informe.textos(self.ticket)
+            self.assertTrue(textos["asunto"].startswith(titulo), textos["asunto"])
+            self.assertIn(frase, textos["introduccion"])
+        acta.actividad = "Desinstalación"
+        acta.save()
+        self.assertIn("El registro del desmonte", informe.textos(self.ticket)["justificacion"])
+
+    def test_desmonte_en_varias_visitas_da_una_tabla_por_sistema(self):
+        from django.utils import timezone
+
+        from . import informe
+        from .models import ActaSoporte, EquipoActa
+        for numero, sistema, equipo in ((100901, "ALARMA", "Sirena"), (100902, "CCTV", "Cámara domo")):
+            otra = ActaSoporte.objects.create(numero=numero, fecha=timezone.now(), empresa=self.emp_a, sede=self.sede_a,
+                                              tecnico=self.agente, actividad="Desinstalación", sistema=sistema,
+                                              diagnostico="x", resultado="solucionado", ticket=self.ticket,
+                                              origen=ActaSoporte.Origen.PLATAFORMA)
+            EquipoActa.objects.create(acta=otra, clase=EquipoActa.Clase.RETIRADO, equipo=equipo, cantidad="1",
+                                      propiedad=EquipoActa.Propiedad.CLIENTE)
+        tablas = [(nombre, sistema, [e.equipo for e in equipos])
+                  for nombre, sistema, equipos in informe.tablas_de_equipos(informe.actas_del_ticket(self.ticket))]
+        self.assertEqual(tablas, [("equipos retirados", "ALARMA", ["Panel de alarma", "Sirena"]),
+                                  ("equipos retirados", "CCTV", ["Cámara domo"])])
+
+    def test_requerimientos_lleva_justificacion_e_imagen_del_catalogo(self):
+        from io import BytesIO
+
+        from PIL import Image
+
+        from comercial.models import ItemCatalogo
+        from . import informe
+        png = BytesIO()
+        Image.new("RGB", (40, 40), "blue").save(png, "PNG")
+        ItemCatalogo.objects.create(descripcion="Cámara bala IP 4 MP", valor_unitario=100,
+                                    imagen=SimpleUploadedFile("camara.png", png.getvalue()))
+        ItemCatalogo.objects.create(descripcion="Cable UTP", valor_unitario=1)  # sin imagen
+        imagenes = informe.imagenes_del_catalogo(["Cámara bala IP 4 MP DS-2CD1043G0E-I", "Cable UTP cat 6", "Sirena"])
+        self.assertEqual(list(imagenes), ["Cámara bala IP 4 MP DS-2CD1043G0E-I"])
+        textos = informe.textos_estudio(self.ticket)
+        self.assertTrue(textos["asunto"].startswith("Requerimientos técnicos para el sistema"))
+        self.assertIn("se definieron a partir de lo observado en sitio", textos["justificacion"])
+        self.client.force_login(self.agente)
+        self.client.post(self.url, {"accion": "generar", "tipo": "estudio"})
+        b = informe.vigente(self.ticket)
+        b.suministros = "3 Cámara bala IP 4 MP DS-2CD1043G0E-I | Hikvision\n80 m Cable UTP cat 6"
+        b.save()
+        r = self.client.get(reverse("informe_borrador_pdf", args=[self.ticket.radicado]))
+        self.assertTrue(r.content.startswith(b"%PDF"))
+        self.assertContains(self.client.get(self.url), "Informe de requerimientos técnicos")
+
     def test_tecnico_corrige_pero_solo_coordinacion_aprueba(self):
         self.client.force_login(self.agente)
         self.client.post(self.url, {"accion": "generar"})

@@ -319,7 +319,7 @@ def devolver(request, radicado):
 
     borrador = inf.vigente(ticket)
     if borrador and not borrador.aprobado:
-        messages.error(request, "El borrador del informe de estudio todavía no está aprobado por coordinación.")
+        messages.error(request, "El borrador del informe de requerimientos todavía no está aprobado por coordinación.")
         return redirect(ticket)
     form = InformeForm(request.POST, request.FILES)
     if not form.is_valid():
@@ -327,7 +327,7 @@ def devolver(request, radicado):
         return redirect(ticket)
     d = form.cleaned_data
     archivos = list(d["archivos"])
-    if borrador and borrador.archivo:  # el informe de estudio pasado a limpio queda como informe del ticket
+    if borrador and borrador.archivo:  # el informe de requerimientos pasado a limpio queda como informe del ticket
         archivos.append(inf.copia_pdf(borrador))
     servicios.registrar_informe(ficha, request.user, d, archivos, con_visita=True)
     servicios.devolver_a_comercial(ficha, request.user, "\n".join(x for x in (
@@ -454,7 +454,7 @@ def catalogo(request):
     editar = ItemCatalogo.objects.filter(pk=request.GET.get("editar")).first() if request.GET.get("editar", "").isdigit() else None
     if request.method == "POST":
         editar = ItemCatalogo.objects.filter(pk=request.POST.get("pk")).first() if request.POST.get("pk", "").isdigit() else None
-        form = ItemCatalogoForm(request.POST, instance=editar)
+        form = ItemCatalogoForm(request.POST, request.FILES, instance=editar)
         if form.is_valid():
             item = form.save(commit=False)
             item.fuente = item.fuente or f"Ajustado por {request.user.get_full_name() or request.user.username}"

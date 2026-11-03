@@ -215,6 +215,14 @@ def ruta_archivo(instancia, nombre):
     return f"comercial/{timezone.localdate():%Y/%m}/{uuid.uuid4().hex}{os.path.splitext(nombre)[1].lower()}"
 
 
+def ruta_imagen_catalogo(instancia, nombre):
+    """Ruta de la imagen de referencia en media/: carpeta del catálogo y nombre aleatorio."""
+    import os
+    import uuid
+
+    return f"comercial/catalogo/{uuid.uuid4().hex}{os.path.splitext(nombre)[1].lower()}"
+
+
 class ItemCatalogo(models.Model):
     """Precio de referencia de un material, equipo o servicio, para armar propuestas sin volver a digitarlo."""
 
@@ -230,6 +238,9 @@ class ItemCatalogo(models.Model):
     fuente = models.CharField("de dónde salió el precio", max_length=120, blank=True,
                               help_text="Por ejemplo, la propuesta en la que se cotizó (PE-2026-07-08-V1).")
     activo = models.BooleanField(default=True)
+    # Foto del producto: sale en la tabla de equipos del informe de requerimientos técnicos
+    imagen = models.ImageField("imagen de referencia", upload_to=ruta_imagen_catalogo, blank=True,
+                               help_text="Foto del equipo (jpg o png). Sale en el informe de requerimientos técnicos.")
     actualizado = models.DateTimeField(auto_now=True)
 
     class Meta:

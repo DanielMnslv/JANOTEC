@@ -13,7 +13,7 @@
         <tbody>
         {% for i in items %}
           <tr class="{% if not i.activo %}text-muted-jn{% endif %}">
-            <td>{{ i.descripcion }}{% if i.unidad %} <span class="text-muted-jn">({{ i.unidad }})</span>{% endif %}{% if not i.activo %} <span class="badge text-bg-secondary">Inactivo</span>{% endif %}</td>
+            <td>{{ i.descripcion }}{% if i.unidad %} <span class="text-muted-jn">({{ i.unidad }})</span>{% endif %}{% if i.imagen %} <i class="bi bi-image text-success" title="Tiene imagen de referencia"></i>{% endif %}{% if not i.activo %} <span class="badge text-bg-secondary">Inactivo</span>{% endif %}</td>
             <td>{{ i.get_tipo_display }}</td>
             <td class="text-end text-nowrap">${{ i.valor_unitario|floatformat:"2g" }}</td>
             <td class="text-end">{{ i.iva|floatformat:"-2" }}%</td>
@@ -27,7 +27,7 @@
   </div>
   <div class="col-lg-4">
     <div class="card"><div class="card-header">{% if editar %}Editar ítem{% else %}Nuevo ítem{% endif %}</div>
-      <form method="post" class="card-body">{% csrf_token %}
+      <form method="post" class="card-body" enctype="multipart/form-data">{% csrf_token %}
         {% if editar %}<input type="hidden" name="pk" value="{{ editar.pk }}">{% endif %}
         {% for campo in form %}{% include "tickets/_campo.html" %}{% endfor %}
         <div class="d-flex gap-2"><button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button>

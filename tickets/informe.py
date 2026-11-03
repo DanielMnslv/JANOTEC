@@ -22,8 +22,10 @@ from .models import ActaSoporte, EquipoActa, InformeBorrador
 
 MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
          "noviembre", "diciembre"]
-# Actividad del acta → cómo se nombra el trabajo en el informe
-TRABAJOS = {"desinstalación": "desmonte", "instalación": "instalación", "soporte": "soporte técnico"}
+# Actividad del acta → cómo se nombra el trabajo en el informe, con su artículo («se realizó la instalación»)
+TRABAJOS = {"desinstalación": "el desmonte", "instalación": "la instalación", "soporte": "el soporte técnico",
+            "mantenimiento preventivo": "el mantenimiento preventivo", "ampliación o mejoramiento": "la ampliación y mejora",
+            "reubicación o traslado": "la reubicación"}
 CLASES = [(EquipoActa.Clase.RETIRADO, "equipos retirados"), (EquipoActa.Clase.INTERVENIDO, "equipos intervenidos"),
           (EquipoActa.Clase.UTILIZADO, "materiales y equipos instalados")]
 
@@ -50,10 +52,21 @@ def _sistemas(actas):
                for a in actas if a.sistema])
 
 
-def _trabajos(actas):
-    """Los trabajos hechos en las actas, en palabras; si no hay ninguno, «visita técnica»."""
-    return _y([TRABAJOS.get(x.strip().lower(), x.strip().lower()) for a in actas for x in a.actividad.split(",") if x.strip()]) \
-        or "visita técnica"
+def _trabajos(actas, articulo=True):
+    """Los trabajos hechos en las actas, en palabras: «el desmonte y la instalación». Sin artículo sirve de título.
+
+    Una actividad escrita a mano en actas anteriores se nombra «el servicio de …»; si no hay ninguna, «la visita técnica».
+    """
+    nombres = [TRABAJOS.get(x.strip().lower(), f"el servicio de {x.strip().lower()}")
+               for a in actas for x in a.actividad.split(",") if x.strip()] or ["la visita técnica"]
+    if not articulo:
+        nombres = [n.split(" ", 1)[1] for n in nombres]
+    return _y(nombres)
+
+
+def _de(trabajo):
+    """«de» + el trabajo, con la contracción del español: «del desmonte», «de la instalación»."""
+    return "del " + trabajo[3:] if trabajo.startswith("el ") else "de " + trabajo
 
 
 def _minuscula(texto):
@@ -94,7 +107,7 @@ def textos(ticket):
         documenta.append("la relación de los equipos intervenidos e instalados")
     if hay_fotos:
         documenta.append("las evidencias fotográficas de la intervención")
-    introduccion = (f"En atención a la solicitud {ticket.radicado} ({ticket.asunto}), el día {fechas} se realizó el {trabajo} "
+    introduccion = (f"En atención a la solicitud {ticket.radicado} ({ticket.asunto}), el día {fechas} se realizó {trabajo} "
                     f"del sistema de {sistemas} en la sede {sede} de {ticket.empresa}" + (f", en {ciudad}" if ciudad else "")).rstrip(".")
     introduccion += f". El presente informe documenta {_y(documenta)}."
 
@@ -115,7 +128,7 @@ def textos(ticket):
         actividades.append("Registro de evidencias fotográficas de los equipos.")
 
     if retirados:
-        justificacion = (f"El registro del {trabajo} y del inventario permite dejar constancia de los elementos recuperados del "
+        justificacion = (f"El registro {_de(trabajo)} y del inventario permite dejar constancia de los elementos recuperados del "
                          f"sistema de {sistemas} de la sede {sede}, apoyar su trazabilidad y facilitar los procesos "
                          "administrativos de control, almacenamiento o traslado de activos.")
     else:
@@ -127,7 +140,7 @@ def textos(ticket):
     resultados = {ActaSoporte.Resultado.SOLUCIONADO: "quedó solucionada", ActaSoporte.Resultado.PARCIAL:
                   "quedó solucionada parcialmente", ActaSoporte.Resultado.RECOMENDACIONES: "quedó atendida con recomendaciones"}
     resultado = next((resultados[a.resultado] for a in reversed(actas) if a.resultado in resultados), "fue atendida")
-    conclusiones = [f"Se realizó el {trabajo} del sistema de {sistemas} de la sede {sede}" + (f", en {ciudad}" if ciudad else "") +
+    conclusiones = [f"Se realizó {trabajo} del sistema de {sistemas} de la sede {sede}" + (f", en {ciudad}" if ciudad else "") +
                     f"; la solicitud {resultado}."]
     if retirados:
         con_placa = [f"{e.equipo} {e.referencia}".strip() + f", inventario {e.placa or e.serial}" for e in retirados
@@ -148,7 +161,7 @@ def textos(ticket):
 
     return {
         "destinatario": str(ticket.empresa),
-        "asunto": f"{trabajo.capitalize()} del sistema de {sistemas} · sede {sede}",
+        "asunto": f"{_trabajos(actas, articulo=False).capitalize()} del sistema de {sistemas} · sede {sede}",
         "introduccion": introduccion,
         "actividades": "\n".join(actividades),
         "justificacion": justificacion,
@@ -181,7 +194,8 @@ def _sistema_ticket(ticket, actas):
 
 
 def textos_estudio(ticket):
-    """Informe de estudio (como los de Diana Corporación o Pastos y Leguminosas): zonas, equipos a suministrar y garantía."""
+    """Informe de requerimientos técnicos (como los de Llanogas La Primavera o Ganacampo): zonas con la visual de cada
+    punto, equipos a suministrar, justificación y garantía. Es la base de la propuesta económica."""
     actas = actas_del_ticket(ticket)
     sistema = _sistema_ticket(ticket, actas)
     sistema_txt = sistema if sistema[:2].isupper() else _minuscula(sistema)
@@ -189,7 +203,7 @@ def textos_estudio(ticket):
     sede = (a0.lugar if a0 else "") or (str(ticket.sede) if ticket.sede else "")
     ciudad = ((a0.ciudad if a0 else "") or (ticket.sede.ciudad if ticket.sede else "")).strip()
     lugar = " · ".join(x for x in (sede, ciudad) if x)
-    introduccion = (f"En atención a la solicitud {ticket.radicado} ({ticket.asunto}), me permito enviar el informe del estudio "
+    introduccion = (f"En atención a la solicitud {ticket.radicado} ({ticket.asunto}), me permito enviar el informe de requerimientos técnicos "
                     f"realizado por el personal técnico de JANOTEC S.A.S. en las instalaciones de {ticket.empresa}"
                     + (f" ({lugar})" if lugar else "")).rstrip(".")
     introduccion += (". En él se relacionan las zonas a cubrir, con la visual de cada punto, y los equipos y materiales "
@@ -206,12 +220,14 @@ def textos_estudio(ticket):
     recomendaciones += [l for a in actas for l in InformeBorrador.lineas(a.observaciones)]
     return {
         "destinatario": str(ticket.empresa),
-        "asunto": f"Estudio del sistema de {sistema_txt}" + (f" · {sede}" if sede else ""),
+        "asunto": f"Requerimientos técnicos para el sistema de {sistema_txt}" + (f" · {sede}" if sede else ""),
         "introduccion": introduccion,
         "actividades": "\n".join(actividades),
-        "justificacion": "",
+        "justificacion": (f"Los requerimientos se definieron a partir de lo observado en sitio: las zonas a cubrir, las "
+                          f"distancias y las condiciones de la instalación. Los equipos y materiales relacionados permiten "
+                          f"implementar el sistema de {sistema_txt} con la cobertura requerida por {ticket.empresa}."),
         "conclusiones": "\n".join([
-            "Con el estudio se definieron las zonas a cubrir y la ubicación de cada equipo.",
+            "Con la visita se definieron las zonas a cubrir y la ubicación de cada equipo.",
             "Los equipos, materiales y servicios relacionados son la base de la propuesta económica que enviará el área comercial."]),
         "recomendaciones": "\n".join(recomendaciones),
         "garantia": GARANTIA,
@@ -279,8 +295,13 @@ E_PIE_FOTO = ParagraphStyle("pie_foto", parent=E, fontSize=7.5, leading=9.5, ali
 
 def _foto(foto, ancho):
     """La foto reducida (y enderezada según el celular) para que el PDF no pese demasiado."""
+    return _imagen(foto.archivo, ancho)
+
+
+def _imagen(archivo, ancho):
+    """La imagen de un archivo guardado, reducida para el PDF; None si no se puede leer."""
     try:
-        with foto.archivo.open("rb") as f:
+        with archivo.open("rb") as f:
             img = ImageOps.exif_transpose(Image.open(f)).convert("RGB")
     except Exception:  # noqa: BLE001 — una foto dañada o HEIC no detiene el informe
         return None
@@ -305,6 +326,32 @@ def _barra(texto, ancho, fondo=VERDE):
     return barra
 
 
+def _sin_tildes(texto):
+    """Minúsculas sin tildes ni espacios repetidos, para comparar descripciones."""
+    import unicodedata
+
+    texto = unicodedata.normalize("NFD", (texto or "").lower())
+    return " ".join("".join(c for c in texto if unicodedata.category(c) != "Mn").split())
+
+
+def imagenes_del_catalogo(descripciones):
+    """{descripción: imagen} de los ítems del catálogo de precios que tienen imagen de referencia.
+
+    Un ítem corresponde a una línea si su descripción es igual a la de la línea o está contenida en ella (o al revés);
+    si varios corresponden, gana la descripción más larga, que es la más específica.
+    """
+    from comercial.models import ItemCatalogo
+
+    con_imagen = [(_sin_tildes(i.descripcion), i.imagen) for i in ItemCatalogo.objects.exclude(imagen="")]
+    salida = {}
+    for d in descripciones:
+        buscada = _sin_tildes(d)
+        candidatos = [(len(desc), img) for desc, img in con_imagen if desc and (desc in buscada or buscada in desc)]
+        if buscada and candidatos:
+            salida[d] = max(candidatos, key=lambda c: c[0])[1]
+    return salida
+
+
 def _cuerpo_estudio(borrador, ancho):
     """Resultados por zona (fotos de la visual), tabla de lo que se va a suministrar, servicios y garantía."""
     h = []
@@ -327,9 +374,17 @@ def _cuerpo_estudio(borrador, ancho):
 
     filas = borrador.filas_suministros()
     if filas:
+        # La imagen de referencia sale del catálogo de precios; la columna solo aparece si algún ítem la tiene
+        imagenes = imagenes_del_catalogo([d for _, d, _ in filas])
         cuerpo = [[_p(x, E_ETIQUETA) for x in ("N.º", "Cant.", "Equipos y materiales", "Marca")]]
         cuerpo += [[_p(i), _p(c), _p(d), _p(m or "N/A")] for i, (c, d, m) in enumerate(filas, 1)]
-        tabla = Table(cuerpo, colWidths=[ancho * x for x in (0.07, 0.12, 0.59, 0.22)], repeatRows=1)
+        anchos = (0.07, 0.12, 0.59, 0.22)
+        if imagenes:
+            cuerpo[0].append(_p("Imagen de referencia", E_ETIQUETA))
+            for fila, (_, d, _) in zip(cuerpo[1:], filas):
+                fila.append((_imagen(imagenes[d], ancho * 0.16) if d in imagenes else None) or "")
+            anchos = (0.06, 0.09, 0.47, 0.18, 0.2)
+        tabla = Table(cuerpo, colWidths=[ancho * x for x in anchos], repeatRows=1)
         tabla.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, BORDE), ("BACKGROUND", (0, 0), (-1, 0), TINTE_VERDE),
                                    ("VALIGN", (0, 0), (-1, -1), "TOP")]))
         h += [Spacer(1, 6), _barra(f"TABLA DE EQUIPOS Y MATERIALES A SUMINISTRAR · {borrador.ticket.empresa}".upper(), ancho), tabla]
@@ -338,6 +393,21 @@ def _cuerpo_estudio(borrador, ancho):
     if borrador.garantia.strip():
         h += [Paragraph("GARANTÍA Y VIDA ÚTIL", E_TITULO), Paragraph(_esc(borrador.garantia), E_TEXTO)]
     return h
+
+
+def tablas_de_equipos(actas):
+    """[(qué se hizo, SISTEMA, equipos)]: una tabla por lo que se hizo con los equipos y por sistema.
+
+    Junta las actas del ticket: un desmonte hecho en varias visitas da una sola tabla por sistema, como en los
+    informes de 4-72. Primero los retirados, luego los intervenidos y al final lo instalado.
+    """
+    grupos = {}
+    for a in actas:
+        sistema = a.get_sistema_display_corto().upper() if a.sistema else ""
+        for e in a.equipos.all():
+            grupos.setdefault((e.clase, sistema), []).append(e)
+    return [(nombre, sistema, equipos) for clase, nombre in CLASES
+            for (clase_grupo, sistema), equipos in grupos.items() if clase_grupo == clase]
 
 
 def pdf(borrador, definitivo=False):
@@ -356,7 +426,7 @@ def pdf(borrador, definitivo=False):
     h = [encabezado, Spacer(1, 10),
          _p(f"{ciudad.upper() + ', ' if ciudad else ''}{_fecha_larga(timezone.localtime(fecha)).upper()}", E_ETIQUETA), Spacer(1, 8),
          _p(f"SEÑORES: {borrador.destinatario.upper()}", E_ETIQUETA), Spacer(1, 6),
-         Paragraph(f"<b>ASUNTO:</b> {'INFORME DE ESTUDIO' if borrador.es_estudio else 'INFORME DE VISITA TÉCNICA'}<br/>"
+         Paragraph(f"<b>ASUNTO:</b> {'INFORME DE REQUERIMIENTOS TÉCNICOS' if borrador.es_estudio else 'INFORME DE VISITA TÉCNICA'}<br/>"
                    f"{_esc(borrador.asunto.upper())}", E_TEXTO),
          Paragraph(f"Ticket {t.radicado}", ParagraphStyle("rad", parent=E, textColor=GRIS)),
          Paragraph("INTRODUCCIÓN", E_TITULO), Paragraph(_esc(borrador.introduccion), E_TEXTO),
@@ -364,24 +434,19 @@ def pdf(borrador, definitivo=False):
 
     if borrador.es_estudio:
         h += _cuerpo_estudio(borrador, ancho)
-    # Tablas de equipos por sistema y por lo que se hizo con ellos (el estudio usa sus zonas y su tabla)
-    for a in ([] if borrador.es_estudio else actas):
-        for clase, nombre in CLASES:
-            equipos = [e for e in a.equipos.all() if e.clase == clase]
-            if not equipos:
-                continue
-            sistema = a.get_sistema_display_corto().upper() if a.sistema else ""
-            cabeza = Table([[Paragraph(f"TABLA DE {nombre.upper()}" + (f" · SISTEMA DE {sistema}" if sistema else ""), E_SECCION)]],
-                           colWidths=[ancho])
-            cabeza.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), VERDE)]))
-            filas = [[_p(x, E_ETIQUETA) for x in ("N.º", "Cant.", "Descripción", "Referencia", "Marca", "Serial / placa")]]
-            for i, e in enumerate(equipos, 1):
-                filas.append([_p(i), _p(e.cantidad or "1"), _p(e.equipo), _p(e.referencia or "Sin referencia"),
-                              _p(e.marca or "No registrada"), _p(" · ".join(x for x in (e.serial, e.placa) if x) or "—")])
-            tabla = Table(filas, colWidths=[ancho * x for x in (0.06, 0.08, 0.3, 0.2, 0.16, 0.2)], repeatRows=1)
-            tabla.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, BORDE), ("BACKGROUND", (0, 0), (-1, 0), TINTE_VERDE),
-                                       ("VALIGN", (0, 0), (-1, -1), "TOP")]))
-            h += [Spacer(1, 10), cabeza, tabla]
+    # Tablas de equipos (el estudio usa sus zonas y su tabla)
+    for nombre, sistema, equipos in ([] if borrador.es_estudio else tablas_de_equipos(actas)):
+        cabeza = Table([[Paragraph(f"TABLA DE {nombre.upper()}" + (f" · SISTEMA DE {sistema}" if sistema else ""), E_SECCION)]],
+                       colWidths=[ancho])
+        cabeza.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), VERDE)]))
+        filas = [[_p(x, E_ETIQUETA) for x in ("N.º", "Cant.", "Descripción", "Referencia", "Marca", "Serial / placa")]]
+        for i, e in enumerate(equipos, 1):
+            filas.append([_p(i), _p(e.cantidad or "1"), _p(e.equipo), _p(e.referencia or "Sin referencia"),
+                          _p(e.marca or "No registrada"), _p(" · ".join(x for x in (e.serial, e.placa) if x) or "—")])
+        tabla = Table(filas, colWidths=[ancho * x for x in (0.06, 0.08, 0.3, 0.2, 0.16, 0.2)], repeatRows=1)
+        tabla.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, BORDE), ("BACKGROUND", (0, 0), (-1, 0), TINTE_VERDE),
+                                   ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+        h += [Spacer(1, 10), cabeza, tabla]
 
     if borrador.justificacion.strip():
         h += [Paragraph("JUSTIFICACIÓN", E_TITULO), Paragraph(_esc(borrador.justificacion), E_TEXTO)]

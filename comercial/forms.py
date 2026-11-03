@@ -365,7 +365,7 @@ class ItemCatalogoForm(BootstrapMixin, forms.ModelForm):
     class Meta:
         from .models import ItemCatalogo
         model = ItemCatalogo
-        fields = ["descripcion", "tipo", "unidad", "valor_unitario", "iva", "activo"]
+        fields = ["descripcion", "tipo", "unidad", "valor_unitario", "iva", "imagen", "activo"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

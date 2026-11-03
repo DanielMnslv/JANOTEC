@@ -717,7 +717,9 @@ class ActaSoporte(models.Model):
         PLATAFORMA = "plataforma", "Plataforma de tickets"
 
     # Mismas opciones del formato «Acta de Soporte, Instalación, Desinstalación V1»
-    ACTIVIDADES = ["Soporte", "Instalación", "Desinstalación"]
+    # Lo que se hizo en la visita; define el título y las frases del informe (tickets/informe.py, TRABAJOS)
+    ACTIVIDADES = ["Soporte", "Mantenimiento preventivo", "Instalación", "Ampliación o mejoramiento",
+                   "Reubicación o traslado", "Desinstalación"]
     SISTEMAS = [("CCTV", "CCTV"), ("ALARMA", "Alarma"), ("EQUIPOS INFORMATICOS", "Equipos informáticos"),
                 ("CONTROL DE ACCESO", "Control de acceso"), ("REDES", "Fibra óptica / red"),
                 ("ENERGIA SOLAR", "Energía fotovoltaica"), ("RADIO", "Radiocomunicaciones"), ("GPS", "GPS")]
@@ -745,7 +747,8 @@ class ActaSoporte(models.Model):
         related_name="actas", verbose_name="técnico",
     )
     tecnico_texto = models.CharField("técnico (como se escribió)", max_length=150, blank=True)
-    actividad = models.CharField(max_length=100, blank=True, help_text="Soporte, Instalación, Desinstalación…")
+    actividad = models.CharField(max_length=200, blank=True,
+                                 help_text="Soporte, Mantenimiento preventivo, Instalación, Desinstalación…")
     sistema = models.CharField(max_length=60, blank=True, help_text="CCTV, Alarma, Equipos informáticos…")
     # Vacía en las actas anteriores: no se registraba y no se puede suponer
     modalidad = models.CharField("modalidad de atención", max_length=12, choices=Modalidad.choices, blank=True)
@@ -991,9 +994,10 @@ class InformeBorrador(models.Model):
         APROBADO = "aprobado", "Aprobado (pasado a limpio)"
 
     class Tipo(models.TextChoices):
-        """Informe de una visita, o de estudio (levantamiento para preparar la propuesta)."""
-        VISITA = "visita", "Informe de visita (soporte, instalación o desmonte)"
-        ESTUDIO = "estudio", "Informe de estudio (levantamiento para la propuesta)"
+        """Informe de una visita, o de requerimientos técnicos (levantamiento para preparar la propuesta).
+        El valor «estudio» se conserva por los borradores ya guardados."""
+        VISITA = "visita", "Informe de visita (soporte, mantenimiento, instalación, reubicación o desmonte)"
+        ESTUDIO = "estudio", "Informe de requerimientos técnicos (para la propuesta)"
 
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="informes_borrador")
     tipo = models.CharField(max_length=10, choices=Tipo.choices, default=Tipo.VISITA)

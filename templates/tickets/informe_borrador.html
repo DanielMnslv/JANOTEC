@@ -32,9 +32,9 @@
     <span><i class="bi bi-file-earmark-text"></i> {{ borrador.get_tipo_display }}</span>
     {% if not borrador.aprobado and en_informe %}
       {% if borrador.es_estudio %}
-        <button class="btn btn-link btn-sm p-0" name="accion" value="redactar" formnovalidate onclick="this.form.tipo.value='visita'; return confirm('Se redacta como informe de visita (soporte, instalación o desmonte). ¿Continuar?')">Cambiar a informe de visita</button>
+        <button class="btn btn-link btn-sm p-0" name="accion" value="redactar" formnovalidate onclick="this.form.tipo.value='visita'; return confirm('Se redacta como informe de visita (soporte, mantenimiento, instalación, reubicación o desmonte). ¿Continuar?')">Cambiar a informe de visita</button>
       {% else %}
-        <button class="btn btn-link btn-sm p-0" name="accion" value="redactar" formnovalidate onclick="this.form.tipo.value='estudio'; return confirm('Se redacta como informe de estudio (zonas con fotos y equipos a suministrar). ¿Continuar?')">Cambiar a informe de estudio</button>
+        <button class="btn btn-link btn-sm p-0" name="accion" value="redactar" formnovalidate onclick="this.form.tipo.value='estudio'; return confirm('Se redacta como informe de requerimientos técnicos (zonas con fotos y equipos a suministrar). ¿Continuar?')">Cambiar a informe de requerimientos</button>
       {% endif %}
     {% endif %}
   </div>
@@ -84,10 +84,10 @@
       </div>
       {% include "tickets/_campo.html" with campo=form.suministros %}
       {% include "tickets/_campo.html" with campo=form.servicios %}
+      <div class="form-text mt-n2 mb-3">La imagen de referencia de cada equipo sale del catálogo de precios (área comercial).</div>
       {% include "tickets/_campo.html" with campo=form.garantia %}
-    {% else %}
-      {% include "tickets/_campo.html" with campo=form.justificacion %}
     {% endif %}
+    {% include "tickets/_campo.html" with campo=form.justificacion %}
     {% include "tickets/_campo.html" with campo=form.conclusiones %}
     {% include "tickets/_campo.html" with campo=form.recomendaciones %}
   </fieldset>
