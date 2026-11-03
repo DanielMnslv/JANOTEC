@@ -717,6 +717,8 @@ class ActaBase(BaseTickets):
             "equipos-0-equipo": "Cámara", "equipos-0-marca": "Hikvision", "equipos-0-cantidad": "1", "equipos-0-fotos": [foto],
         }
         datos.update(kw)
+        for clave in [k for k in datos if k.startswith("equipos-") and k.endswith("-equipo") and datos[k]]:
+            datos.setdefault(clave.replace("-equipo", "-propiedad"), "cliente")  # en el acta es obligatorio decir de quién es
         return datos
 
 
@@ -1309,6 +1311,27 @@ class EquiposIntervenidosYUtilizadosTests(ActaBase):
             self.assertEqual(acta.equipos_retirados, [])
             self.assertEqual([e.trabajo for e in acta.equipos_intervenidos], ["reparado"])
         self.assertContains(self.client.get(acta.get_absolute_url()), "Reparado")
+
+    def test_cada_equipo_intervenido_dice_de_quien_es(self):
+        """Del cliente o de JANOTEC define el seguimiento; lo de JANOTEC lleva placa y sale en su hoja de vida."""
+        from inventario.models import Activo
+
+        from .models import ActaSoporte
+        self.client.force_login(self.agente)
+        url = reverse("acta_nueva", args=[self.ticket.radicado])
+        self.assertContains(self.client.get(url), "¿De quién es?")
+        r = self.client.post(url, self.datos_acta(**{"equipos-0-propiedad": "", "equipos-0-accion": "reparado"}))
+        self.assertContains(r, "Indique si el equipo es del cliente o de JANOTEC.")
+        r = self.client.post(url, self.datos_acta(**{"equipos-0-propiedad": "janotec", "equipos-0-accion": "configurado"}))
+        self.assertContains(r, "Para hacerle seguimiento escriba la placa")
+        r = self.client.post(url, self.datos_acta(**{"equipos-0-propiedad": "janotec", "equipos-0-accion": "configurado",
+                                                     "equipos-0-placa": "cam-bal-2mp009"}))
+        self.assertEqual(r.status_code, 302)
+        e = ActaSoporte.objects.get(ticket=self.ticket).equipos.get()
+        self.assertEqual((e.propiedad, e.placa, e.trabajo), ("janotec", "CAM-BAL-2MP009", "configurado"))
+        Activo.objects.create(placa="CAM-BAL-2MP009", descripcion="Cámara bala")
+        self.client.force_login(Usuario.objects.create_superuser("jefe.prueba", "jefe@janotec.test", "x"))
+        self.assertContains(self.client.get(reverse("inventario:activo", args=["CAM-BAL-2MP009"])), e.acta.numero)
 
     def test_dos_listas_en_el_acta(self):
         from .models import ActaSoporte, EquipoActa

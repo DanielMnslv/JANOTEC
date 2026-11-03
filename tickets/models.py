@@ -782,8 +782,8 @@ class EquipoActa(models.Model):
         CONFIGURADO = "configurado", "Configurado"
 
     class Propiedad(models.TextChoices):
-        CLIENTE = "cliente", "Del cliente: se le entrega"
-        JANOTEC = "janotec", "De JANOTEC (alquiler): vuelve a bodega"
+        CLIENTE = "cliente", "Del cliente"
+        JANOTEC = "janotec", "De JANOTEC"
 
     acta = models.ForeignKey(ActaSoporte, on_delete=models.CASCADE, related_name="equipos")
     propiedad = models.CharField("¿de quién es?", max_length=10, choices=Propiedad.choices, blank=True)

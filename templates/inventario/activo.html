@@ -27,6 +27,14 @@
     </div>
     <h2 class="h5 mb-3">Hoja de vida</h2>
     <ul class="list-group mb-4">{% for m in movimientos %}{% include "inventario/_movimiento.html" %}{% empty %}<li class="list-group-item text-muted-jn">Sin movimientos.</li>{% endfor %}</ul>
+    <h2 class="h5 mb-3">Intervenciones en actas de soporte</h2>
+    <ul class="list-group mb-4">{% for e in intervenciones %}
+      <li class="list-group-item d-flex flex-wrap justify-content-between gap-2">
+        <span><a href="{{ e.acta.get_absolute_url }}" class="radicado">{{ e.acta.numero }}</a> · {{ e.acta.fecha|date:"d/m/Y" }}
+          {% if e.acta.ticket %}· {{ e.acta.ticket.radicado }}{% endif %}{% if e.acta.sede %} · {{ e.acta.sede }}{% endif %}
+          {% if e.observaciones %}<span class="d-block small text-muted-jn">{{ e.observaciones }}</span>{% endif %}</span>
+        <span class="badge text-bg-light border align-self-start">{% if e.clase == 'retirado' %}Retirado{% elif e.trabajo %}{{ e.get_trabajo_display }}{% else %}{{ e.get_clase_display }}{% endif %}</span>
+      </li>{% empty %}<li class="list-group-item text-muted-jn">Ninguna acta registra esta placa.</li>{% endfor %}</ul>
   </div>
   <div class="col-lg-4">
     <div class="card mb-3">

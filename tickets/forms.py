@@ -957,7 +957,8 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
     accion = forms.ChoiceField(label="¿Qué se hizo?", required=False, initial="revisado", choices=[
         ("revisado", "Revisado"), ("reparado", "Reparado"), ("configurado", "Configurado"), ("retirado", "Se retiró (desmonte)")])
     propiedad = forms.ChoiceField(label="¿De quién es?", required=False, choices=[
-        ("", "— Elija —"), ("cliente", "Del cliente: se le entrega"), ("janotec", "De JANOTEC (alquiler): vuelve a bodega")])
+        ("", "— Elija —"), ("cliente", "Del cliente"), ("janotec", "De JANOTEC")],
+        help_text="Define el seguimiento: lo de JANOTEC queda en la hoja de vida del equipo; si se retira, vuelve a bodega.")
     placa = forms.CharField(label="Placa de inventario", max_length=40, required=False)
 
     # Ejemplos que orientan al técnico según la lista
@@ -1005,11 +1006,12 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
 
     def clean(self):
         datos = super().clean()
-        if self.es_retiro and datos.get("equipo"):
+        if "propiedad" in self.fields and datos.get("equipo"):
             if not datos.get("propiedad"):
                 self.add_error("propiedad", "Indique si el equipo es del cliente o de JANOTEC.")
             elif datos["propiedad"] == "janotec" and not (datos.get("placa") or datos.get("serial")):
-                self.add_error("placa", "Para devolverlo al inventario escriba la placa (o el serial) del equipo de JANOTEC.")
+                self.add_error("placa", "Para devolverlo al inventario escriba la placa (o el serial) del equipo de JANOTEC."
+                               if self.es_retiro else "Para hacerle seguimiento escriba la placa (o el serial) del equipo de JANOTEC.")
         return datos
 
     def clean_fotos(self):

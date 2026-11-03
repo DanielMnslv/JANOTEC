@@ -212,16 +212,6 @@
     });
   });
 
-  // --- «Se retiró»: solo entonces se pregunta de quién es y la placa ----------
-  function mostrarRetiro(sel) {
-    const caja = sel.closest('.equipo-acta').querySelector('.solo-retiro');
-    if (caja) caja.hidden = sel.value !== 'retirado';
-  }
-  document.addEventListener('change', function (ev) {
-    if (ev.target.matches('select[name$="-accion"]')) mostrarRetiro(ev.target);
-  });
-  document.querySelectorAll('select[name$="-accion"]').forEach(mostrarRetiro);
-
   // --- Ubicación de la visita (si el técnico lo permite) ---------------------
   const estado = document.getElementById('estado-gps');
   if (navigator.geolocation) {

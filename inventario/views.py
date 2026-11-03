@@ -341,7 +341,11 @@ def activo_detalle(request, placa):
     activo = get_object_or_404(Activo.objects.select_related("tecnico", "empresa", "sede", "ticket_destino"), placa=placa)
     movimientos = activo.movimientos.select_related("tecnico", "empresa", "sede", "ticket", "acta").order_by("-fecha", "-creado")
     form = CambioEstadoForm(initial={"fecha": servicios.timezone.localdate()}) if request.user.gestiona_inventario else None
-    return render(request, "inventario/activo.html", {"activo": activo, "movimientos": movimientos, "form": form})
+    from tickets.models import EquipoActa
+    intervenciones = (EquipoActa.objects.filter(placa__iexact=activo.placa).select_related("acta", "acta__ticket", "acta__sede")
+                      .order_by("-acta__fecha"))
+    return render(request, "inventario/activo.html", {"activo": activo, "movimientos": movimientos, "form": form,
+                                                      "intervenciones": intervenciones})
 
 
 @login_required
