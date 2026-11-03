@@ -319,7 +319,7 @@ def devolver(request, radicado):
 
     borrador = inf.vigente(ticket)
     if borrador and not borrador.aprobado:
-        messages.error(request, "El borrador del informe de requerimientos todavía no está aprobado por coordinación.")
+        messages.error(request, "El borrador del informe de requerimientos todavía no está aprobado por dirección.")
         return redirect(ticket)
     form = InformeForm(request.POST, request.FILES)
     if not form.is_valid():

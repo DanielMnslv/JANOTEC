@@ -8,7 +8,7 @@
     <div class="small text-muted-jn">{{ ticket.asunto }}</div>
   </div>
   <div class="d-flex gap-2 align-items-center">
-    {% if borrador.aprobado %}<span class="badge text-bg-success">Aprobado · pasado a limpio</span>{% else %}<span class="badge text-bg-warning">Borrador</span>{% endif %}
+    {% if borrador.aprobado %}<span class="badge text-bg-success">Aprobado · pasado a limpio</span>{% elif borrador.en_revision %}<span class="badge text-bg-info">En revisión de dirección</span>{% else %}<span class="badge text-bg-warning">Borrador</span>{% endif %}
     <a class="btn btn-outline-primary btn-sm" href="{% url 'informe_borrador_pdf' ticket.radicado %}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> {% if borrador.aprobado %}Ver informe aprobado{% else %}Ver PDF borrador{% endif %}</a>
   </div>
 </div>
@@ -23,7 +23,11 @@
 {% else %}
   <div class="alert alert-info small mb-3">
     <i class="bi bi-info-circle"></i> La plataforma redactó este borrador con los datos del acta. Las <b>tablas de equipos</b> (con referencia, marca y serial) y el <b>anexo de fotos</b> salen del acta en el PDF; aquí se corrige el texto.
-    {% if puede_aprobar %}Cuando quede bien, oprima <b>Aprobar y pasar a limpio</b>.{% else %}Coordinación lo revisa y lo aprueba para pasarlo a limpio.{% endif %}
+    {% if borrador.en_revision %}
+      {% if puede_aprobar %}Coordinación lo envió para su aprobación: corríjalo si hace falta y oprima <b>Aprobar y pasar a limpio</b>, o devuélvalo con lo que hay que corregir.{% else %}Está en revisión de dirección: dirección lo aprueba o lo devuelve con observaciones.{% endif %}
+    {% elif puede_aprobar %}Cuando quede bien, oprima <b>Aprobar y pasar a limpio</b>.
+    {% elif puede_enviar %}Cuando quede bien, oprima <b>Enviar a dirección</b>: dirección lo revisa y lo aprueba.
+    {% else %}Coordinación lo revisa y lo envía a dirección, que lo aprueba.{% endif %}
   </div>
 {% endif %}
 
@@ -39,7 +43,7 @@
     {% endif %}
   </div>
   <input type="hidden" name="tipo" value="">
-  <fieldset class="card-body" {% if borrador.aprobado or not en_informe %}disabled{% endif %}>
+  <fieldset class="card-body" {% if borrador.aprobado or not en_informe or bloqueado %}disabled{% endif %}>
     {% for e in form.non_field_errors %}<div class="alert alert-danger small">{{ e }}</div>{% endfor %}
     <div class="row">
       {% include "tickets/_campo.html" with campo=form.destinatario clase="col-md-5" %}
@@ -91,11 +95,19 @@
     {% include "tickets/_campo.html" with campo=form.recomendaciones %}
     {% include "tickets/_campo.html" with campo=form.garantia %}
   </fieldset>
-  {% if not borrador.aprobado and en_informe %}
+  {% if not borrador.aprobado and en_informe and not bloqueado %}
+  {% if puede_aprobar and borrador.en_revision %}
+  <div class="card-body border-top">
+    <label class="form-label small fw-semibold" for="motivo-devolver">Para devolverlo: qué hay que corregir</label>
+    <textarea class="form-control form-control-sm" id="motivo-devolver" name="motivo" rows="2" placeholder="Ej.: falta la referencia del NVR y la foto del punto 3"></textarea>
+  </div>
+  {% endif %}
   <div class="card-footer d-flex flex-wrap justify-content-between gap-2">
     <button class="btn btn-outline-secondary btn-sm" name="accion" value="redactar" formnovalidate onclick="return confirm('Se reemplaza el texto por uno nuevo con los datos actuales del acta y se pierden las correcciones del texto{% if borrador.es_estudio %} (las zonas, fotos y equipos se conservan){% endif %}. ¿Continuar?')"><i class="bi bi-arrow-clockwise"></i> Volver a redactar desde el acta</button>
     <div class="d-flex flex-wrap gap-2">
       <button class="btn btn-outline-primary" name="accion" value="guardar"><i class="bi bi-save"></i> Guardar cambios</button>
+      {% if puede_aprobar and borrador.en_revision %}<button class="btn btn-outline-danger" name="accion" value="devolver" formnovalidate><i class="bi bi-arrow-return-left"></i> Devolver a coordinación</button>{% endif %}
+      {% if puede_enviar %}<button class="btn btn-accent" name="accion" value="enviar" onclick="return confirm('Se envía a dirección para su revisión y aprobación; mientras tanto no se puede corregir. ¿Enviar?')"><i class="bi bi-send"></i> Enviar a dirección</button>{% endif %}
       {% if puede_aprobar %}<button class="btn btn-accent" name="accion" value="aprobar" onclick="return confirm('Se genera el PDF definitivo y queda como informe oficial del ticket. ¿Aprobar?')"><i class="bi bi-check2-circle"></i> Aprobar y pasar a limpio</button>{% endif %}
     </div>
   </div>

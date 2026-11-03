@@ -226,6 +226,42 @@ def respuesta_del_cliente(ticket, seguimiento):
     )
 
 
+def informe_para_aprobar(borrador, autor):
+    """A dirección: coordinación envió un informe técnico para que lo revise y lo apruebe."""
+    from accounts.models import Usuario
+
+    ticket = borrador.ticket
+    direccion = Usuario.objects.filter(rol=Usuario.Rol.DIRECCION, is_active=True).values_list("email", flat=True)
+    _enviar(
+        f"[{ticket.radicado}] Informe técnico para aprobar: {ticket.asunto}",
+        "\n".join([f"{autor.get_full_name() or autor.username} envió el {borrador.get_tipo_display().split(' (')[0].lower()} "
+                    "para su revisión y aprobación.", "",
+                    f"Empresa: {ticket.empresa}" + (f" · Sede: {ticket.sede}" if ticket.sede else ""), "",
+                    "Puede corregirlo, aprobarlo (queda como informe oficial) o devolverlo con lo que hay que corregir.",
+                    "", f"Revisar: {_enlace(ticket).rsplit('/', 1)[0]}/informe/borrador/"]),
+        list(direccion),
+    )
+
+
+def informe_revisado(borrador, autor, aprobado, motivo=""):
+    """A coordinación (y a quien generó el informe): dirección lo aprobó o lo devolvió con observaciones."""
+    from accounts.models import Usuario
+
+    ticket = borrador.ticket
+    destinos = list(Usuario.objects.filter(rol=Usuario.Rol.SUPERVISOR, is_active=True).values_list("email", flat=True))
+    if borrador.creado_por:
+        destinos.append(borrador.creado_por.email)
+    quien = autor.get_full_name() or autor.username
+    if aprobado:
+        asunto = f"[{ticket.radicado}] Informe técnico aprobado: {ticket.asunto}"
+        texto = [f"{quien} aprobó el informe técnico. Ya se puede entregar al cliente o pasar a comercial para la propuesta."]
+    else:
+        asunto = f"[{ticket.radicado}] Informe técnico devuelto para corregir: {ticket.asunto}"
+        texto = [f"{quien} devolvió el informe técnico para corregir:", "", motivo, "",
+                 "Corríjalo y envíelo de nuevo a dirección."]
+    _enviar(asunto, "\n".join([*texto, "", f"Ver el ticket: {_enlace(ticket)}"]), destinos)
+
+
 def asignacion(ticket, autor=None, mensaje=""):
     """Al nuevo responsable (técnico, comercial, bodega…), con lo que le pidieron al asignárselo."""
     if ticket.asignado_a and ticket.asignado_a.email:

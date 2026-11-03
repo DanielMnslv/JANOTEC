@@ -1406,7 +1406,8 @@ def _guardar_zonas(request, borrador):
 @login_required
 @personal_requerido
 def informe_borrador(request, radicado):
-    """Borrador del informe armado desde el acta: se corrige aquí y coordinación lo aprueba (pasa a limpio)."""
+    """Borrador del informe armado desde el acta: se corrige aquí, coordinación lo envía a dirección y dirección
+    lo aprueba (pasa a limpio) o lo devuelve con observaciones. Aprobado, se entrega o pasa a comercial."""
     from . import informe as inf
 
     ticket = obtener_ticket(request.user, radicado)
@@ -1433,7 +1434,7 @@ def informe_borrador(request, radicado):
             return redirect("informe_borrador", radicado)
         if borrador is None:
             return redirect(ticket)
-        if accion == "reabrir" and borrador.aprobado and request.user.es_supervisor:
+        if accion == "reabrir" and borrador.aprobado and request.user.es_direccion:
             borrador.estado = InformeBorrador.Estado.BORRADOR
             borrador.save(update_fields=["estado", "actualizado"])
             Seguimiento.objects.create(ticket=ticket, autor=request.user, tipo=Seguimiento.Tipo.NOTA_INTERNA, interno=True,
@@ -1441,8 +1442,21 @@ def informe_borrador(request, radicado):
             messages.info(request, "El informe volvió a borrador: ya se puede corregir.")
             return redirect("informe_borrador", radicado)
         if borrador.aprobado:
-            messages.error(request, "El informe ya está aprobado. Para corregirlo, coordinación debe devolverlo a borrador.")
+            messages.error(request, "El informe ya está aprobado. Para corregirlo, dirección debe devolverlo a borrador.")
             return redirect("informe_borrador", radicado)
+        if borrador.en_revision and not request.user.es_direccion:
+            messages.error(request, "El informe está en revisión de dirección: solo dirección lo corrige, lo aprueba o lo devuelve.")
+            return redirect("informe_borrador", radicado)
+        if accion == "devolver":
+            if not (request.user.es_direccion and borrador.en_revision):
+                raise PermissionDenied
+            motivo = request.POST.get("motivo", "").strip()
+            if len(motivo) < 5:
+                messages.error(request, "Escriba qué hay que corregir para devolver el informe.")
+                return redirect("informe_borrador", radicado)
+            inf.devolver(borrador, request.user, motivo[:1000])
+            messages.info(request, "Informe devuelto a coordinación con sus observaciones.")
+            return redirect(ticket)
         if accion == "redactar":
             inf.generar(ticket, request.user, borrador, tipo=tipo)
             messages.info(request, "Se volvió a redactar el texto con los datos actuales del acta." + (
@@ -1455,16 +1469,23 @@ def informe_borrador(request, radicado):
                 errores = _guardar_zonas(request, borrador) if borrador.es_estudio else []
             for e in errores:
                 messages.warning(request, e)
-            if accion == "aprobar" and not errores:
-                if not request.user.es_supervisor:
+            if accion in ("enviar", "aprobar") and not errores:
+                # Coordinación lo envía a dirección; solo dirección lo aprueba
+                if not (request.user.es_direccion if accion == "aprobar" else request.user.es_supervisor):
                     raise PermissionDenied
                 if borrador.es_estudio and not (borrador.suministros.strip() or borrador.servicios.strip()):
-                    messages.error(request, "Antes de aprobar el estudio escriba los equipos y materiales a suministrar, los "
-                                            "servicios a cotizar, o ambos: con ellos comercial arma la propuesta.")
+                    messages.error(request, "Antes de enviarlo o aprobarlo escriba los equipos y materiales requeridos, los "
+                                            "servicios, o ambos: con ellos comercial arma la propuesta.")
                     return redirect("informe_borrador", radicado)
+                if accion == "enviar":
+                    inf.enviar_a_direccion(borrador, request.user)
+                    messages.success(request, "Informe enviado a dirección para su revisión y aprobación.")
+                    return redirect(ticket)
                 inf.aprobar(borrador, request.user)
                 Seguimiento.objects.create(ticket=ticket, autor=request.user, tipo=Seguimiento.Tipo.NOTA_INTERNA, interno=True,
                                            mensaje="Aprobó el informe técnico y lo pasó a limpio: ya se puede entregar.")
+                from . import notificaciones as notif
+                notif.informe_revisado(borrador, request.user, aprobado=True)
                 messages.success(request, "Informe aprobado y pasado a limpio. Ahora elija a quién se entrega."
                                  if not _es_levantamiento(ticket) else
                                  "Informe aprobado y pasado a limpio. Ya puede devolver el levantamiento al área comercial.")
@@ -1479,7 +1500,9 @@ def informe_borrador(request, radicado):
     return render(request, "tickets/informe_borrador.html", {
         "ticket": ticket, "borrador": borrador, "form": form, "en_informe": en_informe,
         "zonas": borrador.zonas.prefetch_related("fotos") if borrador.es_estudio else [],
-        "puede_aprobar": request.user.es_supervisor})
+        "puede_aprobar": request.user.es_direccion,
+        "puede_enviar": request.user.es_supervisor and not request.user.es_direccion,
+        "bloqueado": borrador.en_revision and not request.user.es_direccion})
 
 
 @login_required

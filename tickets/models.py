@@ -991,6 +991,7 @@ class InformeBorrador(models.Model):
     class Estado(models.TextChoices):
         """Si el informe sigue en borrador o ya se pasó a limpio."""
         BORRADOR = "borrador", "Borrador"
+        REVISION = "revision", "En revisión de dirección"
         APROBADO = "aprobado", "Aprobado (pasado a limpio)"
 
     class Tipo(models.TextChoices):
@@ -1040,6 +1041,11 @@ class InformeBorrador(models.Model):
     def lineas(texto):
         """Las líneas no vacías de un texto, sin viñetas ni guiones al inicio."""
         return [x.strip(" •-\t") for x in (texto or "").splitlines() if x.strip(" •-\t")]
+
+    @property
+    def en_revision(self):
+        """Si coordinación ya lo envió y espera la aprobación de dirección (mientras tanto solo dirección lo corrige)."""
+        return self.estado == self.Estado.REVISION
 
     @property
     def es_estudio(self):

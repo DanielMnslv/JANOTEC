@@ -1637,10 +1637,13 @@ class VincularActaHistoricaTests(BaseTickets):
 
 
 class InformeBorradorTests(BaseTickets):
-    """El borrador del informe sale del acta; coordinación lo aprueba (pasa a limpio) y es el que se entrega."""
+    """El borrador del informe sale del acta; coordinación lo envía a dirección, dirección lo aprueba (pasa a limpio)
+    y es el que se entrega."""
 
     def setUp(self):
         super().setUp()
+        self.direccion = Usuario.objects.create_user("miguel", "dir@x.co", "Clave-segura-1", rol="direccion",
+                                                     first_name="Miguel", cargo="Director TI")
         from io import BytesIO
 
         from django.utils import timezone
@@ -1763,7 +1766,7 @@ class InformeBorradorTests(BaseTickets):
         self.assertTrue(r.content.startswith(b"%PDF"))
         self.assertContains(self.client.get(self.url), "Tabla de equipos y materiales requeridos")
 
-    def test_tecnico_corrige_pero_solo_coordinacion_aprueba(self):
+    def test_coordinacion_envia_y_solo_direccion_aprueba(self):
         self.client.force_login(self.agente)
         self.client.post(self.url, {"accion": "generar"})
         datos = {"destinatario": "Empresa A", "asunto": "Desmonte", "introduccion": "Texto corregido", "actividades": "Una",
@@ -1777,11 +1780,35 @@ class InformeBorradorTests(BaseTickets):
         self.ticket.refresh_from_db()
         self.assertEqual(self.ticket.estado, E.INFORME)
 
+        # Coordinación no aprueba: lo envía a dirección, y mientras está en revisión nadie más lo corrige
         self.client.force_login(self.supervisor)
+        self.assertEqual(self.client.post(self.url, {**datos, "accion": "aprobar"}).status_code, 403)
+        mail.outbox.clear()
+        self.client.post(self.url, {**datos, "accion": "enviar"})
+        b.refresh_from_db()
+        self.assertTrue(b.en_revision)
+        self.assertEqual([m.to for m in mail.outbox], [["dir@x.co"]])
+        self.client.post(self.url, {**datos, "introduccion": "Cambio de coordinación", "accion": "guardar"})
+        b.refresh_from_db()
+        self.assertEqual(b.introduccion, "Texto corregido")
+        # Dirección lo devuelve con observaciones: vuelve a borrador y le llega a coordinación
+        self.client.force_login(self.direccion)
+        self.assertContains(self.client.get(self.url), "Devolver a coordinación")
+        mail.outbox.clear()
+        self.client.post(self.url, {**datos, "accion": "devolver", "motivo": "Falta la referencia del panel"})
+        b.refresh_from_db()
+        self.assertEqual(b.estado, "borrador")
+        self.assertIn("sup@x.co", mail.outbox[0].to)
+        self.assertIn("Falta la referencia del panel", mail.outbox[0].body)
+        self.assertTrue(self.ticket.seguimientos.filter(mensaje__contains="Falta la referencia del panel").exists())
+        # Corregido y enviado de nuevo, dirección lo aprueba
+        self.client.force_login(self.supervisor)
+        self.client.post(self.url, {**datos, "accion": "enviar"})
+        self.client.force_login(self.direccion)
         self.assertRedirects(self.client.post(self.url, {**datos, "accion": "aprobar"}), self.ticket.get_absolute_url(),
                              fetch_redirect_response=False)
         b.refresh_from_db()
-        self.assertTrue(b.aprobado and b.archivo and b.aprobado_por == self.supervisor)
+        self.assertTrue(b.aprobado and b.archivo and b.aprobado_por == self.direccion)
         r = self.client.get(reverse("informe_borrador_pdf", args=[self.ticket.radicado]))
         self.assertTrue(b"".join(r.streaming_content).startswith(b"%PDF"))
         # Aprobado ya no se edita hasta que coordinación lo devuelva a borrador
@@ -1798,7 +1825,7 @@ class InformeBorradorTests(BaseTickets):
         self.assertEqual(adj.nombre_original, f"Informe_tecnico_{self.ticket.radicado}.pdf")
 
     def test_reabrir_y_sin_acta_no_hay_borrador(self):
-        self.client.force_login(self.supervisor)
+        self.client.force_login(self.direccion)
         self.client.post(self.url, {"accion": "generar"})
         datos = {"destinatario": "Empresa A", "asunto": "A", "introduccion": "B", "actividades": "C", "conclusiones": "D"}
         self.client.post(self.url, {**datos, "accion": "aprobar"})
@@ -1841,7 +1868,7 @@ class InformeBorradorTests(BaseTickets):
         r = self.client.get(reverse("informe_borrador_pdf", args=[self.ticket.radicado]))
         self.assertTrue(r.content.startswith(b"%PDF"))
 
-        self.client.force_login(self.supervisor)
+        self.client.force_login(self.direccion)
         datos.pop("zona-nueva-fotos"), datos.pop("zona-nueva-nombre")
         self.client.post(self.url, {**datos, "accion": "aprobar"})
         b.refresh_from_db()
@@ -1854,7 +1881,7 @@ class InformeBorradorTests(BaseTickets):
         self.assertIn("Instalación y configuración", informe.servicios)
 
     def test_aprobar_estudio_exige_equipos_o_servicios(self):
-        self.client.force_login(self.supervisor)
+        self.client.force_login(self.direccion)
         self.client.post(self.url, {"accion": "generar", "tipo": "estudio"})
         b = self.ticket.informes_borrador.get()
         self.client.post(self.url, {"destinatario": "E", "asunto": "A", "introduccion": "I", "actividades": "A",

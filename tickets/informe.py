@@ -471,11 +471,15 @@ def pdf(borrador, definitivo=False):
     if borrador.garantia.strip():
         h += [Spacer(1, 4), Paragraph(f"<b>Garantía y vida útil:</b> {_esc(borrador.garantia)}", E_TEXTO)]
 
-    tecnicos = _y([a.tecnico.get_full_name() if a.tecnico else a.tecnico_texto for a in actas]) or \
-        ((borrador.creado_por.get_full_name() or borrador.creado_por.username) if borrador.creado_por else "Área técnica")
-    aprobo = (f"Aprobó: {borrador.aprobado_por.get_full_name() or borrador.aprobado_por.username}\nCoordinación del área técnica"
-              if definitivo and borrador.aprobado_por else "Aprobó: pendiente\nCoordinación del área técnica")
-    h += [Spacer(1, 30), KeepTogether(Table([["_" * 38, "_" * 38], [_p(f"Elaboró: {tecnicos}\nÁrea técnica · JANOTEC S.A.S."), _p(aprobo)]],
+    # Firmas: elabora quien generó el informe (coordinación) y aprueba dirección
+    def firma(usuario, cargo):
+        return f"{usuario.get_full_name() or usuario.username}\n{usuario.cargo or cargo}"
+
+    elaboro = "Elaboró: " + (firma(borrador.creado_por, "Coordinación del área técnica") if borrador.creado_por
+                             else "Coordinación del área técnica")
+    aprobo = "Aprobó: " + (firma(borrador.aprobado_por, "Dirección") if definitivo and borrador.aprobado_por
+                           else "pendiente\nDirección")
+    h += [Spacer(1, 30), KeepTogether(Table([["_" * 38, "_" * 38], [_p(f"{elaboro}\nJANOTEC S.A.S."), _p(f"{aprobo}\nJANOTEC S.A.S.")]],
                                             colWidths=[ancho / 2, ancho / 2]))]
 
     def pagina(canvas, documento):
@@ -495,6 +499,30 @@ def pdf(borrador, definitivo=False):
     doc.build(h, onFirstPage=pagina, onLaterPages=pagina)
     sufijo = "" if definitivo else "_BORRADOR"
     return f"Informe_tecnico_{t.radicado}{sufijo}.pdf", buf.getvalue()
+
+
+def enviar_a_direccion(borrador, usuario):
+    """Coordinación da el informe por revisado y lo envía a dirección, que lo aprueba o lo devuelve."""
+    from . import notificaciones
+    from .models import Seguimiento
+
+    borrador.estado = InformeBorrador.Estado.REVISION
+    borrador.save(update_fields=["estado", "actualizado"])
+    Seguimiento.objects.create(ticket=borrador.ticket, autor=usuario, tipo=Seguimiento.Tipo.NOTA_INTERNA, interno=True,
+                               mensaje="Envió el informe técnico a dirección para su revisión y aprobación.")
+    notificaciones.informe_para_aprobar(borrador, usuario)
+
+
+def devolver(borrador, usuario, motivo):
+    """Dirección devuelve el informe a coordinación con lo que hay que corregir; vuelve a borrador."""
+    from . import notificaciones
+    from .models import Seguimiento
+
+    borrador.estado = InformeBorrador.Estado.BORRADOR
+    borrador.save(update_fields=["estado", "actualizado"])
+    Seguimiento.objects.create(ticket=borrador.ticket, autor=usuario, tipo=Seguimiento.Tipo.NOTA_INTERNA, interno=True,
+                               mensaje=f"Devolvió el informe técnico para corregir: {motivo}")
+    notificaciones.informe_revisado(borrador, usuario, aprobado=False, motivo=motivo)
 
 
 def aprobar(borrador, usuario):
