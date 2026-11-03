@@ -1,0 +1,49 @@
+{% comment %}
+Tabla de equipos y materiales requeridos: se diligencia tal como sale en el informe. La mano de obra va en la misma
+tabla, solo con cantidad 1 y descripción. Cada fila llega como fila-N-campo; filas-total dice cuántas se numeraron.
+{% endcomment %}
+<style>
+  .tabla-requeridos tbody { counter-reset: fila; }
+  .tabla-requeridos td.num::before { counter-increment: fila; content: counter(fila); }
+  .tabla-requeridos input[type=text] { min-width: 6rem; }
+</style>
+<label class="form-label fw-medium mb-1">Tabla de equipos y materiales requeridos</label>
+<div class="table-responsive">
+  <table class="table table-sm table-bordered align-middle tabla-requeridos mb-2">
+    <thead class="table-light small">
+      <tr><th>NUM</th><th style="width:7rem">CANT</th><th style="min-width:14rem">DESCRIPCIÓN</th><th>REFERENCIA</th><th>MARCA</th>
+        <th style="min-width:12rem">IMAGEN DE REFERENCIA</th><th></th></tr>
+    </thead>
+    <tbody id="filas-requeridas">
+      {% for f in filas_requeridas %}
+        {% if f.servicio %}{% include "tickets/_fila_requerida.html" with i=forloop.counter0 servicio=True %}
+        {% else %}{% include "tickets/_fila_requerida.html" with i=forloop.counter0 servicio=False %}{% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<input type="hidden" name="filas-total" id="filas-total" value="{{ filas_requeridas|length }}">
+<div class="d-flex flex-wrap gap-2 mb-1">
+  <button type="button" class="btn btn-outline-primary btn-sm" data-agregar="fila-equipo"><i class="bi bi-plus-lg"></i> Agregar equipo o material</button>
+  <button type="button" class="btn btn-outline-primary btn-sm" data-agregar="fila-servicio"><i class="bi bi-plus-lg"></i> Agregar mano de obra</button>
+</div>
+<div class="form-text mb-3">Lo que se propone. La cantidad puede llevar unidad (120 m). La imagen de referencia se sube aquí o, si no, sale del catálogo de precios cuando el equipo está ahí. La mano de obra solo lleva la descripción. Si el informe es solo informativo, deje la tabla vacía: la sección no sale en el PDF.</div>
+<template id="fila-equipo">{% include "tickets/_fila_requerida.html" with i="__i__" servicio=False f=None %}</template>
+<template id="fila-servicio">{% include "tickets/_fila_requerida.html" with i="__i__" servicio=True f=None %}</template>
+<script>
+  (function () {
+    const cuerpo = document.getElementById('filas-requeridas'), total = document.getElementById('filas-total');
+    document.querySelectorAll('[data-agregar]').forEach(function (boton) {
+      boton.addEventListener('click', function () {
+        const html = document.getElementById(boton.dataset.agregar).innerHTML.replaceAll('__i__', total.value);
+        cuerpo.insertAdjacentHTML('beforeend', html);
+        total.value = Number(total.value) + 1;
+        cuerpo.lastElementChild.querySelector('input[name$="-descripcion"]').focus();
+      });
+    });
+    cuerpo.addEventListener('click', function (e) {
+      const quitar = e.target.closest('[data-quitar]');
+      if (quitar) quitar.closest('tr').remove();  // el número de las demás filas se ajusta solo
+    });
+  })();
+</script>

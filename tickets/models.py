@@ -1071,12 +1071,12 @@ class InformeBorrador(models.Model):
         return [(f["cantidad"], f["descripcion"], f["marca"]) for f in map(self._fila, self.lineas(self.suministros))]
 
     def filas_requeridas(self):
-        """Las filas de la tabla «Equipos y materiales requeridos»: los equipos y materiales y, después, los servicios
-        (mano de obra), que van como una fila más con marca JANOTEC."""
-        filas = [self._fila(l) for l in self.lineas(self.suministros)]
+        """Las filas de la tabla «Equipos y materiales requeridos»: los equipos y materiales y, después, la mano de obra,
+        que va como una fila más con cantidad 1 y solo su descripción (sin referencia, marca ni imagen)."""
+        filas = [{**self._fila(l), "servicio": False} for l in self.lineas(self.suministros)]
         for linea in self.lineas(self.servicios):
-            fila = self._fila(linea)
-            filas.append({**fila, "marca": fila["marca"] or "JANOTEC"})
+            filas.append({"cantidad": "1", "descripcion": self._fila(linea)["descripcion"], "referencia": "", "marca": "",
+                          "servicio": True})
         return filas
 
     def materiales_para_comercial(self):
@@ -1114,6 +1114,22 @@ class FotoZona(models.Model):
 
     class Meta:
         ordering = ["pk"]
+
+
+class ImagenEquipoInforme(models.Model):
+    """Imagen de referencia de un equipo de la tabla de requeridos, subida en el informe.
+
+    Se asocia por la descripción del equipo; si un equipo no tiene, la imagen sale del catálogo de precios.
+    """
+    borrador = models.ForeignKey(InformeBorrador, on_delete=models.CASCADE, related_name="imagenes_equipos")
+    descripcion = models.CharField("descripción del equipo", max_length=300)
+    archivo = models.ImageField(upload_to=ruta_acta)
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["pk"]
+        verbose_name = "imagen de referencia de un equipo"
+        verbose_name_plural = "imágenes de referencia de equipos"
 
 
 # --- Oportunidades comerciales y hallazgos detectados en campo ------------------------------------

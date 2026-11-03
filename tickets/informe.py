@@ -1,11 +1,12 @@
 """Borrador del informe técnico armado a partir de las actas del ticket (plantilla, sin IA).
 
-El texto sale de frases fijas llenadas con los datos del acta; las tablas de equipos y el anexo
-fotográfico se toman de las actas al momento de generar el PDF. Coordinación lo aprueba y se pasa a limpio.
+El texto sale de frases fijas llenadas con los datos del acta, y el anexo fotográfico se toma de las actas al generar
+el PDF. Coordinación lo envía a dirección, que lo aprueba y se pasa a limpio.
 
 Todo informe sigue el formato de JANOTEC, en este orden: introducción, actividades realizadas (lo que dice el acta),
 tabla de equipos y materiales requeridos (lo que se propone), justificación, anexo de evidencias fotográficas y
-conclusiones (qué se hizo, qué se propone y su alcance, con las recomendaciones y la garantía).
+conclusiones (qué se hizo, qué se propone y su alcance, con las recomendaciones y la garantía). Un informe solo
+informativo, sin nada que proponer, no lleva la tabla.
 """
 from io import BytesIO
 
@@ -30,8 +31,6 @@ MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto
 TRABAJOS = {"desinstalación": "el desmonte", "instalación": "la instalación", "soporte": "el soporte técnico",
             "mantenimiento preventivo": "el mantenimiento preventivo", "ampliación o mejoramiento": "la ampliación y mejora",
             "reubicación o traslado": "la reubicación"}
-CLASES = [(EquipoActa.Clase.RETIRADO, "equipos retirados"), (EquipoActa.Clase.INTERVENIDO, "equipos intervenidos"),
-          (EquipoActa.Clase.UTILIZADO, "materiales y equipos instalados")]
 
 
 def _fecha_larga(valor):
@@ -365,12 +364,24 @@ def imagenes_del_catalogo(descripciones):
     return salida
 
 
-def _tabla_equipos(titulo, filas, ancho):
+def imagenes_de_la_tabla(borrador, descripciones):
+    """{descripción: imagen} para la tabla: la subida en el informe y, si no hay, la del catálogo de precios."""
+    propias = {_sin_tildes(i.descripcion): i.archivo for i in borrador.imagenes_equipos.all()} if borrador else {}
+    salida = imagenes_del_catalogo(descripciones)
+    salida.update({d: propias[_sin_tildes(d)] for d in descripciones if _sin_tildes(d) in propias})
+    return salida
+
+
+def _tabla_equipos(titulo, filas, ancho, borrador=None):
     """Tabla de equipos con las columnas del formato de JANOTEC: NUM, CANT, DESCRIPCIÓN, REFERENCIA, MARCA e IMAGEN DE
-    REFERENCIA. Cada fila es {cantidad, descripcion, referencia, marca}; la imagen sale del catálogo de precios."""
-    imagenes = imagenes_del_catalogo([f["descripcion"] for f in filas])
+    REFERENCIA. Cada fila es {cantidad, descripcion, referencia, marca}; la mano de obra («servicio») solo lleva la
+    cantidad y la descripción."""
+    imagenes = imagenes_de_la_tabla(borrador, [f["descripcion"] for f in filas if not f.get("servicio")])
     cuerpo = [[_p(x, E_ETIQUETA) for x in ("NUM", "CANT", "DESCRIPCIÓN", "REFERENCIA", "MARCA", "IMAGEN DE REFERENCIA")]]
     for i, f in enumerate(filas, 1):
+        if f.get("servicio"):
+            cuerpo.append([_p(i), _p("1"), _p(f["descripcion"]), "", "", ""])
+            continue
         imagen = _imagen(imagenes[f["descripcion"]], ancho * 0.16) if f["descripcion"] in imagenes else None
         cuerpo.append([_p(i), _p(f["cantidad"] or "1"), _p(f["descripcion"]), _p(f["referencia"] or "N/A"),
                        _p(f["marca"] or "N/A"), imagen or ""])
@@ -378,28 +389,6 @@ def _tabla_equipos(titulo, filas, ancho):
     tabla.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, BORDE), ("BACKGROUND", (0, 0), (-1, 0), TINTE_VERDE),
                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (5, 1), (5, -1), "CENTER")]))
     return [Spacer(1, 10), _barra(titulo, ancho), tabla]
-
-
-def _fila_de_equipo(e):
-    """Un equipo del acta como fila de la tabla; el serial y la placa van con la referencia para su seguimiento."""
-    referencia = " · ".join(x for x in (e.referencia, f"S/N {e.serial}" if e.serial else "",
-                                        f"Placa {e.placa}" if e.placa else "") if x)
-    return {"cantidad": e.cantidad, "descripcion": e.equipo, "referencia": referencia, "marca": e.marca}
-
-
-def tablas_de_equipos(actas):
-    """[(qué se hizo, SISTEMA, equipos)]: una tabla por lo que se hizo con los equipos y por sistema.
-
-    Junta las actas del ticket: un desmonte hecho en varias visitas da una sola tabla por sistema, como en los
-    informes de 4-72. Primero los retirados, luego los intervenidos y al final lo instalado.
-    """
-    grupos = {}
-    for a in actas:
-        sistema = a.get_sistema_display_corto().upper() if a.sistema else ""
-        for e in a.equipos.all():
-            grupos.setdefault((e.clase, sistema), []).append(e)
-    return [(nombre, sistema, equipos) for clase, nombre in CLASES
-            for (clase_grupo, sistema), equipos in grupos.items() if clase_grupo == clase]
 
 
 def pdf(borrador, definitivo=False):
@@ -426,13 +415,10 @@ def pdf(borrador, definitivo=False):
 
     # Orden fijo de JANOTEC: introducción, actividades realizadas (lo que dice el acta), tabla de equipos y materiales
     # requeridos (lo que se propone), justificación, anexo de evidencias fotográficas y conclusiones (con el alcance).
+    # Un informe solo informativo (sin equipos, materiales ni mano de obra que proponer) no lleva esta sección
     requeridas = borrador.filas_requeridas()
     if requeridas:
-        h += _tabla_equipos("TABLA DE EQUIPOS Y MATERIALES REQUERIDOS", requeridas, ancho)
-    elif not borrador.es_estudio:  # sin nada que proponer, la tabla muestra lo que se hizo con los equipos del acta
-        for nombre, sistema, equipos in tablas_de_equipos(actas):
-            titulo = f"TABLA DE {nombre.upper()}" + (f" · SISTEMA DE {sistema}" if sistema else "")
-            h += _tabla_equipos(titulo, [_fila_de_equipo(e) for e in equipos], ancho)
+        h += _tabla_equipos("TABLA DE EQUIPOS Y MATERIALES REQUERIDOS", requeridas, ancho, borrador)
 
     if borrador.justificacion.strip():
         h += [Paragraph("JUSTIFICACIÓN", E_TITULO), Paragraph(_esc(borrador.justificacion), E_TEXTO)]

@@ -1,0 +1,19 @@
+{# Una fila de la tabla de requeridos. Mano de obra: cantidad 1 fija y sin referencia, marca ni imagen. #}
+<tr>
+  <td class="num text-center small"></td>
+  <td><input type="hidden" name="fila-{{ i }}-tipo" value="{% if servicio %}servicio{% else %}equipo{% endif %}">
+    {% if servicio %}<input type="text" class="form-control form-control-sm" value="1" readonly aria-label="Cantidad">
+    {% else %}<input type="text" class="form-control form-control-sm" name="fila-{{ i }}-cantidad" value="{{ f.cantidad|default:'' }}" placeholder="1" aria-label="Cantidad">{% endif %}</td>
+  <td><input type="text" class="form-control form-control-sm" name="fila-{{ i }}-descripcion" value="{{ f.descripcion|default:'' }}" maxlength="250"
+             placeholder="{% if servicio %}Mano de obra: instalación y configuración{% else %}Cámara IP 4 MP bala{% endif %}" aria-label="Descripción"></td>
+  {% if servicio %}
+    <td class="text-center text-muted-jn">—</td><td class="text-center text-muted-jn">—</td><td class="text-center text-muted-jn small">Mano de obra</td>
+  {% else %}
+    <td><input type="text" class="form-control form-control-sm" name="fila-{{ i }}-referencia" value="{{ f.referencia|default:'' }}" maxlength="80" placeholder="DS-2CD1043G0E-I" aria-label="Referencia"></td>
+    <td><input type="text" class="form-control form-control-sm" name="fila-{{ i }}-marca" value="{{ f.marca|default:'' }}" maxlength="80" placeholder="Hikvision" aria-label="Marca"></td>
+    <td><input type="file" class="form-control form-control-sm" name="fila-{{ i }}-imagen" accept="image/jpeg,image/png,image/webp" aria-label="Imagen de referencia">
+      {% if f.imagen == "propia" %}<div class="small text-success"><i class="bi bi-check2"></i> Imagen cargada</div>
+      {% elif f.imagen == "catalogo" %}<div class="small text-success"><i class="bi bi-check2"></i> Del catálogo de precios</div>{% endif %}</td>
+  {% endif %}
+  <td class="text-center"><button type="button" class="btn btn-sm btn-light border py-0" data-quitar title="Quitar fila" aria-label="Quitar fila"><i class="bi bi-x-lg"></i></button></td>
+</tr>

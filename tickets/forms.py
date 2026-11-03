@@ -1134,8 +1134,8 @@ class InformeBorradorForm(BootstrapMixin, forms.ModelForm):
         # Nombres y ayudas según las secciones del informe de JANOTEC
         self.fields["suministros"].label = "Tabla de equipos y materiales requeridos"
         self.fields["suministros"].help_text = ("Lo que se propone, uno por línea: cantidad descripción | referencia | marca. "
-                                                "La imagen de referencia sale del catálogo de precios. Déjelo vacío si no se "
-                                                "propone nada: la tabla muestra entonces los equipos del acta.")
+                                                "La imagen de referencia sale del catálogo de precios. Déjelo vacío si el "
+                                                "informe es solo informativo: la sección no sale en el PDF.")
         self.fields["servicios"].label = "Servicios requeridos (mano de obra)"
         self.fields["servicios"].help_text = "Uno por línea. Van en la misma tabla, con marca JANOTEC. Ej.: 1 Instalación y configuración"
         self.fields["conclusiones"].help_text = ("Una por línea: qué se hizo y, si se propone algo, qué se propone y su alcance "

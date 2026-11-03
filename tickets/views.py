@@ -1403,6 +1403,33 @@ def _guardar_zonas(request, borrador):
     return errores
 
 
+def _tabla_requeridos(request):
+    """Lee la tabla de equipos y materiales requeridos del formulario (fila-N-campo).
+
+    Devuelve (suministros, servicios, {descripción: imagen subida}) con las líneas en el formato que guarda el informe:
+    «cantidad descripción | referencia | marca» para los equipos y «1 descripción» para la mano de obra.
+    """
+    total = request.POST.get("filas-total", "")
+    suministros, servicios, imagenes = [], [], {}
+    for i in range(min(int(total) if total.isdigit() else 0, 300)):
+        p = f"fila-{i}-"
+
+        def campo(nombre):
+            """El texto de la celda en una sola línea y sin «|», que separa las columnas al guardar."""
+            return " ".join(request.POST.get(p + nombre, "").replace("|", "/").split())
+
+        descripcion = campo("descripcion")
+        if not descripcion:
+            continue
+        if request.POST.get(p + "tipo") == "servicio":
+            servicios.append(f"1 {descripcion}")
+            continue
+        suministros.append(f"{campo('cantidad') or '1'} {descripcion} | {campo('referencia')} | {campo('marca')}")
+        if request.FILES.get(p + "imagen"):
+            imagenes[descripcion] = request.FILES[p + "imagen"]
+    return "\n".join(suministros), "\n".join(servicios), imagenes
+
+
 @login_required
 @personal_requerido
 def informe_borrador(request, radicado):
@@ -1462,11 +1489,22 @@ def informe_borrador(request, radicado):
             messages.info(request, "Se volvió a redactar el texto con los datos actuales del acta." + (
                 " Las zonas, fotos y equipos que ya había escrito se conservan." if borrador.es_estudio else ""))
             return redirect("informe_borrador", radicado)
-        form = InformeBorradorForm(request.POST, instance=borrador)
+        datos, imagenes = request.POST, {}
+        if "filas-total" in request.POST:  # la tabla de requeridos llega fila por fila
+            datos = request.POST.copy()
+            datos["suministros"], datos["servicios"], imagenes = _tabla_requeridos(request)
+        form = InformeBorradorForm(datos, instance=borrador)
         if form.is_valid():
             with transaction.atomic():
                 borrador = form.save()
                 errores = _guardar_zonas(request, borrador) if borrador.es_estudio else []
+                from .models import ImagenEquipoInforme
+                for descripcion, archivo in imagenes.items():
+                    if os.path.splitext(archivo.name)[1].lower() not in (".jpg", ".jpeg", ".png", ".webp"):
+                        errores.append(f"«{archivo.name}» no es una imagen (jpg, png, webp).")
+                        continue
+                    borrador.imagenes_equipos.filter(descripcion=descripcion).delete()
+                    ImagenEquipoInforme.objects.create(borrador=borrador, descripcion=descripcion[:300], archivo=archivo)
             for e in errores:
                 messages.warning(request, e)
             if accion in ("enviar", "aprobar") and not errores:
@@ -1500,9 +1538,23 @@ def informe_borrador(request, radicado):
     return render(request, "tickets/informe_borrador.html", {
         "ticket": ticket, "borrador": borrador, "form": form, "en_informe": en_informe,
         "zonas": borrador.zonas.prefetch_related("fotos") if borrador.es_estudio else [],
+        "filas_requeridas": _filas_para_editar(borrador),
         "puede_aprobar": request.user.es_direccion,
         "puede_enviar": request.user.es_supervisor and not request.user.es_direccion,
         "bloqueado": borrador.en_revision and not request.user.es_direccion})
+
+
+def _filas_para_editar(borrador):
+    """Las filas de la tabla de requeridos con el origen de su imagen («propia», «catalogo» o vacío)."""
+    from . import informe as inf
+
+    filas = borrador.filas_requeridas()
+    imagenes = inf.imagenes_del_catalogo([f["descripcion"] for f in filas if not f["servicio"]])
+    propias = {inf._sin_tildes(i.descripcion) for i in borrador.imagenes_equipos.all()}
+    for f in filas:
+        f["imagen"] = ("propia" if inf._sin_tildes(f["descripcion"]) in propias else
+                       "catalogo" if f["descripcion"] in imagenes else "")
+    return filas
 
 
 @login_required

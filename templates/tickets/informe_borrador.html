@@ -22,7 +22,7 @@
   </div>
 {% else %}
   <div class="alert alert-info small mb-3">
-    <i class="bi bi-info-circle"></i> La plataforma redactó este borrador con los datos del acta. Las <b>tablas de equipos</b> (con referencia, marca y serial) y el <b>anexo de fotos</b> salen del acta en el PDF; aquí se corrige el texto.
+    <i class="bi bi-info-circle"></i> La plataforma redactó este borrador con los datos del acta. El <b>anexo de fotos</b> sale del acta en el PDF; aquí se corrige el texto y se diligencia la tabla de lo que se propone (si el informe es solo informativo, la tabla no sale).
     {% if borrador.en_revision %}
       {% if puede_aprobar %}Coordinación lo envió para su aprobación: corríjalo si hace falta y oprima <b>Aprobar y pasar a limpio</b>, o devuélvalo con lo que hay que corregir.{% else %}Está en revisión de dirección: dirección lo aprueba o lo devuelve con observaciones.{% endif %}
     {% elif puede_aprobar %}Cuando quede bien, oprima <b>Aprobar y pasar a limpio</b>.
@@ -88,8 +88,7 @@
       </div>
     {% endif %}
     {# Mismo orden del informe: tabla de equipos y materiales requeridos, justificación y conclusiones #}
-    {% include "tickets/_campo.html" with campo=form.suministros %}
-    {% include "tickets/_campo.html" with campo=form.servicios %}
+    {% include "tickets/_tabla_requeridos.html" %}
     {% include "tickets/_campo.html" with campo=form.justificacion %}
     {% include "tickets/_campo.html" with campo=form.conclusiones %}
     {% include "tickets/_campo.html" with campo=form.recomendaciones %}

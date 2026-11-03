@@ -1699,22 +1699,19 @@ class InformeBorradorTests(BaseTickets):
         acta.save()
         self.assertIn("El registro del desmonte", informe.textos(self.ticket)["justificacion"])
 
-    def test_desmonte_en_varias_visitas_da_una_tabla_por_sistema(self):
-        from django.utils import timezone
+    def test_informe_solo_informativo_no_lleva_tabla(self):
+        from unittest import mock
 
         from . import informe
-        from .models import ActaSoporte, EquipoActa
-        for numero, sistema, equipo in ((100901, "ALARMA", "Sirena"), (100902, "CCTV", "Cámara domo")):
-            otra = ActaSoporte.objects.create(numero=numero, fecha=timezone.now(), empresa=self.emp_a, sede=self.sede_a,
-                                              tecnico=self.agente, actividad="Desinstalación", sistema=sistema,
-                                              diagnostico="x", resultado="solucionado", ticket=self.ticket,
-                                              origen=ActaSoporte.Origen.PLATAFORMA)
-            EquipoActa.objects.create(acta=otra, clase=EquipoActa.Clase.RETIRADO, equipo=equipo, cantidad="1",
-                                      propiedad=EquipoActa.Propiedad.CLIENTE)
-        tablas = [(nombre, sistema, [e.equipo for e in equipos])
-                  for nombre, sistema, equipos in informe.tablas_de_equipos(informe.actas_del_ticket(self.ticket))]
-        self.assertEqual(tablas, [("equipos retirados", "ALARMA", ["Panel de alarma", "Sirena"]),
-                                  ("equipos retirados", "CCTV", ["Cámara domo"])])
+        self.client.force_login(self.agente)
+        self.client.post(self.url, {"accion": "generar"})
+        b = informe.vigente(self.ticket)
+        with mock.patch.object(informe, "_tabla_equipos", wraps=informe._tabla_equipos) as tabla:
+            self.assertTrue(informe.pdf(b)[1].startswith(b"%PDF"))
+            tabla.assert_not_called()
+            b.servicios = "1 Mantenimiento preventivo"
+            informe.pdf(b)
+            tabla.assert_called_once()
 
     def test_requerimientos_lleva_justificacion_e_imagen_del_catalogo(self):
         from io import BytesIO
@@ -1748,10 +1745,11 @@ class InformeBorradorTests(BaseTickets):
         b = InformeBorrador(suministros="3 Cámara bala IP 4 MP | DS-2CD1043G0E-I | Hikvision\n80 m Cable UTP | Linkedpro\nNVR",
                             servicios="1 Instalación y configuración")
         self.assertEqual(b.filas_requeridas(), [
-            {"cantidad": "3", "descripcion": "Cámara bala IP 4 MP", "referencia": "DS-2CD1043G0E-I", "marca": "Hikvision"},
-            {"cantidad": "80 m", "descripcion": "Cable UTP", "referencia": "", "marca": "Linkedpro"},
-            {"cantidad": "1", "descripcion": "NVR", "referencia": "", "marca": ""},
-            {"cantidad": "1", "descripcion": "Instalación y configuración", "referencia": "", "marca": "JANOTEC"}])
+            {"cantidad": "3", "descripcion": "Cámara bala IP 4 MP", "referencia": "DS-2CD1043G0E-I", "marca": "Hikvision",
+             "servicio": False},
+            {"cantidad": "80 m", "descripcion": "Cable UTP", "referencia": "", "marca": "Linkedpro", "servicio": False},
+            {"cantidad": "1", "descripcion": "NVR", "referencia": "", "marca": "", "servicio": False},
+            {"cantidad": "1", "descripcion": "Instalación y configuración", "referencia": "", "marca": "", "servicio": True}])
         self.assertEqual(b.materiales_para_comercial().splitlines()[0], "3 Cámara bala IP 4 MP DS-2CD1043G0E-I Hikvision")
         # Una visita que propone algo dice en las conclusiones qué se propone y su alcance
         self.client.force_login(self.agente)
@@ -1765,6 +1763,37 @@ class InformeBorradorTests(BaseTickets):
         r = self.client.get(reverse("informe_borrador_pdf", args=[self.ticket.radicado]))
         self.assertTrue(r.content.startswith(b"%PDF"))
         self.assertContains(self.client.get(self.url), "Tabla de equipos y materiales requeridos")
+
+    def test_la_tabla_se_diligencia_fila_por_fila_con_mano_de_obra(self):
+        from io import BytesIO
+
+        from PIL import Image
+
+        from . import informe
+        png = BytesIO()
+        Image.new("RGB", (40, 40), "green").save(png, "PNG")
+        self.client.force_login(self.agente)
+        self.client.post(self.url, {"accion": "generar"})
+        datos = {"destinatario": "Empresa A", "asunto": "A", "introduccion": "I", "actividades": "A", "conclusiones": "C",
+                 "accion": "guardar", "filas-total": "4",
+                 "fila-0-tipo": "equipo", "fila-0-cantidad": "2", "fila-0-descripcion": "Sensor de movimiento",
+                 "fila-0-referencia": "NV5", "fila-0-marca": "Paradox",
+                 "fila-0-imagen": SimpleUploadedFile("sensor.png", png.getvalue()),
+                 "fila-1-tipo": "equipo", "fila-1-cantidad": "", "fila-1-descripcion": "",  # vacía: no cuenta
+                 "fila-2-tipo": "servicio", "fila-2-descripcion": "Instalación y configuración | con alturas",
+                 "fila-3-tipo": "equipo", "fila-3-cantidad": "30 m", "fila-3-descripcion": "Cable UTP"}
+        self.client.post(self.url, datos)
+        b = informe.vigente(self.ticket)
+        self.assertEqual(b.suministros, "2 Sensor de movimiento | NV5 | Paradox\n30 m Cable UTP |  |")
+        self.assertEqual(b.servicios, "1 Instalación y configuración / con alturas")
+        self.assertEqual([f["descripcion"] for f in b.filas_requeridas() if f["servicio"]], ["Instalación y configuración / con alturas"])
+        self.assertEqual(list(informe.imagenes_de_la_tabla(b, ["Sensor de movimiento", "Cable UTP"])), ["Sensor de movimiento"])
+        pagina = self.client.get(self.url)
+        self.assertContains(pagina, 'value="Sensor de movimiento"')
+        self.assertContains(pagina, "Imagen cargada")
+        self.assertContains(pagina, "Mano de obra")
+        r = self.client.get(reverse("informe_borrador_pdf", args=[self.ticket.radicado]))
+        self.assertTrue(r.content.startswith(b"%PDF"))
 
     def test_coordinacion_envia_y_solo_direccion_aprueba(self):
         self.client.force_login(self.agente)
