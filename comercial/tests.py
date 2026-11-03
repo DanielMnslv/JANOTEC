@@ -480,7 +480,7 @@ class CotizadorTests(BaseComercial):
 
     def lineas(self, filas):
         datos = {"alcance": "Cámaras para el parqueadero", "condiciones": "Garantía de 1 año", "modalidad": "venta",
-                 "aiu_utilidad": "10", "tasa_mensual": "1.5", "recargo_alquiler": "0", "plazos": "12,24,36", "opcion_compra": "1",
+                 "tasa_mensual": "1.5", "recargo_alquiler": "0", "plazos": "12,24,36", "opcion_compra": "1",
                  "lineas-TOTAL_FORMS": str(len(filas)), "lineas-INITIAL_FORMS": "0", "lineas-MIN_NUM_FORMS": "0",
                  "lineas-MAX_NUM_FORMS": "1000"}
         for i, (desc, cant, valor, descuento) in enumerate(filas):
@@ -531,23 +531,16 @@ class CotizadorTests(BaseComercial):
         self.assertEqual(v2.codigo, v1.codigo.replace("-V1", "-V2"))
         self.assertEqual(t.ficha.cotizaciones.count(), 2)
 
-    def test_monitoreo_con_aiu_y_alquiler_con_opcion_de_compra(self):
-        """Los valores de las propuestas reales de comercial: monitoreo de $100.000 y alquiler a 12/24/36 meses."""
+    def test_alquiler_con_opcion_de_compra(self):
+        """Los valores de una propuesta real de comercial: alquiler a 12/24/36 meses con opción de compra."""
         from decimal import Decimal
 
         t = self.crear()
-        self.client.post(reverse("comercial:informe", args=[t.radicado]), {"necesidad": "Monitoreo", "servicios": "Monitoreo"})
+        self.client.post(reverse("comercial:informe", args=[t.radicado]), {"necesidad": "Cámaras", "servicios": "CCTV"})
         url = reverse("comercial:cotizador", args=[t.radicado])
-        self.client.post(url, {**self.lineas([("Monitoreo de alarma 24 horas", "1", "98135.43", "0")]), "modalidad": "monitoreo"})
-        cot = t.ficha.cotizaciones.get()
-        tot = cot.totales()
-        self.assertEqual((tot["iva"], tot["total"]), (Decimal("1864.57"), Decimal("100000.00")))  # IVA solo sobre la utilidad
-        t.ficha.cotizaciones.update(margen=1)
-        self.assertEqual(self.client.get(reverse("comercial:cotizacion_pdf", args=[t.radicado]))["Content-Type"], "application/pdf")
-        cot.lineas.all().delete()
         self.client.post(url, {**self.lineas([("Sistema de videovigilancia", "1", "24746222.98", "0")]), "modalidad": "alquiler",
                                "recargo_alquiler": "0"})
-        cot.refresh_from_db()
+        cot = t.ficha.cotizaciones.get()
         c = cot.canones()
         self.assertEqual(c["valor"], Decimal("29448005.35"))
         # Los cánones de la propuesta en papel (a un centavo, por el redondeo del valor de partida)
@@ -716,78 +709,6 @@ class CotizadorTests(BaseComercial):
         self.assertEqual(s.estado, "validacion")
         self.assertEqual(sorted(i.descripcion for i in s.items.all()), ["Cable HDMI 15 m", "Canaleta 20x12"])  # sin el servicio
         self.assertIn(t.ficha.versiones.get().codigo, s.nota)
-
-
-class ContratosMonitoreoTests(BaseComercial):
-    def setUp(self):
-        super().setUp()
-        from decimal import Decimal
-
-        from .models import ServicioMonitoreo
-        self.D = Decimal
-        self.sede2 = Sede.objects.create(empresa=self.emp, nombre="Oficina Centro")
-        self.s1 = ServicioMonitoreo.objects.create(sede=self.sede, valor_mensual=Decimal("100000"), anio_valor=2026)
-        self.s2 = ServicioMonitoreo.objects.create(sede=self.sede2, valor_mensual=Decimal("200000"), anio_valor=2026)
-        self.baja = ServicioMonitoreo.objects.create(sede=Sede.objects.create(empresa=self.emp, nombre="Retirada"),
-                                                     valor_mensual=Decimal("50000"), anio_valor=2026, activo=False)
-
-    def test_comercial_ve_el_total_y_tecnica_no_entra(self):
-        self.client.force_login(self.asesor)
-        r = self.client.get(reverse("comercial:monitoreo"))
-        self.assertContains(r, "Oficina Centro")
-        self.assertContains(r, "$300.000")  # el inactivo no suma
-        self.client.force_login(self.tecnico)
-        self.assertEqual(self.client.get(reverse("comercial:monitoreo")).status_code, 403)
-
-    def test_ajuste_anual_sube_los_activos_una_sola_vez(self):
-        self.client.force_login(self.asesor)
-        url = reverse("comercial:monitoreo") + f"?empresa={self.emp.pk}"
-        self.client.post(url, {"accion": "ajuste", "anio": 2027, "porcentaje": "10", "nota": "IPC"})
-        self.s1.refresh_from_db()
-        self.baja.refresh_from_db()
-        self.assertEqual((self.s1.valor_mensual, self.s1.anio_valor), (self.D("110000.00"), 2027))
-        self.assertEqual(self.baja.valor_mensual, self.D("50000"))
-        a = self.s1.ajustes.get()
-        self.assertEqual((a.valor_anterior, a.porcentaje, a.aplicado_por), (self.D("100000.00"), self.D("10.00"), self.asesor))
-        self.client.post(url, {"accion": "ajuste", "anio": 2027, "porcentaje": "10"})  # repetido: no se aplica dos veces
-        self.s1.refresh_from_db()
-        self.assertEqual(self.s1.valor_mensual, self.D("110000.00"))
-
-    def test_agregar_sede_con_monitoreo(self):
-        nueva = Sede.objects.create(empresa=self.emp, nombre="Sede Norte")
-        self.client.force_login(self.asesor)
-        self.client.post(reverse("comercial:monitoreo") + f"?empresa={self.emp.pk}",
-                         {"sede": nueva.pk, "descripcion": "Monitoreo 24 h", "cantidad": 1, "valor_mensual": "180000",
-                          "anio_valor": 2026, "activo": "on"})
-        self.assertEqual(nueva.monitoreos.get().valor_mensual, self.D("180000"))
-
-    def test_importar_desde_el_excel(self):
-        import io
-        import os
-
-        import openpyxl
-        from django.core.management import call_command
-
-        from .models import ServicioMonitoreo
-        ServicioMonitoreo.objects.all().delete()
-        libro = openpyxl.Workbook()
-        h = libro.active
-        h.title = "ALARMA "
-        h.append([None, None, None, None, None, None, None, 0.23])
-        h.append(["CLIENTE", "SEDE", "DIRECCION", "CIUDAD", "DESCRIPCIÓN", "CANT", "VALOR TOTAL MENSUAL", 2025])
-        h.append(["CLIENTE A", "Oficina Centro", "Calle 1 # 2-3", "Villavicencio", "Monitoreo 24 h", 1, 123000.0, 100000.0])
-        h.append(["CLIENTE A", "Oficina Centro", "Calle 1 # 2-3", "Villavicencio", "Monitoreo 24 h", 1, 123000.0, 100000.0])
-        h.append(["CLIENTE A", "No existe", "", "", "Monitoreo 24 h", 1, 123000.0, 100000.0])
-        ruta = os.path.join(MEDIA_TMP, "monitoreo.xlsx")
-        libro.save(ruta)
-        call_command("importar_monitoreo", ruta, stdout=io.StringIO())
-        self.assertFalse(ServicioMonitoreo.objects.exists())  # sin --aplicar no guarda
-        call_command("importar_monitoreo", ruta, "--aplicar", stdout=io.StringIO())
-        s = ServicioMonitoreo.objects.get()
-        self.assertEqual((s.sede, s.valor_mensual, s.anio_valor), (self.sede2, self.D("123000.00"), 2026))
-        self.assertEqual(s.ajustes.get().valor_anterior, self.D("100000.00"))
-        self.sede2.refresh_from_db()
-        self.assertEqual(self.sede2.direccion, "Calle 1 # 2-3")
 
 
 class PasoAPasoComercialTests(BaseComercial):

@@ -57,8 +57,8 @@ class Command(BaseCommand):
                 (e1, s1, c1, "soporte", "CCTV / Videovigilancia", "Cámara 4 de la bodega sin imagen", "Desde anoche la cámara del muelle de carga muestra 'sin señal' en el NVR.", "alta", None, Ticket.Estado.RADICADO, ("Jorge (vigilante)", "3201112233", {"domingo": "todo"})),
                 (e1, s2, c1, "soporte", "Alarmas", "Sensor de la puerta trasera dispara falsas alarmas", "La central nos ha llamado 3 veces esta semana por la zona 5.", "media", tec1, Ticket.Estado.EN_PROCESO, None),
                 (e2, s3, c2, "soporte", "Control de acceso", "Biométrico de urgencias no reconoce huellas", "El lector de la puerta de urgencias rechaza a todo el personal desde hoy.", "alta", tec2, Ticket.Estado.ASIGNADO, None),
-                (e2, s3, c2, "peticion", "Mantenimiento preventivo", "Programar mantenimiento trimestral", "Solicitamos agendar el mantenimiento del cuarto de monitoreo.", "", tec1, Ticket.Estado.RESUELTO, None),
-                (e1, None, c1, "reclamo", "Facturación y contratos", "Cobro doble en la factura de septiembre", "En la factura de septiembre aparece dos veces el cargo de monitoreo.", "", None, Ticket.Estado.RADICADO, None),
+                (e2, s3, c2, "peticion", "Mantenimiento preventivo", "Programar mantenimiento trimestral", "Solicitamos agendar el mantenimiento del cuarto de equipos.", "", tec1, Ticket.Estado.RESUELTO, None),
+                (e1, None, c1, "reclamo", "Facturación y contratos", "Cobro doble en la factura de septiembre", "En la factura de septiembre aparece dos veces el cargo de mantenimiento.", "", None, Ticket.Estado.RADICADO, None),
             ]
             for emp, sede, sol, tipo, cat_n, asunto, desc, impacto, tec, estado, contacto in ejemplos:
                 nombre, tel, horario = contacto or (

@@ -298,7 +298,7 @@ class ClienteContactoForm(_Estilos, BootstrapMixin, forms.ModelForm):
         return (self.cleaned_data.get("nit") or "").strip() or None
 
 
-AREAS = ["Técnica", "Administrativa", "Sistemas", "Comercial", "Directiva", "Central de monitoreo"]
+AREAS = ["Técnica", "Administrativa", "Sistemas", "Comercial", "Directiva"]
 
 
 class FuncionarioForm(_Estilos, BootstrapMixin, forms.ModelForm):

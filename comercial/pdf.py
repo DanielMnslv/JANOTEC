@@ -318,12 +318,11 @@ def _resumen_propuesta(cotizacion, codigo, linea_servicio):
     tabla_datos.setStyle(TableStyle(malla + [("BACKGROUND", (1, 1), (1, 1), CREMA), ("BACKGROUND", (1, 2), (1, 2), TINTE_VERDE)]))
     historia = [_barra("PROPUESTA ECONÓMICA — MEDIOS TECNOLÓGICOS", ANCHO), tabla_datos, Spacer(1, separacion)]
 
-    aiu = cotizacion.aiu_utilidad if cotizacion.modalidad == M.MONITOREO else None
     orden = list(LineaCotizacion.Categoria.values)
     lineas = sorted(cotizacion.lineas.all(), key=lambda linea: orden.index(linea.categoria_final))
     por_categoria = {c: {"base": Decimal(0), "iva": Decimal(0), "total": Decimal(0)} for c in LineaCotizacion.Categoria.values}
     for linea in lineas:
-        c = linea.calculo(aiu)
+        c = linea.calculo()
         for clave in ("base", "iva", "total"):
             por_categoria[linea.categoria_final][clave] += c[clave]
 
@@ -425,10 +424,6 @@ def _observaciones_propuesta(cotizacion, linea_servicio):
             c = cotizacion.canones()
             historia.append(_p("Al finalizar el contrato, los bienes se transfieren al cliente mediante acta por el "
                                f"{Decimal(str(cotizacion.opcion_compra)).normalize():f} % del valor inicial ({_pesos(c['opcion_compra'])}).", cuerpo))
-    elif cotizacion.modalidad == M.MONITOREO:
-        utilidad = f"{Decimal(str(cotizacion.aiu_utilidad)).normalize():f}"
-        historia.append(_p(f"Valor mensual del servicio, con AIU: el IVA del 19 % se liquida sobre la utilidad ({utilidad} %). Incluye "
-                           "únicamente el servicio descrito; no incluye equipos ni su instalación.", cuerpo))
     historia += [Spacer(1, 3 * mm), Paragraph("<b>Vigencia de la propuesta:</b> Siete (7) días Hábiles", cuerpo)]
     condiciones = cotizacion.condiciones.strip()
     if condiciones:

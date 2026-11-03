@@ -14,7 +14,7 @@ def tickets_visibles(usuario):
     - Técnico: los que le asignaron o en cuyas visitas del cronograma participa.
     - Área comercial: los que tienen ficha comercial (también los que ya envió al área técnica, para seguirlos)
       y las solicitudes técnicas que radicó para un cliente.
-    - Central de monitoreo: las que radicó.
+    - Central de atención: las que radicó.
     - Cliente con empresa: todos los de su empresa, de principio a fin.
     """
     from django.db.models import Q
@@ -108,7 +108,7 @@ def comercial_o_supervisor(vista):
 
 
 def radicador_requerido(vista):
-    """Quien registra solicitudes: clientes, personal JANOTEC, central de monitoreo y comercial."""
+    """Quien registra solicitudes: clientes, personal JANOTEC, central de atención y comercial."""
     @wraps(vista)
     def envoltura(request, *args, **kwargs):
         if not (request.user.es_cliente or request.user.radica_para_clientes):

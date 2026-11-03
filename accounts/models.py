@@ -78,7 +78,7 @@ class Sede(models.Model):
     direccion = models.CharField("dirección", max_length=200, blank=True)
     abonado = models.CharField(
         "abonado de alarma", max_length=20, blank=True,
-        help_text="Número de abonado con el que la central de monitoreo identifica la sede.",
+        help_text="Número de abonado del panel de alarma de la sede.",
     )
     # Quién recibe en la sede: se llena solo al radicar y recibe la autorización de ingreso
     contacto_nombre = models.CharField("contacto en la sede", max_length=150, blank=True)
@@ -105,7 +105,7 @@ class Usuario(AbstractUser):
         SUPERVISOR = "supervisor", "Área técnica (coordinador)"
         COMERCIAL = "comercial", "Área comercial"
         DIRECCION = "direccion", "Dirección (ve todas las áreas)"
-        CENTRAL = "central", "Central de monitoreo"
+        CENTRAL = "central", "Central de atención"
         BODEGA = "bodega", "Administración y bodega (inventario)"
 
     rol = models.CharField(max_length=20, choices=Rol.choices, default=Rol.CLIENTE)
@@ -208,7 +208,7 @@ class Usuario(AbstractUser):
 
     @property
     def radica_para_clientes(self):
-        """Radica solicitudes a nombre de cualquier cliente: personal JANOTEC, central de monitoreo y comercial."""
+        """Radica solicitudes a nombre de cualquier cliente: personal JANOTEC, central de atención y comercial."""
         return self.es_personal or self.es_central or self.es_comercial
 
     @property

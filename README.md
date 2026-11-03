@@ -1,7 +1,7 @@
 # Plataforma de Tickets JANOTEC
 
 Plataforma web para que los clientes de **Jano Tec S.A.S.** radiquen solicitudes de soporte
-(CCTV, monitoreo 24/7, alarmas, control de acceso…) y el área de soporte les haga
+(CCTV, alarmas, control de acceso, redes…) y el área de soporte les haga
 seguimiento, mientras el cliente ve el avance en tiempo real.
 
 **Stack:** Python 3.11+ · Django 5.2 · MySQL 8 · Bootstrap 5 (servido localmente, sin CDN)
@@ -15,7 +15,7 @@ seguimiento, mientras el cliente ve el avance en tiempo real.
 (o **Pendiente nueva visita** si no quedó solucionado; vuelve a programarse).
 
 **1. Registro de la solicitud.** La registran los **clientes** (a nombre de su empresa) y, a nombre de cualquier
-cliente, el **personal JANOTEC**, la **central de monitoreo** y los **ejecutivos comerciales**. Campos:
+cliente, el **personal JANOTEC**, la **central de atención** y los **ejecutivos comerciales**. Campos:
 quién lo gestiona y fecha de registro (automáticos), empresa, sede, departamento, municipio, dirección,
 tipo de ticket (mantenimiento, servicio técnico, toma de requerimientos), sistema a intervenir (CCTV, alarma de
 intrusión, redes de comunicaciones, energía solar, control de acceso), descripción, días y **rangos de fecha y hora
@@ -107,7 +107,7 @@ Las **oportunidades** que reportan los técnicos llegan al área comercial, no a
 | **Área técnica (coordinador)** | Tickets del área técnica: direcciona, fija prioridad, asigna técnico y visita; reportes y *Configuración*. No ve lo que está en comercial |
 | **Área comercial** | Requerimientos comerciales y oportunidades: radica, pide levantamientos, envía propuestas y traspasa a instalación. No ve los tickets técnicos puros |
 | **Encargado (técnico)** | Solo sus tickets asignados: respuestas al cliente, notas internas, actas y avance de estado. No asigna ni cambia prioridad |
-| **Central de monitoreo** | Registra solicitudes a nombre de cualquier cliente y sigue las que registró |
+| **Central de atención** | Registra solicitudes a nombre de cualquier cliente y sigue las que registró |
 | **Cliente** | Su propio usuario: **Mis solicitudes** (técnicas y comerciales), **Radicar solicitud** y **Solicitar cotización**. Limitado a su empresa |
 
 En **Configuración** (grupo «Área administrativa», asignado automáticamente por el rol) el coordinador

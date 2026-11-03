@@ -108,7 +108,7 @@ def inicio(request):
         return redirect("inventario:panel")
     if request.user.es_comercial:
         return redirect("comercial:bandeja")
-    return redirect("mis_tickets")  # cliente y central de monitoreo
+    return redirect("mis_tickets")  # cliente y central de atención
 
 
 @login_required
@@ -139,7 +139,7 @@ def buscar_radicado(request):
 @login_required
 @radicador_requerido
 def mis_tickets(request):
-    """Cliente: las solicitudes de su empresa. Central de monitoreo y comercial: las que radicaron."""
+    """Cliente: las solicitudes de su empresa. Central de atención y comercial: las que radicaron."""
     cierre.revisar_si_toca()
     base = tickets_visibles(request.user)
     if not request.user.es_cliente:

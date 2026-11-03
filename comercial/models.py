@@ -246,7 +246,6 @@ class Cotizacion(models.Model):
 
     class Modalidad(models.TextChoices):
         VENTA = "venta", "Venta (pago único)"
-        MONITOREO = "monitoreo", "Monitoreo mensual (AIU)"
         ALQUILER = "alquiler", "Alquiler (mano de obra sumada al canon)"
         HIBRIDO = "hibrido", "Híbrido (alquiler de equipos y venta de mano de obra)"
 
@@ -260,14 +259,12 @@ class Cotizacion(models.Model):
     alcance = models.TextField("alcance de la propuesta", blank=True,
                                help_text="Qué se va a hacer, en palabras del cliente (sale en el PDF).")
     condiciones = models.TextField(default=CONDICIONES)
-    # Forma de cobro: venta (pago único), monitoreo mensual con AIU, alquiler o híbrido (la mano de obra se cobra aparte)
+    # Forma de cobro: venta (pago único), alquiler o híbrido (la mano de obra se cobra aparte)
     modalidad = models.CharField(max_length=10, choices=Modalidad.choices, default=Modalidad.VENTA)
     margen = models.DecimalField("margen de utilidad %", max_digits=5, decimal_places=2, null=True, blank=True,
                                  validators=[MinValueValidator(1), MaxValueValidator(99)],
                                  help_text="Porcentaje del precio de venta que queda de utilidad: precio = costo ÷ (1 − margen). "
                                            "Es obligatorio para enviar; el cliente solo ve el precio final.")
-    aiu_utilidad = models.DecimalField("utilidad del AIU %", max_digits=5, decimal_places=2, default=Decimal("10"),
-                                       help_text="En el monitoreo el IVA se cobra solo sobre la utilidad.")
     tasa_mensual = models.DecimalField("tasa mensual %", max_digits=5, decimal_places=2, default=Decimal("2"),
                                        help_text="Interés del alquiler: el canon es una cuota fija a esta tasa.")
     recargo_alquiler = models.DecimalField("recargo del alquiler %", max_digits=5, decimal_places=2, default=Decimal("2"),
@@ -302,9 +299,8 @@ class Cotizacion(models.Model):
         from decimal import Decimal
         t = {"bruto": Decimal(0), "descuento": Decimal(0), "base": Decimal(0), "iva": Decimal(0), "total": Decimal(0),
              "ahorro": Decimal(0)}
-        aiu = self.aiu_utilidad if self.modalidad == self.Modalidad.MONITOREO else None
         for linea in self.lineas.all():
-            for clave, valor in linea.calculo(aiu).items():
+            for clave, valor in linea.calculo().items():
                 t[clave] += valor
         return t
 
@@ -398,21 +394,23 @@ class LineaCotizacion(models.Model):
 
         return self._precio_exacto().quantize(Decimal("0.01"), ROUND_HALF_UP)
 
-    def calculo(self, aiu_utilidad=None):
-        """Valores de la línea. Con AIU (monitoreo) el IVA va solo sobre la utilidad: base × utilidad % × IVA %."""
+    def calculo(self):
+        """Valores de la línea: subtotal, descuento, base, IVA, total y lo que ahorra el cliente."""
         from decimal import ROUND_HALF_UP, Decimal
         dos = Decimal("0.01")
         bruto = (self.cantidad * self._precio_exacto()).quantize(dos, ROUND_HALF_UP)  # Sin redondear antes, para no descuadrar por cantidad
         descuento = (bruto * self.descuento / 100).quantize(dos, ROUND_HALF_UP)
         base = bruto - descuento
-        tasa = self.iva / 100 * (aiu_utilidad / 100 if aiu_utilidad is not None else 1)
+        tasa = self.iva / 100
         iva = (base * tasa).quantize(dos, ROUND_HALF_UP)
         ahorro = (descuento * (1 + tasa)).quantize(dos, ROUND_HALF_UP)  # lo que el cliente deja de pagar, con IVA
         return {"bruto": bruto, "descuento": descuento, "base": base, "iva": iva, "total": base + iva, "ahorro": ahorro}
 
 
 class ServicioMonitoreo(models.Model):
-    """Lo que el cliente paga cada mes por el monitoreo de una sede (contrato de monitoreo).
+    """ARCHIVADO: JANOTEC no presta monitoreo. Se conserva solo para no perder los registros importados; no se usa.
+
+Lo que el cliente paga cada mes por el monitoreo de una sede (contrato de monitoreo).
 
     El valor se ajusta una vez al año; cada ajuste queda en AjusteMonitoreo para saber de dónde salió el valor vigente.
     """

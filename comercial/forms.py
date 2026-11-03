@@ -351,7 +351,7 @@ class CotizacionForm(BootstrapMixin, forms.ModelForm):
     class Meta:
         from .models import Cotizacion
         model = Cotizacion
-        fields = ["alcance", "condiciones", "modalidad", "margen", "aiu_utilidad", "tasa_mensual", "recargo_alquiler", "plazos",
+        fields = ["alcance", "condiciones", "modalidad", "margen", "tasa_mensual", "recargo_alquiler", "plazos",
                   "opcion_compra"]
         widgets = {"alcance": forms.Textarea(attrs={"rows": 2}), "condiciones": forms.Textarea(attrs={"rows": 3}),
                    "margen": forms.NumberInput(attrs={"min": "1", "max": "99", "step": "any"})}
@@ -369,33 +369,4 @@ class ItemCatalogoForm(BootstrapMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._aplicar_estilos()
-
-
-class ServicioMonitoreoForm(BootstrapMixin, forms.ModelForm):
-    class Meta:
-        from .models import ServicioMonitoreo
-        model = ServicioMonitoreo
-        fields = ["sede", "descripcion", "cantidad", "valor_mensual", "anio_valor", "activo", "observaciones"]
-
-    def __init__(self, *args, empresa=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        sedes = Sede.objects.filter(activa=True).select_related("empresa").order_by("empresa__razon_social", "nombre")
-        if empresa:
-            sedes = sedes.filter(empresa=empresa)
-        self.fields["sede"].queryset = sedes
-        self.fields["sede"].label_from_instance = lambda s: s.nombre if empresa else f"{s.empresa} · {s.nombre}"
-        self.fields["anio_valor"].initial = self.fields["anio_valor"].initial or timezone.localdate().year
-        self._aplicar_estilos()
-
-
-class AjusteMonitoreoForm(BootstrapMixin, forms.Form):
-    anio = forms.IntegerField(label="Año del nuevo valor", min_value=2020, max_value=2100)
-    porcentaje = forms.DecimalField(label="Incremento %", max_digits=6, decimal_places=2, min_value=0, max_value=100,
-                                    help_text="Por ejemplo el IPC o lo pactado en el contrato.")
-    nota = forms.CharField(label="Nota", max_length=200, required=False, help_text="De dónde sale el porcentaje.")
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["anio"].initial = timezone.localdate().year + 1
         self._aplicar_estilos()

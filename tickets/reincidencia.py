@@ -8,7 +8,7 @@ from .models import ActaSoporte, Ticket
 DIAS = 30
 SISTEMA_POR_SERVICIO = {
     "Mantenimiento CCTV IP": "CCTV", "Instalación CCTV IP": "CCTV", "Alarma de intrusión": "ALARMA",
-    "Monitoreo 24/7": "ALARMA", "Control de acceso": "CONTROL DE ACCESO", "Fibra óptica / red": "REDES",
+    "Control de acceso": "CONTROL DE ACCESO", "Fibra óptica / red": "REDES",
     "Energía fotovoltaica": "ENERGIA SOLAR", "Radiocomunicaciones": "RADIO",
 }
 PREVENTIVO = re.compile(r"preventiv|peri[oó]dic", re.I)

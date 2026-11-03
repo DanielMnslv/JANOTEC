@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AjusteMonitoreo, FichaComercial, InformeRequerimiento, PropuestaVersion, ServicioMonitoreo
+from .models import FichaComercial, InformeRequerimiento, PropuestaVersion
 
 
 class InformeInline(admin.StackedInline):
@@ -24,17 +24,3 @@ class FichaComercialAdmin(admin.ModelAdmin):
     autocomplete_fields = ("ticket", "comercial", "oportunidad")
     readonly_fields = ("creado", "actualizado", "fecha_envio", "fecha_respuesta")
     inlines = [InformeInline, VersionInline]
-
-
-class AjusteMonitoreoInline(admin.TabularInline):
-    model = AjusteMonitoreo
-    extra = 0
-    readonly_fields = ("aplicado_por", "aplicado")
-
-
-@admin.register(ServicioMonitoreo)
-class ServicioMonitoreoAdmin(admin.ModelAdmin):
-    list_display = ("sede", "valor_mensual", "cantidad", "anio_valor", "activo")
-    list_filter = ("activo", "anio_valor", "sede__empresa")
-    search_fields = ("sede__nombre", "sede__empresa__razon_social")
-    inlines = [AjusteMonitoreoInline]

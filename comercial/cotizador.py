@@ -32,7 +32,7 @@ def borrador(ficha):
             nueva = Cotizacion.objects.create(
                 ficha=ficha, alcance=anterior.alcance, condiciones=anterior.condiciones, modalidad=anterior.modalidad,
                 margen=anterior.margen,
-                aiu_utilidad=anterior.aiu_utilidad, tasa_mensual=anterior.tasa_mensual, plazos=anterior.plazos,
+                tasa_mensual=anterior.tasa_mensual, plazos=anterior.plazos,
                 recargo_alquiler=anterior.recargo_alquiler,
                 opcion_compra=anterior.opcion_compra)
             for linea in anterior.lineas.all():

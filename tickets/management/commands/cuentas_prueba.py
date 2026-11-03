@@ -23,7 +23,7 @@ CUENTAS = [
     ("cliente.prueba", "Cliente", "De Prueba", Usuario.Rol.CLIENTE, "Administrador de la sede (prueba)"),
     ("tecnico.prueba", "Técnico", "De Prueba", Usuario.Rol.AGENTE, "Técnico de prueba"),
     ("comercial.prueba", "Comercial", "De Prueba", Usuario.Rol.COMERCIAL, "Asesor comercial de prueba"),
-    ("central.prueba", "Central", "De Prueba", Usuario.Rol.CENTRAL, "Operador de la central de monitoreo de prueba"),
+    ("central.prueba", "Central", "De Prueba", Usuario.Rol.CENTRAL, "Operador de la central de atención de prueba"),
 ]
 ARCHIVO = Path(settings.BASE_DIR) / "datos_iniciales" / "cuentas_de_prueba.txt"
 

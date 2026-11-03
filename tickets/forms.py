@@ -247,7 +247,7 @@ class RadicacionForm(BootstrapMixin, forms.ModelForm):
     """Registro de una solicitud de soporte técnico, mantenimiento o toma de requerimientos.
 
     La radican el cliente (a nombre de su empresa) y, a nombre de cualquier cliente, el personal JANOTEC,
-    la central de monitoreo y los ejecutivos comerciales. Con `instance` lo usa el área técnica para
+    la central de atención y los ejecutivos comerciales. Con `instance` lo usa el área técnica para
     corregir cualquier campo al recepcionar.
 
     Empresa, sede, sistema y falla se escriben con sugerencias: si lo que necesita el cliente no está

@@ -210,7 +210,7 @@ class Ticket(models.Model):
     solicitante = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="tickets_solicitados"
     )
-    # «¿Quién lo está gestionando?»: quien radicó (cliente, personal JANOTEC, central de monitoreo o comercial)
+    # «¿Quién lo está gestionando?»: quien radicó (cliente, personal JANOTEC, central de atención o comercial)
     radicado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="tickets_radicados",
         verbose_name="gestionado por",
@@ -1009,7 +1009,7 @@ class OportunidadComercial(models.Model):
     SERVICIOS = [
         ("cctv", "CCTV"), ("control_acceso", "Control de acceso"), ("alarma", "Alarma"), ("redes", "Redes / fibra"),
         ("radio", "Radio"), ("energia_solar", "Energía solar"), ("ia", "IA JANOTEC"), ("vigilante_virtual", "Vigilante virtual"),
-        ("central_monitoreo", "Central de monitoreo"), ("cobro_parqueadero", "Cobro de parqueadero"),
+        ("cobro_parqueadero", "Cobro de parqueadero"),
         ("alarma_comunitaria", "Alarma comunitaria"), ("ciberseguridad", "Ciberseguridad"),
         ("mto_computo", "Mantenimiento de cómputo"), ("proyecto_gob", "Proyecto gobierno"),
     ]

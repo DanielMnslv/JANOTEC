@@ -33,13 +33,6 @@ FALLAS = {
         "Equipos apagados o sin energía (fuente, UPS)",
         OTRA,
     ],
-    "Monitoreo 24/7": [
-        "La central no está recibiendo señales de la sede",
-        "No llegan los reportes de apertura y cierre",
-        "Llamadas o reportes de la central que no corresponden",
-        "Actualizar contactos, claves o usuarios de la central",
-        OTRA,
-    ],
     "Alarma de intrusión": [
         "Falsas alarmas o activaciones constantes",
         "Una zona o sensor no funciona",

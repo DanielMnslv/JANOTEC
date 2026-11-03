@@ -29,13 +29,11 @@
         <div class="row g-3 align-items-end">
           <div class="col-md-5">{% include "tickets/_campo.html" with campo=form.modalidad %}</div>
           <div class="col-md-4">{% include "tickets/_campo.html" with campo=form.margen %}</div>
-          <div class="col-md-4 solo-monitoreo">{% include "tickets/_campo.html" with campo=form.aiu_utilidad %}</div>
           <div class="col-md-3 solo-alquiler">{% include "tickets/_campo.html" with campo=form.tasa_mensual %}</div>
           <div class="col-md-3 solo-alquiler">{% include "tickets/_campo.html" with campo=form.recargo_alquiler %}</div>
           <div class="col-md-3 solo-alquiler">{% include "tickets/_campo.html" with campo=form.plazos %}</div>
           <div class="col-md-3 solo-alquiler">{% include "tickets/_campo.html" with campo=form.opcion_compra %}</div>
         </div>
-        <p class="small text-muted-jn mb-0 solo-monitoreo">Los ítems son el valor <strong>mensual</strong>. El IVA del 19 % se cobra solo sobre la utilidad del AIU; la tarifa se ajusta cada año.</p>
         <p class="small text-muted-jn mb-0 solo-alquiler">Los ítems son los bienes a rentar. El canon es una cuota fija mensual sobre el valor con IVA; al terminar, el cliente se queda con los equipos pagando la opción de compra.</p>
       </div></div>
 
@@ -73,8 +71,8 @@
             <dt>Subtotal</dt><dd id="t-bruto">${{ totales.bruto|floatformat:"0g" }}</dd>
             <dt>Descuento</dt><dd id="t-descuento">${{ totales.descuento|floatformat:"0g" }}</dd>
             <dt>Subtotal con descuento</dt><dd id="t-base">${{ totales.base|floatformat:"0g" }}</dd>
-            <dt>IVA<span class="solo-monitoreo"> (sobre la utilidad)</span></dt><dd id="t-iva">${{ totales.iva|floatformat:"0g" }}</dd>
-            <dt><span class="solo-monitoreo">Total mensual</span><span class="no-monitoreo">Total</span><span class="solo-alquiler"> de los bienes</span></dt><dd class="fs-5 fw-bold" id="t-total">${{ totales.total|floatformat:"0g" }}</dd>
+            <dt>IVA</dt><dd id="t-iva">${{ totales.iva|floatformat:"0g" }}</dd>
+            <dt>Total<span class="solo-alquiler"> de los bienes</span></dt><dd class="fs-5 fw-bold" id="t-total">${{ totales.total|floatformat:"0g" }}</dd>
             <dt>Ahorro para el cliente</dt><dd id="t-ahorro">${{ totales.ahorro|floatformat:"0g" }}</dd>
           </dl>
           <div class="solo-alquiler mb-3">
@@ -126,11 +124,7 @@
   function recalcular() {
     const m = modalidad.value;
     const alquila = m === 'alquiler' || m === 'hibrido';
-    document.querySelectorAll('.solo-monitoreo').forEach(function (el) { el.hidden = m !== 'monitoreo'; });
-    document.querySelectorAll('.no-monitoreo').forEach(function (el) { el.hidden = m === 'monitoreo'; });
     document.querySelectorAll('.solo-alquiler').forEach(function (el) { el.hidden = !alquila; });
-    // Monitoreo con AIU: el IVA va solo sobre la utilidad
-    const factor = m === 'monitoreo' ? num(document.getElementById('id_aiu_utilidad')) / 100 : 1;
     const t = {bruto: 0, descuento: 0, base: 0, iva: 0, ahorro: 0};
     const margen = 1 - Math.min(num(document.getElementById('id_margen')), 99) / 100;  // Sobre la venta, como LineaCotizacion.precio_unitario
     let costo = 0;
@@ -141,7 +135,7 @@
       const borrar = tr.querySelector('input[type=checkbox][name$=DELETE]');
       const costoLinea = num(tr.querySelector('.cantidad')) * num(tr.querySelector('.valor'));
       const bruto = costoLinea / margen;
-      const tasa = num(tr.querySelector('.iva')) / 100 * factor;
+      const tasa = num(tr.querySelector('.iva')) / 100;
       const desc = bruto * num(tr.querySelector('.descuento')) / 100, base = bruto - desc, iva = base * tasa;
       tr.querySelector('.subtotal').textContent = pesos(base);
       tr.classList.toggle('text-decoration-line-through', !!(borrar && borrar.checked));
@@ -167,7 +161,7 @@
       document.getElementById('t-compra').textContent = pesos((a.bienes + a.iva) * num(document.getElementById('id_opcion_compra')) / 100);
     }
   }
-  ['id_modalidad', 'id_margen', 'id_aiu_utilidad', 'id_tasa_mensual', 'id_recargo_alquiler', 'id_plazos', 'id_opcion_compra'].forEach(function (id) {
+  ['id_modalidad', 'id_margen', 'id_tasa_mensual', 'id_recargo_alquiler', 'id_plazos', 'id_opcion_compra'].forEach(function (id) {
     const el = document.getElementById(id);
     if (el) { el.addEventListener('input', recalcular); el.addEventListener('change', recalcular); }
   });
