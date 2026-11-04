@@ -1,0 +1,23 @@
+{% extends "admin/base.html" %}{% load static %}
+{# Configuración (admin de Django) con la marca JANOTEC: logo, colores y fuentes de la plataforma. #}
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block extrastyle %}{{ block.super }}
+<link rel="icon" href="{% static 'img/marca/favicon.ico' %}" sizes="48x48">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Carlito:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'css/admin_janotec.css' %}?v=20261104b">
+{% endblock %}
+
+{% block branding %}
+<div id="site-name"><a href="{% url 'admin:index' %}">
+  <img src="{% static 'img/marca/logo-blanco.webp' %}" alt="JANOTEC" class="logo-admin">
+  <span class="marca-separador" aria-hidden="true"></span>
+  <span class="marca-texto">Configuración de la plataforma</span>
+</a></div>
+{% if user.is_anonymous %}{% include "admin/color_theme_toggle.html" %}{% endif %}
+{% endblock %}
+
+{% block userlinks %}<a class="volver-plataforma" href="/">← Volver a la plataforma</a> {{ block.super }}{% endblock %}
+
+{% block nav-global %}{% endblock %}

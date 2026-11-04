@@ -1,0 +1,189 @@
+/* Configuración (admin de Django) con la marca JANOTEC: gris corporativo #686975, verde #ACC812,
+   Montserrat en títulos y Carlito en el texto, como el resto de la plataforma.
+   Django 5.2 pinta el admin con variables CSS: aquí se reemplazan, en claro y en oscuro. */
+
+:root, html[data-theme="light"] {
+  --primary: #686975;            /* barras de módulo y encabezados */
+  --secondary: #4e4f59;
+  --accent: #acc812;             /* verde de marca: acentos */
+  --primary-fg: #fff;
+  --body-fg: #1f2024;
+  --body-bg: #f5f5f6;
+  --body-quiet-color: #5f606b;
+  --body-medium-color: #444;
+  --body-loud-color: #1f2024;
+  --header-color: #f0f2e6;
+  --header-branding-color: #fff;
+  --header-bg: #686975;
+  --header-link-color: #fff;
+  --breadcrumbs-fg: #f0f2e6;
+  --breadcrumbs-link-fg: #fff;
+  --breadcrumbs-bg: #4e4f59;
+  --link-fg: #4e5f07;            /* verde oscuro legible sobre blanco */
+  --link-hover-color: #2f3a03;
+  --link-selected-fg: #637309;
+  --hairline-color: #e2e2e6;
+  --border-color: #d6d7dc;
+  --darkened-bg: #f0f1f4;
+  --selected-bg: #eef4d0;
+  --selected-row: #f6fadf;
+  --button-fg: #fff;
+  --button-bg: #686975;
+  --button-hover-bg: #4e4f59;
+  --default-button-bg: #637309;
+  --default-button-hover-bg: #4e5f07;
+  --close-button-bg: #929291;
+  --close-button-hover-bg: #686975;
+  --delete-button-bg: #b42318;
+  --delete-button-hover-bg: #8a1a12;
+  --object-tools-bg: #686975;
+  --object-tools-hover-bg: #4e4f59;
+  --message-success-bg: #eef4d0;
+  --font-family-primary: "Carlito", Calibri, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --primary: #8a8b97;
+    --secondary: #3a3b43;
+    --accent: #acc812;
+    --body-fg: #e8e8ec;
+    --body-bg: #1c1d21;
+    --body-quiet-color: #a9aab3;
+    --body-loud-color: #fff;
+    --header-bg: #2a2b31;
+    --breadcrumbs-bg: #34353d;
+    --link-fg: #c3db3a;
+    --link-hover-color: #dbef6a;
+    --link-selected-fg: #c3db3a;
+    --hairline-color: #34353d;
+    --border-color: #44454e;
+    --darkened-bg: #24252b;
+    --selected-bg: #3a4210;
+    --selected-row: #2e3410;
+    --button-bg: #5c5d68;
+    --button-hover-bg: #6e6f7a;
+    --default-button-bg: #7d9110;
+    --default-button-hover-bg: #93a915;
+    --object-tools-bg: #5c5d68;
+    --message-success-bg: #2e3410;
+  }
+}
+html[data-theme="dark"] {
+  --primary: #8a8b97;
+  --secondary: #3a3b43;
+  --accent: #acc812;
+  --body-fg: #e8e8ec;
+  --body-bg: #1c1d21;
+  --body-quiet-color: #a9aab3;
+  --body-loud-color: #fff;
+  --header-bg: #2a2b31;
+  --breadcrumbs-bg: #34353d;
+  --link-fg: #c3db3a;
+  --link-hover-color: #dbef6a;
+  --link-selected-fg: #c3db3a;
+  --hairline-color: #34353d;
+  --border-color: #44454e;
+  --darkened-bg: #24252b;
+  --selected-bg: #3a4210;
+  --selected-row: #2e3410;
+  --button-bg: #5c5d68;
+  --button-hover-bg: #6e6f7a;
+  --default-button-bg: #7d9110;
+  --default-button-hover-bg: #93a915;
+  --object-tools-bg: #5c5d68;
+  --message-success-bg: #2e3410;
+}
+
+/* --- Encabezado: logo, franja verde como en la plataforma ------------------------------ */
+#header {
+  padding: 12px 40px;
+  border-bottom: 4px solid var(--accent);
+  align-items: center;
+}
+#branding h1, #site-name { display: flex; align-items: center; gap: 14px; margin: 0; }
+#site-name a, #site-name a:link, #site-name a:visited { display: flex; align-items: center; gap: 14px; color: #fff; }
+.logo-admin { height: 34px; width: auto; display: block; }
+.marca-separador { width: 1px; height: 26px; background: rgba(255, 255, 255, .35); }
+.marca-texto { font-family: "Montserrat", system-ui, sans-serif; font-weight: 600; font-size: 1.05rem; letter-spacing: .01em; }
+#user-tools { font-family: "Montserrat", system-ui, sans-serif; font-size: .72rem; letter-spacing: .03em; }
+#user-tools a { border-bottom-color: rgba(255, 255, 255, .35); }
+#user-tools a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.volver-plataforma {
+  display: inline-block; margin-right: 10px; padding: 4px 10px; border-radius: 999px;
+  background: var(--accent); color: #2b2c31 !important; border: 0 !important; font-weight: 700;
+}
+.volver-plataforma:hover { background: #c3db3a; }
+
+div.breadcrumbs { padding: 10px 40px; font-family: "Montserrat", system-ui, sans-serif; font-size: .8rem; }
+
+/* --- Títulos y contenido ----------------------------------------------------------------- */
+#content { padding: 24px 40px; }
+#content h1, #content h2, .module h2, .module caption, .inline-group h2, #changelist-filter h2 {
+  font-family: "Montserrat", system-ui, sans-serif;
+}
+#content > h1 { font-weight: 700; color: var(--body-loud-color); font-size: 1.6rem; margin-bottom: 18px; }
+
+/* Tarjetas de cada app en la portada de Configuración */
+.dashboard #content { max-width: 1280px; }
+.dashboard .module, #content-related .module {
+  background: var(--body-bg);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(31, 32, 36, .06), 0 4px 14px rgba(31, 32, 36, .05);
+  border: 1px solid var(--hairline-color);
+}
+html:not([data-theme="dark"]) .dashboard .module, html:not([data-theme="dark"]) #content-related .module { background: #fff; }
+.module h2, .module caption {
+  background: var(--primary);
+  border-left: 5px solid var(--accent);
+  font-weight: 600; font-size: .78rem; letter-spacing: .06em; padding: 10px 14px;
+}
+.dashboard .module table th, .dashboard .module table td { padding: 10px 14px; vertical-align: middle; }
+.dashboard .module table th a { font-weight: 600; font-size: .95rem; }
+.dashboard .module table tr:hover { background: var(--selected-row); }
+.dashboard .module table td a.addlink, .dashboard .module table td a.changelink, .dashboard .module table td a.viewlink {
+  padding: 3px 9px; border-radius: 999px; background: var(--darkened-bg); font-size: .78rem;
+}
+
+/* Acciones recientes */
+#recent-actions-module { border-radius: 12px; }
+#recent-actions-module h2 { background: var(--primary); color: #fff; border-left: 5px solid var(--accent); }
+#recent-actions-module h3 { font-family: "Montserrat", system-ui, sans-serif; font-size: .8rem; padding: 12px 14px 4px; }
+.actionlist li { padding: 6px 14px 6px 32px !important; }
+
+/* Botones */
+.button, input[type=submit], input[type=button], .submit-row input, a.button {
+  border-radius: 8px; font-family: "Montserrat", system-ui, sans-serif; font-weight: 600;
+}
+.object-tools a { border-radius: 999px; font-family: "Montserrat", system-ui, sans-serif; font-weight: 600; letter-spacing: .03em; }
+.submit-row { border-radius: 10px; }
+
+/* Listados */
+#changelist .actions { border-radius: 8px 8px 0 0; }
+#result_list thead th { font-family: "Montserrat", system-ui, sans-serif; font-size: .74rem; letter-spacing: .04em; }
+#result_list tbody tr:hover td, #result_list tbody tr:hover th { background: var(--selected-row); }
+#changelist-filter { border-radius: 10px; overflow: hidden; }
+#changelist-filter h2 { border-left: 5px solid var(--accent); }
+#changelist-search input[type=text] { border-radius: 8px; padding: 6px 10px; }
+
+/* Formularios */
+fieldset.module { border-radius: 10px; }
+input[type=text], input[type=email], input[type=password], input[type=number], input[type=url], input[type=tel],
+input[type=date], textarea, select, .vTextField {
+  border-radius: 6px;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--accent) !important; outline: 2px solid rgba(172, 200, 18, .3); }
+
+/* Mensajes */
+ul.messagelist li { border-radius: 8px; margin: 0 0 6px; }
+
+/* Pantalla de ingreso */
+body.login { background: linear-gradient(160deg, #686975 0%, #4e4f59 100%); }
+.login #container { border-radius: 14px; overflow: hidden; border-top: 5px solid var(--accent); box-shadow: 0 10px 40px rgba(0, 0, 0, .25); }
+.login #header { justify-content: center; }
+
+@media (max-width: 767px) {
+  #header, div.breadcrumbs, #content { padding-left: 16px; padding-right: 16px; }
+  .marca-texto, .marca-separador { display: none; }
+}
