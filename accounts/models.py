@@ -6,6 +6,7 @@ class Empresa(models.Model):
     """Cliente corporativo de JANOTEC (ej. Servicios Postales 4-72)."""
 
     class Sector(models.TextChoices):
+        """Sector del cliente: privado o público (el público exige otros documentos en las propuestas)."""
         PRIVADO = "privado", "Privado"
         PUBLICO = "publico", "Público"
 
@@ -99,7 +100,14 @@ class Sede(models.Model):
 
 
 class Usuario(AbstractUser):
+    """Usuario de la plataforma: clientes y funcionarios de JANOTEC.
+
+        El rol dice el área principal; las marcas «también …» suman otras áreas a la misma persona
+        (p. ej. Yuri y Sindy: bodega y también administrativa). Las propiedades es_* y ve_* son las que
+        consultan permisos, menús y avisos; ninguna se deduce del nombre de usuario.
+    """
     class Rol(models.TextChoices):
+        """Áreas de la plataforma. Dirección ve todo y aprueba; financiera paga y valida facturas."""
         CLIENTE = "cliente", "Cliente"
         AGENTE = "agente", "Encargado (técnico)"
         SUPERVISOR = "supervisor", "Área técnica (coordinador)"
@@ -153,6 +161,7 @@ class Usuario(AbstractUser):
 
     @property
     def es_cliente(self):
+        """Usuario de una empresa cliente (radica tickets y aprueba propuestas)."""
         return self.rol == self.Rol.CLIENTE and not self.is_superuser
 
     @property
@@ -167,6 +176,7 @@ class Usuario(AbstractUser):
 
     def save(self, *args, **kwargs):
         # El acceso a Configuración lo da el rol (los superusuarios siempre lo tienen)
+        """Guarda el usuario; el acceso a Configuración (is_staff) lo da el rol: coordinador o dirección."""
         if not self.is_superuser:
             self.is_staff = self.rol in (self.Rol.SUPERVISOR, self.Rol.DIRECCION)
         super().save(*args, **kwargs)
@@ -227,6 +237,7 @@ class Usuario(AbstractUser):
 
     @property
     def es_bodega(self):
+        """Encargado de bodega e inventario por rol (el superusuario no cuenta)."""
         return self.rol == self.Rol.BODEGA and not self.is_superuser
 
     @property
@@ -237,10 +248,12 @@ class Usuario(AbstractUser):
 
     @property
     def ve_inventario(self):
+        """Entra al módulo de inventario: quienes lo gestionan y los técnicos (estos ven su material)."""
         return self.gestiona_inventario or self.rol == self.Rol.AGENTE or self.tambien_tecnico
 
     @property
     def es_central(self):
+        """Central de atención: recibe y reparte los tickets que llegan."""
         return self.rol == self.Rol.CENTRAL and not self.is_superuser
 
     @property

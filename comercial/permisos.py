@@ -9,8 +9,10 @@ from tickets.permisos import tickets_visibles
 def _exige(propiedad, explicacion):
     """Decorador que deja pasar solo a quien tenga la propiedad del usuario (si no, 403)."""
     def decorador(vista):
+        """Envuelve la vista con la comprobación del permiso y añade el permiso a su documentación."""
         @wraps(vista)
         def envoltura(request, *args, **kwargs):
+            """Responde 403 si el usuario no tiene la propiedad exigida; si la tiene, ejecuta la vista."""
             if not getattr(request.user, propiedad, False):
                 raise PermissionDenied
             return vista(request, *args, **kwargs)

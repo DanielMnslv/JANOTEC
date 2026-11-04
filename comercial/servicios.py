@@ -25,10 +25,15 @@ T = Ticket
 
 
 def _seguimiento(ticket, autor, mensaje, interno=False, tipo=Seguimiento.Tipo.COMENTARIO, **extra):
+    """Crea una entrada en el historial del ticket (por defecto un comentario visible para el cliente)."""
     return Seguimiento.objects.create(ticket=ticket, autor=autor, tipo=tipo, mensaje=mensaje, interno=interno, **extra)
 
 
 def guardar_adjuntos(ticket, archivos, autor, seguimiento, es_propuesta=False, es_informe=False):
+    """Guarda los archivos subidos como adjuntos del ticket, colgados del seguimiento que los trajo.
+
+        es_propuesta / es_informe marcan el tipo de documento para mostrarlo en su sección.
+    """
     for a in archivos:
         Adjunto.objects.create(ticket=ticket, seguimiento=seguimiento, archivo=a, nombre_original=a.name[:255],
                                tamano=a.size, subido_por=autor, es_propuesta=es_propuesta, es_informe=es_informe)
@@ -55,6 +60,7 @@ def registrar_informe(ficha, autor, datos, archivos=(), con_visita=False):
 
 
 def categoria_instalacion():
+    """Categoría con la que se radican los requerimientos comerciales (Instalación…, o la primera que exista)."""
     categoria = Categoria.objects.filter(nombre__startswith="Instalación").first() or Categoria.objects.first()
     return categoria
 
@@ -285,6 +291,10 @@ def registrar_respuesta(ficha, autor, aprobada, motivo=""):
 
 # --- Avisos ------------------------------------------------------------------------
 def _acciones_propuesta(version):
+    """Botones del correo de la propuesta: aprobar, aprobar con cambios o no aprobar.
+
+        Cada enlace lleva una firma propia de la versión, así el cliente responde sin iniciar sesión.
+    """
     if version is None:
         return []
     from .respuesta import enlace
@@ -320,12 +330,14 @@ def _correos_propuesta(ficha):
 
 # --- Revisión de la propuesta por dirección ------------------------------------------------------
 def _correos_direccion():
+    """Correos de los usuarios de dirección activos (Miguel)."""
     from accounts.models import Usuario
     return list(Usuario.objects.filter(rol=Usuario.Rol.DIRECCION, is_active=True).exclude(email="")
                 .values_list("email", flat=True))
 
 
 def _enlace_cotizador(ficha):
+    """Enlace absoluto al cotizador del requerimiento, para los avisos al área administrativa."""
     from django.urls import reverse
     return f"{settings.SITIO_URL.rstrip('/')}{reverse('comercial:cotizador', args=[ficha.ticket.radicado])}"
 
@@ -411,6 +423,7 @@ def _enviar_con_ficha(asunto, cuerpo, destinatarios, ficha, interna):
 
 
 def requerimiento_creado(ficha):
+    """Aviso al radicar un requerimiento: al cliente con la ficha en PDF y al área comercial."""
     t = ficha.ticket
     adjuntos = []
     try:

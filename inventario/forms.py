@@ -11,12 +11,15 @@ from .models import Activo, Insumo, LineaOrdenCompra, Modalidad, OrdenCompra
 
 
 class _Estilos:
+    """Mezcla para formularios que aplican los estilos de la plataforma al crearse."""
     def __init__(self, *args, **kwargs):
+        """Crea el formulario y aplica los estilos a sus campos."""
         super().__init__(*args, **kwargs)
         self._aplicar_estilos()
 
 
 def tecnicos():
+    """Técnicos activos ordenados por nombre, para las listas de «quién recibe»."""
     return Usuario.tecnicos().order_by("first_name", "last_name")
 
 
@@ -24,6 +27,10 @@ class MaterialMixin:
     """Filas de placas (activos) y de código + cantidad (insumos) que se agregan con «+»."""
 
     def leer_material(self, datos, placas_validas=None):
+        """Lee las placas e insumos que vienen en el POST y devuelve (activos, insumos, errores).
+
+            placas_validas limita las placas aceptadas (p. ej. solo las que tiene el técnico).
+        """
         activos, insumos, errores = [], [], []
         placas = [p.strip().upper() for p in datos.getlist("placa") if p.strip()]
         for placa in dict.fromkeys(placas):
@@ -54,6 +61,7 @@ class MaterialMixin:
 
 
 class EntregaForm(_Estilos, BootstrapMixin, forms.Form):
+    """Entrega de material de bodega a un técnico, con modalidad, destino y las dos firmas del acta."""
     tecnico = forms.ModelChoiceField(label="Técnico que recibe", queryset=Usuario.objects.none())
     modalidad = forms.ChoiceField(label="Modalidad", choices=[("", "— Elija —")] + [
         c for c in Modalidad.choices if c[0] != Modalidad.STOCK])
@@ -68,6 +76,7 @@ class EntregaForm(_Estilos, BootstrapMixin, forms.Form):
     firma_recibe = forms.CharField(required=False, widget=forms.HiddenInput)
 
     def __init__(self, *args, **kwargs):
+        """Lista de técnicos y de tickets abiertos (con radicado, cliente y asunto)."""
         super().__init__(*args, **kwargs)
         self.fields["tecnico"].queryset = tecnicos()
         self.fields["ticket"].queryset = (Ticket.objects.filter(estado__in=Ticket.ESTADOS_ABIERTOS)
@@ -75,14 +84,17 @@ class EntregaForm(_Estilos, BootstrapMixin, forms.Form):
         self.fields["ticket"].label_from_instance = lambda t: f"{t.radicado} · {t.empresa} · {t.asunto[:50]}"
 
     def clean_firma_entrega(self):
+        """Firma opcional de quien entrega (bodega)."""
         from tickets.forms import leer_firma
         return leer_firma(self.cleaned_data.get("firma_entrega"), False, "de quien entrega")
 
     def clean_firma_recibe(self):
+        """Firma opcional del técnico que recibe."""
         from tickets.forms import leer_firma
         return leer_firma(self.cleaned_data.get("firma_recibe"), False, "de quien recibe")
 
     def clean(self):
+        """Salvo en asignación al personal, el material debe ir para un ticket o un cliente."""
         d = super().clean()
         if d.get("modalidad") not in (Modalidad.ASIGNACION, None, "") and not d.get("ticket") and not d.get("empresa"):
             raise ValidationError("Indique el ticket o el cliente para el que lleva el material.")
@@ -90,6 +102,7 @@ class EntregaForm(_Estilos, BootstrapMixin, forms.Form):
 
 
 class DevolucionForm(_Estilos, BootstrapMixin, forms.Form):
+    """Devolución de material del técnico a bodega, con observaciones."""
     observaciones = forms.CharField(required=False, max_length=500,
                                     widget=forms.TextInput(attrs={"placeholder": "Ej.: Sobrante de la instalación en Gases del Llano"}))
 
@@ -125,6 +138,7 @@ class SinFacturaMixin(forms.Form):
     motivo_sin_factura = forms.ChoiceField(label="¿De dónde sale?", choices=MOTIVOS, required=False)
 
     def _exigir_datos_de_compra(self, d):
+        """Exige los datos de compra (DATOS_COMPRA) salvo que se marque «Ingreso sin factura»."""
         if d.get("sin_factura"):
             return
         for campo in self.DATOS_COMPRA:
@@ -132,10 +146,12 @@ class SinFacturaMixin(forms.Form):
                 self.add_error(campo, "Este campo es obligatorio (o marque «Ingreso sin factura»).")
 
     def nota_sin_factura(self):
+        """Nota para el historial con el motivo del ingreso sin factura."""
         return f"Ingreso sin factura: {dict(self.MOTIVOS).get(self.cleaned_data.get('motivo_sin_factura'), 'sin motivo')}"
 
 
 class CompraActivoForm(SinFacturaMixin, _Estilos, BootstrapMixin, forms.ModelForm):
+    """Ingreso de activos con placa: varios iguales a la vez, con placas consecutivas y un serial por línea."""
     DATOS_COMPRA = ("fecha_compra", "proveedor", "factura", "valor")
     cantidad_iguales = forms.IntegerField(label="¿Cuántos iguales?", min_value=1, max_value=50, initial=1,
                                           help_text="Se crean placas consecutivas; los seriales se escriben uno por línea.")
@@ -151,6 +167,7 @@ class CompraActivoForm(SinFacturaMixin, _Estilos, BootstrapMixin, forms.ModelFor
                    "descripcion": forms.TextInput()}
 
     def __init__(self, *args, **kwargs):
+        """Categoría, tipo y descripción obligatorios; los datos de compra se exigen en clean; sugerencias en los campos."""
         super().__init__(*args, **kwargs)
         for campo in ("categoria", "tipo", "descripcion"):
             self.fields[campo].required = True
@@ -161,17 +178,21 @@ class CompraActivoForm(SinFacturaMixin, _Estilos, BootstrapMixin, forms.ModelFor
             self.fields[campo].widget.attrs["list"] = lista
 
     def clean_prefijo(self):
+        """Normaliza el código de placa (mayúsculas, sin espacios) y le quita el consecutivo."""
         return Activo.prefijo(self.cleaned_data["prefijo"].strip().upper().replace(" ", ""))
 
     def clean_marca(self):
+        """Escribe la marca como está en el catálogo (evita duplicados por mayúsculas)."""
         from .catalogos import canonica
         return canonica("marcas", self.cleaned_data.get("marca"))
 
     def clean_categoria(self):
+        """Escribe la categoría como está en el catálogo."""
         from .catalogos import canonica
         return canonica("categorias", (self.cleaned_data.get("categoria") or "").upper())
 
     def clean(self):
+        """Revisa que haya un serial por activo, que ninguno exista ya, y los datos de compra."""
         d = super().clean()
         seriales = [s.strip() for s in (d.get("seriales") or "").splitlines() if s.strip()]
         if seriales and len(seriales) != d.get("cantidad_iguales", 1):
@@ -185,6 +206,7 @@ class CompraActivoForm(SinFacturaMixin, _Estilos, BootstrapMixin, forms.ModelFor
 
 
 class CompraInsumoForm(SinFacturaMixin, _Estilos, BootstrapMixin, forms.Form):
+    """Ingreso de insumos (cable, conectores…) por código; si el código es nuevo se crea en el catálogo."""
     DATOS_COMPRA = ("valor_unitario", "proveedor", "factura", "fecha")
 
     codigo = forms.CharField(label="Código del insumo", max_length=40, widget=forms.TextInput(attrs={"list": "lista-insumos"}))
@@ -198,6 +220,7 @@ class CompraInsumoForm(SinFacturaMixin, _Estilos, BootstrapMixin, forms.Form):
     fecha = forms.DateField(label="Fecha de compra", required=False, widget=forms.DateInput(attrs={"type": "date"}))
 
     def clean(self):
+        """Toma el código de la sugerencia; uno nuevo exige descripción; revisa los datos de compra."""
         d = super().clean()
         codigo = (d.get("codigo") or "").split(" · ")[0].strip().upper()
         d["codigo"] = codigo
@@ -222,6 +245,9 @@ class ValidarSolicitudForm(_Estilos, BootstrapMixin, forms.Form):
     comentario = forms.CharField(label="Comentario (opcional)", required=False, max_length=500)
 
     def __init__(self, *args, solicitud, **kwargs):
+        """Arranca con lo que trae la solicitud (cargo, modalidad, técnico, devolución) y arma los
+                campos de adicionales y de los renglones escritos a mano.
+        """
         self.solicitud = solicitud
         kwargs.setdefault("initial", {}).update(cargo=solicitud.cargo, modalidad=solicitud.modalidad, tecnico=solicitud.tecnico_id,
                                                 fecha_devolucion=solicitud.fecha_devolucion)
@@ -242,25 +268,31 @@ class ValidarSolicitudForm(_Estilos, BootstrapMixin, forms.Form):
                 widget=forms.CheckboxInput(attrs={"class": "form-check-input"}))
 
     def clean(self):
+        """Un préstamo exige la fecha en que deben devolver los equipos."""
         d = super().clean()
         if d.get("modalidad") == Modalidad.PRESTAMO and not d.get("fecha_devolucion"):
             self.add_error("fecha_devolucion", "En un préstamo indique cuándo deben devolver los equipos.")
         return d
 
     def campos_adicionales(self):
+        """Pares (renglón, campo de adicional) de los consumibles, para la plantilla."""
         return [(item, self[f"adicional_{item.pk}"]) for item in self.consumibles]
 
     def campos_a_mano(self):
+        """Pares (renglón, casilla «listo») de lo escrito a mano, para la plantilla."""
         return [(item, self[f"listo_{item.pk}"]) for item in self.escritos_a_mano]
 
     def a_mano_listos(self):
+        """Qué renglones escritos a mano marcó bodega como listos: {pk: bool}."""
         return {item.pk: bool(self.cleaned_data.get(f"listo_{item.pk}")) for item in self.escritos_a_mano}
 
     def adicionales(self):
+        """Cantidad adicional de cada consumible: {pk: Decimal} (vacío = 0)."""
         return {item.pk: self.cleaned_data.get(f"adicional_{item.pk}") or Decimal(0) for item in self.consumibles}
 
 
 class HerramientaForm(_Estilos, BootstrapMixin, forms.ModelForm):
+    """Alta o edición de una herramienta y su responsable."""
     class Meta:
         from .models import Herramienta
         model = Herramienta
@@ -269,6 +301,7 @@ class HerramientaForm(_Estilos, BootstrapMixin, forms.ModelForm):
                    "nombre": forms.TextInput(attrs={"list": "lista-nombres", "placeholder": "Ej.: Ponchadora RJ45"})}
 
     def __init__(self, *args, **kwargs):
+        """El responsable es opcional (en bodega) y se elige entre los técnicos."""
         super().__init__(*args, **kwargs)
         self.fields["tecnico"].queryset = tecnicos()
         self.fields["tecnico"].required = False
@@ -276,12 +309,14 @@ class HerramientaForm(_Estilos, BootstrapMixin, forms.ModelForm):
         self.fields["costo_compra"].label = "Precio de compra (unidad)"
 
     def clean_marca(self):
+        """Escribe la marca como está en el catálogo."""
         from .catalogos import canonica
         return canonica("marcas", self.cleaned_data.get("marca"))
 
 
 # --- Fase 3: contactos y funcionarios -------------------------------------------------------
 class ProveedorForm(_Estilos, BootstrapMixin, forms.ModelForm):
+    """Datos del proveedor y las marcas que maneja."""
     class Meta:
         from .models import Proveedor
         model = Proveedor
@@ -290,11 +325,13 @@ class ProveedorForm(_Estilos, BootstrapMixin, forms.ModelForm):
 
 
 class ClienteContactoForm(_Estilos, BootstrapMixin, forms.ModelForm):
+    """Datos de contacto de un cliente, editables desde inventario."""
     class Meta:
         model = Empresa
         fields = ["razon_social", "nit", "email_contacto", "telefono", "direccion", "ciudad", "activa"]
 
     def clean_nit(self):
+        """NIT vacío se guarda como nulo (el campo es único)."""
         return (self.cleaned_data.get("nit") or "").strip() or None
 
 
@@ -313,6 +350,7 @@ class FuncionarioForm(_Estilos, BootstrapMixin, forms.ModelForm):
         widgets = {"area": forms.TextInput(attrs={"list": "lista-areas"})}
 
     def __init__(self, *args, editor=None, **kwargs):
+        """Nombre, apellido y cédula obligatorios; solo el superusuario asigna roles fuera de los básicos."""
         super().__init__(*args, **kwargs)
         for campo in ("first_name", "last_name", "documento"):
             self.fields[campo].required = True
@@ -324,6 +362,7 @@ class FuncionarioForm(_Estilos, BootstrapMixin, forms.ModelForm):
                 self.fields["rol"].choices = Usuario.Rol.choices
 
     def clean_documento(self):
+        """Cédula solo con números y sin repetir entre funcionarios."""
         cedula = "".join(c for c in self.cleaned_data["documento"] if c.isdigit())
         if not cedula:
             raise ValidationError("Escriba la cédula (solo números).")
@@ -332,6 +371,7 @@ class FuncionarioForm(_Estilos, BootstrapMixin, forms.ModelForm):
         return cedula
 
     def save(self, commit=True):
+        """Al crear, arma el usuario con la inicial y el primer apellido (sin tildes), sin repetir."""
         usuario = super().save(commit=False)
         if not usuario.pk:
             base = (usuario.first_name[:1] + usuario.last_name.split()[0]).lower() if usuario.last_name else usuario.first_name.lower()
@@ -349,6 +389,7 @@ class FuncionarioForm(_Estilos, BootstrapMixin, forms.ModelForm):
 
 
 class OrdenCompraForm(BootstrapMixin, forms.ModelForm):
+    """Encabezado de la orden de compra: proveedor, fecha estimada, forma de pago y cotización del proveedor."""
     class Meta:
         model = OrdenCompra
         fields = ["proveedor", "fecha_estimada", "forma_pago", "dias_credito", "notas", "soporte"]
@@ -356,6 +397,7 @@ class OrdenCompraForm(BootstrapMixin, forms.ModelForm):
                    "notas": forms.Textarea(attrs={"rows": 2, "placeholder": "Forma de pago, entrega en bodega, garantía…"})}
 
     def __init__(self, *args, **kwargs):
+        """La forma de pago es opcional en el formulario: si no se elige, queda pago anticipado."""
         super().__init__(*args, **kwargs)
         self.fields["proveedor"].empty_label = "— Elija el proveedor —"
         self.fields["soporte"].widget.attrs["accept"] = ".pdf,image/*"
@@ -364,6 +406,7 @@ class OrdenCompraForm(BootstrapMixin, forms.ModelForm):
         self._aplicar_estilos()
 
     def clean_forma_pago(self):
+        """Pago anticipado cuando no se eligió forma de pago."""
         return self.cleaned_data.get("forma_pago") or OrdenCompra.FormaPago.ANTICIPADO
 
     def clean(self):
@@ -375,6 +418,7 @@ class OrdenCompraForm(BootstrapMixin, forms.ModelForm):
 
 
 class LineaOrdenForm(BootstrapMixin, forms.ModelForm):
+    """Un renglón de la orden: descripción, cantidad, adicional, valor unitario sin IVA e IVA."""
     class Meta:
         model = LineaOrdenCompra
         fields = ["descripcion", "cantidad", "adicional", "valor_unitario", "iva"]
@@ -384,11 +428,13 @@ class LineaOrdenForm(BootstrapMixin, forms.ModelForm):
                    "iva": forms.NumberInput(attrs={"step": "any", "min": "0", "max": "100"})}
 
     def __init__(self, *args, **kwargs):
+        """Cantidad y adicional opcionales (vacíos cuentan como cero)."""
         super().__init__(*args, **kwargs)
         self.fields["cantidad"].required = self.fields["adicional"].required = False
         self._aplicar_estilos()
 
     def clean(self):
+        """Exige que el renglón compre algo (cantidad + adicional > 0) salvo que se esté borrando."""
         d = super().clean()
         d["cantidad"], d["adicional"] = d.get("cantidad") or Decimal(0), d.get("adicional") or Decimal(0)
         if d.get("descripcion") and not d.get("DELETE") and d["cantidad"] + d["adicional"] <= 0:
@@ -397,4 +443,5 @@ class LineaOrdenForm(BootstrapMixin, forms.ModelForm):
 
 
 def formset_orden():
+    """Formset de los renglones de la orden (dos vacíos de más para agregar, y se pueden borrar)."""
     return forms.inlineformset_factory(OrdenCompra, LineaOrdenCompra, form=LineaOrdenForm, extra=2, can_delete=True)

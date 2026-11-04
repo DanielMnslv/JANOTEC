@@ -43,6 +43,7 @@ def compras_requerido(vista):
     """Las órdenes de compra las ven bodega, dirección y financiera (cada uno actúa solo en su paso)."""
     @wraps(vista)
     def envoltura(request, *args, **kwargs):
+        """Deja pasar a bodega (gestiona el inventario) y a financiera o dirección; los demás reciben 403."""
         if not (request.user.gestiona_inventario or request.user.ve_financiera):
             raise PermissionDenied
         return vista(request, *args, **kwargs)
@@ -53,6 +54,7 @@ def financiera_requerida(vista):
     """El módulo de financiera: financiera y dirección."""
     @wraps(vista)
     def envoltura(request, *args, **kwargs):
+        """Deja pasar solo a financiera o dirección; los demás reciben 403."""
         if not request.user.ve_financiera:
             raise PermissionDenied
         return vista(request, *args, **kwargs)
@@ -61,10 +63,12 @@ def financiera_requerida(vista):
 
 # --- A quién le llega cada aviso -----------------------------------------------------------------
 def _activos(filtro):
+    """Correos de los usuarios activos que cumplen el filtro (se omiten los que no tienen correo)."""
     return list(Usuario.objects.filter(filtro, is_active=True).exclude(email="").values_list("email", flat=True))
 
 
 def correos_direccion():
+    """Correos de dirección (Miguel); si no hay ninguno, el buzón de soporte, para que el aviso no se pierda."""
     return _activos(Q(rol=Usuario.Rol.DIRECCION)) or [c for c in (settings.NOTIFICAR_SOPORTE_EMAIL,) if c]
 
 
@@ -74,19 +78,23 @@ def correos_financiera():
 
 
 def correos_bodega():
+    """Correos de bodega; si no hay usuario de bodega, los buzones administrativo y de soporte."""
     return _activos(Q(rol=Usuario.Rol.BODEGA)) or [c for c in (settings.NOTIFICAR_ADMINISTRATIVA_EMAIL,
                                                                  settings.NOTIFICAR_SOPORTE_EMAIL) if c]
 
 
 def _enlace(orden):
+    """Enlace absoluto a la orden de compra, para ponerlo en los correos."""
     return f"{settings.SITIO_URL.rstrip('/')}{orden.get_absolute_url()}"
 
 
 def _pesos(valor):
+    """Valor en pesos colombianos con punto de miles: 1234567 → «$1.234.567»."""
     return f"${valor:,.0f}".replace(",", ".")
 
 
 def _resumen(orden):
+    """Líneas de resumen de la orden para los correos: proveedor, total con IVA, forma de pago y ticket."""
     t = orden.totales()
     return [f"Proveedor: {orden.proveedor or '—'}", f"Total: {_pesos(t['total'])} (con IVA)",
             f"Forma de pago: {orden.get_forma_pago_display()}" + (f" a {orden.dias_credito} días" if orden.a_credito and orden.dias_credito else "")
@@ -124,6 +132,7 @@ def _archivo(campo):
 
 
 def _pdf_orden(orden):
+    """PDF de la orden de compra como adjunto de correo: (nombre, contenido, tipo)."""
     from .pdf import orden_compra_pdf
     nombre, contenido = orden_compra_pdf(orden)
     return nombre, contenido, "application/pdf"
@@ -249,6 +258,7 @@ def registrar_pago(orden, autor, fecha, valor, medio, soporte):
 
 # --- 3. Bodega se la envía al proveedor ------------------------------------------------------------
 def correos_proveedor(proveedor):
+    """Correos del proveedor sin repetir: primero el de su asesor, luego el general."""
     asesor = proveedor.asesor
     return [c for c in dict.fromkeys([asesor.correo if asesor else "", proveedor.correo]) if c]
 
@@ -343,6 +353,7 @@ def _decimal(texto):
 
 
 def _fecha(texto):
+    """Convierte la fecha del formulario (AAAA-MM-DD); si viene vacía o mal escrita, error de validación."""
     try:
         return date.fromisoformat(texto or "")
     except ValueError:

@@ -45,6 +45,7 @@ def cotiza_requerido(vista):
 
     @wraps(vista)
     def envoltura(request, *args, **kwargs):
+        """Deja pasar a bodega y al área administrativa (arma propuestas); los demás reciben 403."""
         if not (request.user.gestiona_inventario or request.user.arma_propuestas):
             raise PermissionDenied
         return vista(request, *args, **kwargs)
@@ -54,6 +55,7 @@ E = SolicitudCotizacion.Estado
 
 
 class SolicitudForm(BootstrapMixin, forms.ModelForm):
+    """Datos generales de la solicitud de cotización: fecha límite y notas para el proveedor."""
     class Meta:
         model = SolicitudCotizacion
         fields = ["fecha_limite", "notas"]
@@ -61,11 +63,13 @@ class SolicitudForm(BootstrapMixin, forms.ModelForm):
                    "notas": forms.Textarea(attrs={"rows": 3, "placeholder": "Marca preferida, garantía, lugar de entrega…"})}
 
     def __init__(self, *args, **kwargs):
+        """Aplica los estilos de la plataforma a los campos."""
         super().__init__(*args, **kwargs)
         self._aplicar_estilos()
 
 
 class LineaForm(BootstrapMixin, forms.ModelForm):
+    """Un renglón por cotizar: qué es, cuánto se pide y a qué proveedor se le pregunta."""
     class Meta:
         model = LineaSolicitudCotizacion
         fields = ["tipo", "descripcion", "cantidad", "adicional", "proveedor", "precio_referencia"]
@@ -75,6 +79,7 @@ class LineaForm(BootstrapMixin, forms.ModelForm):
                    "descripcion": forms.TextInput(attrs={"list": "elementos-conocidos", "autocomplete": "off"})}
 
     def __init__(self, *args, **kwargs):
+        """Cantidad, adicional y tipo opcionales; el proveedor se elige de la lista ordenada."""
         super().__init__(*args, **kwargs)
         self.fields["cantidad"].required = self.fields["adicional"].required = self.fields["tipo"].required = False
         self.fields["proveedor"].queryset = Proveedor.objects.order_by("razon_social")
@@ -82,6 +87,7 @@ class LineaForm(BootstrapMixin, forms.ModelForm):
         self._aplicar_estilos()
 
     def clean(self):
+        """Vacíos cuentan como cero y el tipo por defecto es material; exige pedir algo (cantidad + adicional > 0)."""
         d = super().clean()
         d["cantidad"], d["adicional"] = d.get("cantidad") or Decimal(0), d.get("adicional") or Decimal(0)
         d["tipo"] = d.get("tipo") or LineaSolicitudCotizacion.Tipo.MATERIAL
@@ -91,10 +97,12 @@ class LineaForm(BootstrapMixin, forms.ModelForm):
 
 
 def formset_lineas():
+    """Formset de los renglones de la solicitud (dos vacíos de más para agregar, y se pueden borrar)."""
     return forms.inlineformset_factory(SolicitudCotizacion, LineaSolicitudCotizacion, form=LineaForm, extra=2, can_delete=True)
 
 
 class RespuestaForm(BootstrapMixin, forms.ModelForm):
+    """Cotización que devuelve el proveedor: referencia, fechas, condiciones y el archivo (PDF o imagen)."""
     class Meta:
         model = CotizacionProveedor
         fields = ["referencia", "fecha", "fecha_entrega", "condiciones", "archivo"]
@@ -103,6 +111,7 @@ class RespuestaForm(BootstrapMixin, forms.ModelForm):
                    "condiciones": forms.Textarea(attrs={"rows": 2})}
 
     def __init__(self, *args, **kwargs):
+        """El archivo solo admite PDF o imagen."""
         super().__init__(*args, **kwargs)
         self.fields["archivo"].widget.attrs["accept"] = ".pdf,image/*"
         self.fields["archivo"].validators.append(FileExtensionValidator(["pdf", "png", "jpg", "jpeg"]))
@@ -217,6 +226,7 @@ def sincronizar_proveedores(pedido):
 
 # --- Envío a los proveedores: correo con su PDF y enlace de WhatsApp -------------------------------
 def _correos_proveedor(proveedor):
+    """Correos del proveedor sin repetir: primero el de su asesor, luego el general."""
     asesor = proveedor.asesor
     return [c for c in dict.fromkeys([asesor.correo if asesor else "", proveedor.correo]) if c]
 
@@ -296,6 +306,7 @@ def reabrir(orden):
 @login_required
 @cotiza_requerido
 def listado(request):
+    """Bandeja de solicitudes de cotización (SC), por defecto las abiertas; ?estado= filtra por otro estado."""
     estado = request.GET.get("estado", "abiertas")
     qs = (SolicitudCotizacion.objects.select_related("solicitud", "solicitud__ticket", "propuesta__ticket")
           .prefetch_related("lineas", "cotizaciones"))
@@ -346,6 +357,7 @@ def nueva(request):
 @login_required
 @cotiza_requerido
 def detalle(request, pk):
+    """Ficha de una SC: mientras está en preparación se editan sus datos y renglones; enviada ya no cambia."""
     pedido = get_object_or_404(SolicitudCotizacion.objects.select_related("solicitud", "solicitud__ticket",
                                                                           "propuesta__ticket__empresa"), pk=pk)
     editable = pedido.estado == E.BORRADOR  # lo que ya se le mandó al proveedor no cambia
@@ -458,6 +470,7 @@ def respuesta(request, pk, cot_pk):
 @login_required
 @cotiza_requerido
 def pdf(request, pk, cot_pk):
+    """PDF de la solicitud que se le envía a un proveedor (solo sus renglones), abierto en el navegador."""
     cotizacion = get_object_or_404(CotizacionProveedor.objects.select_related("proveedor", "solicitud"), pk=cot_pk, solicitud_id=pk)
     nombre, contenido = solicitud_cotizacion_pdf(cotizacion)
     r = HttpResponse(contenido, content_type="application/pdf")
@@ -468,6 +481,7 @@ def pdf(request, pk, cot_pk):
 @login_required
 @cotiza_requerido
 def archivo(request, pk, cot_pk):
+    """Abre el archivo que adjuntó el proveedor con su cotización (404 si no hay)."""
     cotizacion = get_object_or_404(CotizacionProveedor, pk=cot_pk, solicitud_id=pk)
     if not cotizacion.archivo:
         raise Http404

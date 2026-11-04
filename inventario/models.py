@@ -25,6 +25,7 @@ def normalizar(texto):
 
 
 class Lugar(models.TextChoices):
+    """Dónde está físicamente un activo o material: bodega, con el técnico o en el cliente."""
     BODEGA = "bodega", "Bodega principal"
     TECNICO = "tecnico", "En poder del técnico"
     CLIENTE = "cliente", "Cliente"
@@ -33,6 +34,7 @@ class Lugar(models.TextChoices):
 
 
 class Modalidad(models.TextChoices):
+    """Cómo sale el material de bodega: venta, alquiler, préstamo, reinversión, mantenimiento, uso del personal o stock."""
     VENTA = "venta", "Venta"
     ALQUILER = "alquiler", "Alquiler"
     PRESTAMO = "prestamo", "Préstamo"
@@ -70,6 +72,7 @@ class CategoriaActivo(models.Model):
 
 
 class Proveedor(models.Model):
+    """Proveedor al que se le cotiza y compra; puede tener asesor propio y marcas que maneja."""
     nit = models.CharField("NIT", max_length=30, blank=True, db_index=True)
     razon_social = models.CharField("razón social", max_length=200, unique=True)
     correo = models.EmailField(blank=True)
@@ -129,7 +132,9 @@ class CodigoActivo(models.Model):
 
 
 class Activo(models.Model):
+    """Equipo con placa (cámara, DVR…): su historia completa queda en sus movimientos."""
     class Estado(models.TextChoices):
+        """Estado del activo según dónde está y para qué."""
         DISPONIBLE = "disponible", "Disponible en bodega"
         EN_TECNICO = "en_tecnico", "En poder del técnico"
         ASIGNADO = "asignado", "Asignado (uso del personal)"
@@ -185,19 +190,23 @@ class Activo(models.Model):
         return f"{self.placa} · {self.descripcion_corta}"
 
     def get_absolute_url(self):
+        """Ficha del activo por su placa."""
         return reverse("inventario:activo", args=[self.placa])
 
     @property
     def descripcion_corta(self):
+        """Tipo, subtipo, marca y referencia; si no hay, el comienzo de la descripción."""
         partes = [self.tipo, self.subtipo, self.marca, self.referencia]
         return " ".join(p for p in partes if p) or self.descripcion[:60]
 
     @property
     def valor_con_iva(self):
+        """Valor de compra con IVA, o None si no se registró."""
         return (self.valor * (1 + self.iva / 100)).quantize(Decimal("0.01")) if self.valor is not None else None
 
     @property
     def ubicacion(self):
+        """Texto de dónde está: cliente (y sede), «Con …» el técnico, o bodega."""
         if self.lugar == Lugar.CLIENTE:
             return str(self.empresa or self.cliente_texto) + (f" · {self.sede.nombre}" if self.sede else "")
         if self.lugar == Lugar.TECNICO:
@@ -206,6 +215,7 @@ class Activo(models.Model):
 
     @property
     def color_estado(self):
+        """Color de la etiqueta del estado (clases de Bootstrap)."""
         return {"disponible": "success", "en_tecnico": "warning", "asignado": "info", "alquilado": "primary",
                 "prestado": "primary", "vendido": "secondary", "baja": "dark", "no_encontrado": "danger"}.get(self.estado, "light")
 
@@ -219,11 +229,13 @@ class Activo(models.Model):
 
     @property
     def vencido(self):
+        """True si es un préstamo o alquiler cuya fecha de devolución ya pasó."""
         dias = self.dias_para_devolver
         return dias is not None and dias < 0
 
     @staticmethod
     def prefijo(placa):
+        """Parte de la placa sin el consecutivo final: CAM-BAL-2MP010 → CAM-BAL-2MP."""
         m = re.match(r"^(.*?)(\d+)$", placa or "")
         return m.group(1) if m else placa
 
@@ -243,6 +255,7 @@ class Insumo(models.Model):
     """Material por cantidad (como INVENTARIO_INSUMO). El stock sale de los movimientos."""
 
     class Unidad(models.TextChoices):
+        """Unidad en que se cuenta el insumo."""
         UNIDAD = "Unidad", "Unidad"
         METRO = "Metro", "Metro"
 
@@ -261,6 +274,7 @@ class Insumo(models.Model):
         return f"{self.codigo} · {self.descripcion}"
 
     def get_absolute_url(self):
+        """Ficha del insumo por su código."""
         return reverse("inventario:insumo", args=[self.codigo])
 
 
@@ -268,6 +282,7 @@ class MovimientoBase(models.Model):
     """Lo común a los movimientos de activos e insumos: de dónde, a dónde, quién, para qué cliente y por qué."""
 
     class Tipo(models.TextChoices):
+        """Tipos de movimiento del inventario (compra, entrega, instalación, salida, devolución, traslado, garantía, baja, ajuste…)."""
         COMPRA = "compra", "Compra (ingreso a bodega)"
         ENTREGA = "entrega", "Entrega de bodega al técnico"
         INSTALACION = "instalacion", "Instalado / usado en el cliente (acta)"
@@ -315,14 +330,17 @@ class MovimientoBase(models.Model):
 
     @property
     def cliente(self):
+        """Nombre del cliente del movimiento (empresa registrada o texto libre)."""
         return str(self.empresa) if self.empresa else self.cliente_texto
 
     @property
     def responsable(self):
+        """Técnico responsable (usuario registrado o nombre escrito)."""
         return str(self.tecnico) if self.tecnico else self.tecnico_nombre
 
 
 class MovimientoActivo(MovimientoBase):
+    """Movimiento de un activo con placa y el estado en que queda."""
     activo = models.ForeignKey(Activo, on_delete=models.CASCADE, related_name="movimientos")
     estado = models.CharField("estado resultante", max_length=20, choices=Activo.Estado.choices)
 
@@ -335,6 +353,7 @@ class MovimientoActivo(MovimientoBase):
 
 
 class MovimientoInsumo(MovimientoBase):
+    """Movimiento de un insumo por cantidad (entra o sale) y su valor unitario."""
     insumo = models.ForeignKey(Insumo, on_delete=models.PROTECT, related_name="movimientos")
     cantidad = models.DecimalField(max_digits=12, decimal_places=2)
     valor_unitario = models.DecimalField("valor unitario sin IVA", max_digits=14, decimal_places=4, null=True, blank=True)
@@ -366,10 +385,12 @@ class SolicitudMaterial(models.Model):
     """
 
     class Origen(models.TextChoices):
+        """Quién pide el material: comercial (propuesta aprobada) o técnica (visita)."""
         COMERCIAL = "comercial", "Área comercial (propuesta aprobada)"
         TECNICA = "tecnica", "Área técnica (visita programada)"
 
     class Estado(models.TextChoices):
+        """Pasos de la solicitud de material, de borrador a entregada."""
         BORRADOR = "borrador", "Por completar"
         VALIDACION = "validacion", "Validación de bodega"
         PROPUESTA = "propuesta", "Esperando aprobación del cliente (propuesta)"
@@ -380,6 +401,7 @@ class SolicitudMaterial(models.Model):
         CANCELADA = "cancelada", "Cancelada"
 
     class Cargo(models.TextChoices):
+        """Quién paga el material: JANOTEC (garantía, contrato) o el cliente (con propuesta aprobada)."""
         POR_DEFINIR = "", "Por definir"
         JANOTEC = "janotec", "A cargo de JANOTEC (garantía, contrato, mantenimiento)"
         CLIENTE = "cliente", "A cargo del cliente (requiere propuesta aprobada)"
@@ -415,10 +437,12 @@ class SolicitudMaterial(models.Model):
         return f"{self.numero} · {self.ticket.radicado}"
 
     def get_absolute_url(self):
+        """Ficha de la solicitud de material."""
         return reverse("inventario:solicitud", args=[self.pk])
 
     @property
     def numero(self):
+        """Consecutivo visible: SM-00012."""
         return f"SM-{self.pk:05d}" if self.pk else "SM-nueva"
 
     @property
@@ -428,16 +452,20 @@ class SolicitudMaterial(models.Model):
 
     @property
     def firmas_ronda(self):
+        """Firmas de aprobación de la ronda actual (si se devuelve, empieza otra)."""
         return [f for f in self.firmas.all() if f.ronda == self.ronda]
 
     @property
     def color_estado(self):
+        """Color de la etiqueta del estado (clases de Bootstrap)."""
         return {"borrador": "secondary", "validacion": "info", "propuesta": "warning", "compra": "danger",
                 "aprobacion": "warning", "aprobada": "success", "entregada": "primary", "cancelada": "dark"}[self.estado]
 
 
 class ItemSolicitud(models.Model):
+    """Renglón de una solicitud de material: del catálogo (insumo/activo) o escrito a mano."""
     class Seccion(models.TextChoices):
+        """Las dos secciones de la lista: lo aprobado por el cliente y los adicionales para instalar."""
         APROBADO = "aprobado", "Aprobado por el cliente"
         ADICIONAL = "adicional", "Adicionales para instalar"
 
@@ -463,10 +491,12 @@ class ItemSolicitud(models.Model):
 
     @property
     def es_activo(self):
+        """True si es un equipo con placa (tiene referencia y no es insumo)."""
         return bool(self.referencia) and self.insumo_id is None
 
     @property
     def total(self):
+        """Cantidad más adicional."""
         return self.cantidad + (self.adicional or 0)
 
 
@@ -477,6 +507,7 @@ class SolicitudCotizacion(models.Model):
     """
 
     class Estado(models.TextChoices):
+        """Estado de la solicitud de cotización (SC) a proveedores."""
         BORRADOR = "borrador", "En preparación"
         ENVIADA = "enviada", "Esperando cotizaciones"
         CERRADA = "cerrada", "Orden de compra generada"
@@ -504,14 +535,17 @@ class SolicitudCotizacion(models.Model):
         return self.numero
 
     def get_absolute_url(self):
+        """Ficha de la solicitud de cotización."""
         return reverse("inventario:cotizacion", args=[self.pk])
 
     @property
     def numero(self):
+        """Consecutivo visible: SC-00012."""
         return f"SC-{self.pk:05d}" if self.pk else "SC-nueva"
 
     @property
     def color_estado(self):
+        """Color de la etiqueta del estado (clases de Bootstrap)."""
         return {"borrador": "secondary", "enviada": "warning", "cerrada": "success", "cancelada": "dark"}[self.estado]
 
     def lineas_para(self, proveedor):
@@ -535,6 +569,7 @@ class LineaSolicitudCotizacion(models.Model):
     """Lo que se pregunta: lo que pide el ticket más lo adicional que bodega quiere tener en inventario."""
 
     class Tipo(models.TextChoices):
+        """Si el renglón es un equipo o un material."""
         EQUIPO = "equipo", "Equipo"
         MATERIAL = "material", "Material"
 
@@ -556,6 +591,7 @@ class LineaSolicitudCotizacion(models.Model):
 
     @property
     def total(self):
+        """Cantidad más adicional."""
         return self.cantidad + self.adicional
 
 
@@ -582,6 +618,7 @@ class CotizacionProveedor(models.Model):
         return f"{self.solicitud.numero} · {self.proveedor}"
 
     def get_absolute_url(self):
+        """Pantalla para registrar la respuesta de este proveedor."""
         return reverse("inventario:cotizacion_respuesta", args=[self.solicitud_id, self.pk])
 
 
@@ -599,6 +636,7 @@ class PrecioCotizado(models.Model):
 
     @property
     def subtotal(self):
+        """Total del renglón según el precio del proveedor (sin IVA)."""
         return self.linea.total * self.valor_unitario
 
 
@@ -615,6 +653,11 @@ class OrdenCompra(models.Model):
     """
 
     class Estado(models.TextChoices):
+        """Camino de la orden de compra:
+
+            borrador → revisión de dirección → por pagar (financiera, si es anticipado) → lista →
+            enviada al proveedor → recibida en bodega. Con crédito se salta «por pagar».
+        """
         BORRADOR = "borrador", "En preparación"
         REVISION = "revision", "En revisión de dirección"
         POR_PAGAR = "por_pagar", "Por pagar (financiera)"
@@ -624,6 +667,7 @@ class OrdenCompra(models.Model):
         CANCELADA = "cancelada", "Cancelada"
 
     class FormaPago(models.TextChoices):
+        """Anticipado: financiera paga antes del despacho. Crédito: se paga contra la factura."""
         ANTICIPADO = "anticipado", "Pago anticipado (antes del despacho)"
         CREDITO = "credito", "Crédito (se paga contra factura)"
 
@@ -677,24 +721,29 @@ class OrdenCompra(models.Model):
         return self.numero
 
     def get_absolute_url(self):
+        """Ficha de la orden de compra."""
         return reverse("inventario:orden", args=[self.pk])
 
     @property
     def numero(self):
+        """Consecutivo visible: OC-00012."""
         return f"OC-{self.pk:05d}" if self.pk else "OC-nueva"
 
     @property
     def color_estado(self):
+        """Color de la etiqueta del estado (clases de Bootstrap)."""
         return {"borrador": "secondary", "revision": "info", "por_pagar": "danger", "lista": "primary", "enviada": "warning",
                 "recibida": "success", "cancelada": "dark"}[self.estado]
 
     # --- Pago y factura ---------------------------------------------------------------------
     @property
     def a_credito(self):
+        """True si la orden se paga a crédito, contra factura."""
         return self.forma_pago == self.FormaPago.CREDITO
 
     @property
     def pagada(self):
+        """True si financiera ya registró el pago."""
         return bool(self.pagada_en)
 
     @property
@@ -707,6 +756,7 @@ class OrdenCompra(models.Model):
 
     @property
     def factura_registrada(self):
+        """True si financiera ya registró la factura del proveedor."""
         return self.factura_valor is not None
 
     @property
@@ -729,11 +779,13 @@ class OrdenCompra(models.Model):
 
     @property
     def atrasada(self):
+        """True si se espera la mercancía y la fecha estimada de llegada ya pasó."""
         from django.utils import timezone
         return (self.estado in (self.Estado.LISTA, self.Estado.ENVIADA) and self.fecha_estimada
                 and self.fecha_estimada < timezone.localdate())
 
     def totales(self):
+        """Base, IVA y total de la orden: {'base', 'iva', 'total'}."""
         from decimal import Decimal
         base = sum((l.subtotal for l in self.lineas.all()), Decimal(0))
         iva = sum((l.subtotal * l.iva / 100 for l in self.lineas.all()), Decimal(0))
@@ -766,14 +818,17 @@ class LineaOrdenCompra(models.Model):
 
     @property
     def total(self):
+        """Cantidad más adicional que se compra."""
         return self.cantidad + self.adicional
 
     @property
     def pendiente(self):
+        """Lo que falta por recibir en bodega (nunca negativo)."""
         return max(self.total - self.recibido, Decimal(0))
 
     @property
     def subtotal(self):
+        """Total del renglón sin IVA."""
         return self.total * self.valor_unitario
 
 
@@ -795,6 +850,7 @@ class GarantiaProveedor(models.Model):
     """Un equipo que se manda al proveedor por garantía o devolución, y cómo se resolvió."""
 
     class Estado(models.TextChoices):
+        """Cómo va la garantía con el proveedor."""
         EN_PROVEEDOR = "en_proveedor", "En el proveedor"
         REPARADO = "reparado", "Volvió reparado"
         REEMPLAZADO = "reemplazado", "Lo cambiaron por otro"
@@ -827,19 +883,23 @@ class GarantiaProveedor(models.Model):
 
     @property
     def numero(self):
+        """Consecutivo visible: GAR-0012."""
         return f"GAR-{self.pk:04d}" if self.pk else "GAR-nueva"
 
     @property
     def abierta(self):
+        """True mientras el equipo sigue en el proveedor."""
         return self.estado == self.Estado.EN_PROVEEDOR
 
     @property
     def dias(self):
+        """Días que lleva (o llevó) el equipo en garantía."""
         from django.utils import timezone
         return ((self.resuelta or timezone.localdate()) - self.enviada).days
 
     @property
     def color_estado(self):
+        """Color de la etiqueta del estado (clases de Bootstrap)."""
         return {"en_proveedor": "warning", "reparado": "success", "reemplazado": "success", "nota_credito": "info",
                 "rechazada": "danger"}[self.estado]
 
@@ -860,6 +920,7 @@ class AvisoSemanal(models.Model):
 
 
 def ruta_firma(instancia, nombre):
+    """Ruta de la imagen de una firma: por año y mes, con nombre aleatorio."""
     import uuid
 
     from django.utils import timezone
@@ -893,6 +954,7 @@ class ActaEntrega(models.Model):
 
     @property
     def numero(self):
+        """Consecutivo visible: AE-00012."""
         return f"AE-{self.pk:05d}" if self.pk else "AE-nueva"
 
 
@@ -900,6 +962,7 @@ class FirmaSolicitud(models.Model):
     """Firma de aprobación (o rechazo) de una solicitud: quién, en qué rol, cuándo y con qué comentario."""
 
     class Rol(models.TextChoices):
+        """Quién firma la aprobación del material: bodega, coordinador o dirección."""
         BODEGA = "bodega", "Encargado del inventario"
         COORDINADOR = "coordinador", "Coordinador técnico"
         DIRECCION = "direccion", "Dirección (jefe)"
@@ -923,6 +986,7 @@ class Herramienta(models.Model):
     """Herramienta o equipo de trabajo asignado a un técnico (sin placa): sale y vuelve sin firmas."""
 
     class Estado(models.TextChoices):
+        """Estado de la herramienta."""
         DISPONIBLE = "disponible", "Disponible"
         EN_USO = "en_uso", "En uso"
         EN_REPARACION = "en_reparacion", "En reparación"
@@ -951,18 +1015,22 @@ class Herramienta(models.Model):
         return f"{self.nombre}{' · ' + self.serial if self.serial else ''}"
 
     def get_absolute_url(self):
+        """Ficha de la herramienta."""
         return reverse("inventario:herramienta", args=[self.pk])
 
     @property
     def responsable(self):
+        """Técnico responsable (usuario registrado o nombre escrito)."""
         return str(self.tecnico) if self.tecnico else self.tecnico_nombre
 
     @property
     def valor(self):
+        """Valor total: precio de compra por cantidad."""
         return (self.costo_compra or 0) * self.cantidad
 
     @property
     def color_estado(self):
+        """Color de la etiqueta del estado (clases de Bootstrap)."""
         return {"disponible": "success", "en_uso": "primary", "en_reparacion": "warning", "danada": "danger",
                 "baja": "dark"}[self.estado]
 
@@ -971,6 +1039,7 @@ class EntregaHerramienta(models.Model):
     """Historial de quién ha tenido cada herramienta (la foto del nombre no cambia aunque se edite)."""
 
     class Tipo(models.TextChoices):
+        """Si la herramienta se entregó al técnico o volvió a bodega."""
         ENTREGA = "entrega", "Entregada al técnico"
         DEVOLUCION = "devolucion", "Devuelta a bodega"
 
@@ -991,6 +1060,7 @@ class AuditoriaHerramientas(models.Model):
     """Revisión física de las herramientas de un técnico. Es un registro permanente: no se edita ni se borra."""
 
     class Resultado(models.TextChoices):
+        """Resultado general de la auditoría de herramientas."""
         CONFORME = "conforme", "Conforme"
         CON_NOVEDADES = "con_novedades", "Con novedades"
 
@@ -1017,6 +1087,7 @@ class AuditoriaHerramientas(models.Model):
         return f"Auditoría #{self.pk} · {self.tecnico_nombre}"
 
     def get_absolute_url(self):
+        """Ficha de la auditoría."""
         return reverse("inventario:auditoria", args=[self.pk])
 
 
@@ -1024,12 +1095,14 @@ class DetalleAuditoria(models.Model):
     """Una herramienta revisada: guarda la foto de lo registrado en ese momento (nombre, serial, cantidad, estado)."""
 
     class EstadoEncontrado(models.TextChoices):
+        """Estado en que se encontró la herramienta al auditar."""
         EN_USO = "en_uso", "En uso"
         EN_REPARACION = "en_reparacion", "En reparación"
         DANADA = "danada", "Dañada"
         NO_ENCONTRADA = "no_encontrada", "No encontrada"
 
     class Resultado(models.TextChoices):
+        """Resultado de cada herramienta auditada."""
         CONFORME = "conforme", "Conforme"
         CON_NOVEDAD = "con_novedad", "Con novedad"
         NO_ENCONTRADA = "no_encontrada", "No encontrada"
@@ -1052,4 +1125,5 @@ class DetalleAuditoria(models.Model):
 
     @property
     def estado_registrado_display(self):
+        """Nombre legible del estado que tenía registrado la herramienta."""
         return dict(Herramienta.Estado.choices).get(self.estado_registrado, self.estado_registrado)
