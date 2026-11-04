@@ -59,6 +59,9 @@ class FichaComercial(models.Model):
 
     ETAPAS_ABIERTAS = [Etapa.GESTION, Etapa.LEVANTAMIENTO, Etapa.ELABORANDO, Etapa.ENVIADA, Etapa.AJUSTES,
                        Etapa.APROBADA]
+    # Quién tiene la solicitud en cada etapa abierta (levantamiento es del área técnica)
+    ETAPAS_DE_COMERCIAL = [Etapa.GESTION, Etapa.ENVIADA, Etapa.APROBADA]  # asesor, respuesta del cliente, traspaso
+    ETAPAS_DE_ADMINISTRATIVA = [Etapa.ELABORANDO, Etapa.AJUSTES]  # arma o ajusta la propuesta
     # Lo que ve el cliente, de principio a fin (la última parte es el flujo técnico de instalación)
     PASOS_CLIENTE = ["Solicitud recibida", "Informe del requerimiento", "Propuesta", "Aprobada", "Instalación", "Cerrado"]
 

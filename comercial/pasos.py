@@ -1,7 +1,8 @@
 """Paso a paso del área comercial en cada requerimiento (como el del área técnica).
 
 El siguiente paso se habilita cuando el anterior está completo: primero el asesor, luego el informe del
-requerimiento, la propuesta, la respuesta del cliente y, con la propuesta aprobada, el traspaso a instalación.
+requerimiento, la propuesta (la arma el área administrativa y la aprueba dirección), la respuesta del cliente y,
+con la propuesta aprobada, el traspaso a instalación.
 """
 from .models import FichaComercial
 
@@ -12,7 +13,8 @@ PASOS = [
     ("asesor", "Asesor", "Elegir el asesor comercial que lleva el requerimiento.", "Comercial", ""),
     ("informe", "Informe del requerimiento", "Registrar qué necesita el cliente, o pedir la visita de levantamiento al "
      "área técnica si hay que verlo en sitio.", "Comercial o técnico", "tenga asesor"),
-    ("propuesta", "Propuesta", "Armar la propuesta en el cotizador y enviarla al cliente.", "Comercial",
+    ("propuesta", "Propuesta", "Armar la propuesta en el cotizador, enviarla a dirección para aprobación y luego "
+     "al cliente.", "Administrativa",
      "esté el informe del requerimiento"),
     ("respuesta", "Respuesta del cliente", "El cliente aprueba, no aprueba o pide cambios (si pide cambios, se "
      "ajusta y se envía otra versión).", "Cliente", "se haya enviado la propuesta"),
@@ -32,6 +34,7 @@ DESPUES = {"propuesta": {Et.ENVIADA, Et.AJUSTES, Et.APROBADA, Et.RECHAZADA, Et.I
 
 
 def etapas_permitidas(etapa):
+    """Etapas a las que se puede pasar desde la actual (incluida ella misma, para guardar sin cambiarla)."""
     return {etapa} | SIGUIENTES.get(etapa, set())
 
 

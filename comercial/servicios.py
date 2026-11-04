@@ -1,7 +1,7 @@
 """Reglas del flujo comercial y los traspasos del mismo ticket entre áreas.
 
     Comercial ──solicitar_levantamiento──▶ Técnica ──(informe) devolver_a_comercial──▶ Comercial
-    Comercial ──registrar_informe (sin visita)──▶ Comercial elabora la propuesta
+    Comercial ──registrar_informe (sin visita)──▶ Administrativa arma la propuesta ──▶ dirección la aprueba
     Propuesta v1 ──enviar_version──▶ cliente: aprueba · no aprueba · solicitar_cambios ──▶ v2 …
     Propuesta aprobada ──a_inventario──▶ «En inventario» (bodega alista lo aprobado y los adicionales)
         ──coordinación decide──▶ «Recepcionado» en técnica (cronograma, visita, cierre)
@@ -54,7 +54,7 @@ def registrar_informe(ficha, autor, datos, archivos=(), con_visita=False):
                            + (" (con visita de levantamiento)." if informe.con_visita else " (sin visita)."), interno=True)
         guardar_adjuntos(t, archivos, autor, seg, es_informe=True)
         if ficha.etapa == F.Etapa.GESTION:
-            ficha.etapa = F.Etapa.ELABORANDO  # con el informe, comercial ya puede armar la propuesta
+            ficha.etapa = F.Etapa.ELABORANDO  # con el informe, administrativa ya puede armar la propuesta
             ficha.save(update_fields=["etapa", "actualizado"])
     return informe
 

@@ -807,7 +807,9 @@ class CotizadorTests(BaseComercial):
         self.assertEqual(self.client.get(url).status_code, 200)
         self.assertEqual(self.client.get(reverse("comercial:catalogo")).status_code, 200)
         self.assertEqual(self.client.get(reverse("inventario:cotizaciones")).status_code, 200)
-        self.assertContains(self.client.get(reverse("comercial:bandeja")), t.radicado)
+        # Mientras arma la propuesta, la solicitud está en «En el área administrativa», no en lo de comercial
+        self.assertContains(self.client.get(reverse("comercial:bandeja") + "?vista=administrativa"), t.radicado)
+        self.assertNotContains(self.client.get(reverse("comercial:bandeja")), t.radicado)
         # …pero no radica, no pide el levantamiento ni registra la respuesta del cliente
         self.assertEqual(self.client.get(reverse("comercial:nuevo")).status_code, 403)
         self.assertEqual(self.client.post(reverse("comercial:levantamiento", args=[t.radicado]),

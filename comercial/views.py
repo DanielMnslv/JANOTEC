@@ -50,12 +50,17 @@ def _errores(request, form):
 def bandeja(request):
     """Bandeja comercial: los requerimientos por etapa, los que están en técnica, los míos y la búsqueda.
 
+    Por defecto («A cargo del área comercial») lista solo lo que le toca mover a comercial: en gestión, propuestas
+    enviadas esperando la respuesta del cliente y aprobadas por traspasar. Lo que está armando el área administrativa
+    (elaborando o ajustando la propuesta) y lo que está en técnica se ve aparte, como seguimiento.
     Arriba muestra el conteo por etapa y cuántas propuestas ya pasaron la fecha máxima que pidió el cliente.
     """
     base = tickets_visibles(request.user).filter(ficha__isnull=False)
     vista = request.GET.get("vista", "comercial")
     if vista == "comercial":
-        qs = base.filter(area=T.Area.COMERCIAL, ficha__etapa__in=F.ETAPAS_ABIERTAS)
+        qs = base.filter(area=T.Area.COMERCIAL, ficha__etapa__in=F.ETAPAS_DE_COMERCIAL)
+    elif vista == "administrativa":
+        qs = base.filter(area=T.Area.COMERCIAL, ficha__etapa__in=F.ETAPAS_DE_ADMINISTRATIVA)
     elif vista == "tecnica":
         qs = base.filter(area=T.Area.TECNICA).exclude(estado__in=T.ESTADOS_FINALES)
     elif vista in F.Etapa.values:
@@ -78,6 +83,7 @@ def bandeja(request):
         "pagina": pagina, "vista": vista, "q": q, "conteo": conteo, "vencidas": vencidas, "params": params.urlencode(),
         "etapas": F.Etapa.choices,
         "en_tecnica": base.filter(area=T.Area.TECNICA).exclude(estado__in=T.ESTADOS_FINALES).count(),
+        "en_administrativa": base.filter(area=T.Area.COMERCIAL, ficha__etapa__in=F.ETAPAS_DE_ADMINISTRATIVA).count(),
         # Aprobadas por dirección para que comercial las lleve en persona
         "por_entregar": PropuestaVersion.objects.filter(ficha__ticket__in=base, por_comercial=True, entregada_cliente__isnull=True,
                                                         estado=PropuestaVersion.Estado.ENVIADA)
@@ -258,8 +264,8 @@ def _en_comercial(request, ticket):
 def gestionar(request, radicado):
     """Avanza la etapa de la propuesta, asigna asesor y valor, y registra respuestas o cambios del cliente.
 
-    Enviar a mano un PDF de propuesta también exige dirección: solo ella, o comercial con «Envío urgente» y motivo
-    (dirección recibe el aviso). Cada paso a «Propuesta enviada» crea una versión nueva y le llega al cliente.
+    Enviar a mano un PDF de propuesta también exige dirección: solo ella, o administrativa con «Envío urgente» y
+    motivo (dirección recibe el aviso). Cada paso a «Propuesta enviada» crea una versión nueva y le llega al cliente.
     """
     ticket = obtener_ticket_comercial(request.user, radicado)
     ficha = ticket.ficha
@@ -273,7 +279,7 @@ def gestionar(request, radicado):
     interno = d["visibilidad"] == "interno"
     mensaje = (d.get("mensaje") or "").strip()
     etapa_previa = ficha.etapa
-    # Enviar a mano un PDF de propuesta también pasa por dirección: solo ella, o comercial si es urgente (con motivo)
+    # Enviar a mano un PDF de propuesta también pasa por dirección: solo ella, o administrativa si es urgente (con motivo)
     motivo_urgencia = ""
     if d["etapa"] == F.Etapa.ENVIADA and etapa_previa != F.Etapa.ENVIADA and not request.user.es_direccion:
         motivo_urgencia = " ".join(request.POST.get("motivo_urgencia", "").split())[:500]

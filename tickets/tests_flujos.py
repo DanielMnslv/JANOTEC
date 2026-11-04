@@ -304,7 +304,7 @@ class FlujoComercialTests(BaseFlujos):
         t.refresh_from_db()
         self.assertEqual(t.area, Ticket.Area.COMERCIAL, "pasa a comercial para la propuesta del material")
         self.assertTrue(self.comerciales & {d for m in mail.outbox for d in m.to}, "comercial recibe el aviso")
-        self.assertIn(t.radicado, self.radicados(self.yuri, reverse("comercial:bandeja")))
+        self.assertIn(t.radicado, self.radicados(self.yuri, reverse("comercial:bandeja") + "?vista=administrativa"))
         a.refresh_from_db()
         # La visita que estaba programada no puede quedar como si nada: o sigue programada o se avisa
         self.assertTrue(a.ticket.area == Ticket.Area.COMERCIAL)

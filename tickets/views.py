@@ -1531,7 +1531,7 @@ def informe_borrador(request, radicado):
                     raise PermissionDenied
                 if borrador.es_estudio and not (borrador.suministros.strip() or borrador.servicios.strip()):
                     messages.error(request, "Antes de enviarlo o aprobarlo escriba los equipos y materiales requeridos, los "
-                                            "servicios, o ambos: con ellos comercial arma la propuesta.")
+                                            "servicios, o ambos: con ellos administrativa arma la propuesta.")
                     return redirect("informe_borrador", radicado)
                 if accion == "enviar":
                     inf.enviar_a_direccion(borrador, request.user)
