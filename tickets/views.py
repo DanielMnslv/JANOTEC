@@ -312,6 +312,43 @@ def cancelar(request, radicado):
     return redirect(ticket)
 
 
+@login_required
+@require_POST
+def eliminar_ticket(request, radicado):
+    """Dirección o coordinación eliminan el ticket del todo, con motivo y escribiendo el radicado para confirmar.
+
+    Las reglas (qué lo bloquea en un cliente real, qué se borra y qué registro queda) están en tickets/eliminar.py.
+    """
+    from . import eliminar
+
+    if not eliminar.puede_eliminar(request.user):
+        raise PermissionDenied
+    ticket = obtener_ticket(request.user, radicado)
+    motivo = " ".join(request.POST.get("motivo", "").split())
+    if request.POST.get("confirmar", "").strip().upper() != ticket.radicado:
+        messages.error(request, f"Para eliminarlo escriba el radicado {ticket.radicado} tal cual.")
+        return redirect(ticket)
+    if len(motivo) < 10:
+        messages.error(request, "Escriba por qué se elimina el ticket (mínimo 10 caracteres).")
+        return redirect(ticket)
+    bloqueos = eliminar.bloqueos(ticket)
+    if bloqueos:
+        messages.error(request, f"No se puede eliminar {ticket.radicado}: " + "; ".join(bloqueos) + ".")
+        return redirect(ticket)
+    resumen = eliminar.eliminar(ticket, request.user, motivo)
+    messages.success(request, f"Ticket eliminado: {resumen}. Queda el registro en Configuración → Historial.")
+    return redirect("inicio")
+
+
+def contexto_eliminar(usuario, ticket):
+    """Datos del recuadro «Eliminar ticket» de la ficha: solo para dirección y coordinación."""
+    from . import eliminar
+
+    if not eliminar.puede_eliminar(usuario):
+        return None
+    return {"bloqueos": eliminar.bloqueos(ticket), "prueba": eliminar.es_de_prueba(ticket)}
+
+
 # ============================================================================
 # Detalle (compartido) y descargas
 # ============================================================================
@@ -371,6 +408,7 @@ def ticket_detalle(request, radicado):
             tickets_visibles(request.user).filter(empresa=ticket.empresa).exclude(pk=ticket.pk)
             .order_by("-creado")[:5]
         )
+        contexto["eliminar"] = contexto_eliminar(request.user, ticket)
         return render(request, "tickets/personal_detalle.html", contexto)
 
     contexto["seguimientos"] = seguimientos.filter(interno=False).exclude(

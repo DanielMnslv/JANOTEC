@@ -234,6 +234,8 @@ def detalle(request, radicado):
         contexto["form_gestion"] = GestionComercialForm(ficha=ficha, usuario=request.user)
         if request.user.gestiona_requerimientos and ficha.etapa in (F.Etapa.GESTION, F.Etapa.ELABORANDO, F.Etapa.AJUSTES):
             contexto["form_informe"] = InformeForm(informe=contexto["informe"])
+    from tickets.views import contexto_eliminar
+    contexto["eliminar"] = contexto_eliminar(request.user, ticket)
     return render(request, "comercial/detalle.html", contexto)
 
 

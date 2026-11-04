@@ -34,6 +34,7 @@ urlpatterns = [
     path("ticket/<str:radicado>/confirmar/", views.confirmar_solucion, name="confirmar_solucion"),
     path("ticket/<str:radicado>/calificar/", views.calificar, name="calificar"),
     path("ticket/<str:radicado>/cancelar/", views.cancelar, name="cancelar"),
+    path("ticket/<str:radicado>/eliminar/", views.eliminar_ticket, name="eliminar_ticket"),
     path("ticket/<str:radicado>/gestionar/", views.gestionar, name="gestionar"),
     path("ticket/<str:radicado>/recepcionar/", views.recepcionar, name="recepcionar"),
     path("ticket/<str:radicado>/editar/", views.editar_ticket, name="editar_ticket"),

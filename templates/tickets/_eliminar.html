@@ -1,0 +1,24 @@
+{# Eliminar el ticket del todo: solo dirección y coordinación. Recibe «eliminar» (bloqueos, prueba) y «ticket». #}
+{% if eliminar %}
+<details class="card border-danger mt-4 no-imprimir" id="eliminar-ticket">
+  <summary class="card-header text-danger" style="cursor:pointer"><i class="bi bi-trash3"></i> Eliminar este ticket</summary>
+  <div class="card-body small">
+    {% if eliminar.bloqueos %}
+      <p class="mb-1">No se puede eliminar porque {{ eliminar.bloqueos|join:"; " }}.</p>
+      <p class="text-muted-jn mb-0">Es soporte de un servicio o de una compra. Si ya no sigue, cancélelo en lugar de eliminarlo.</p>
+    {% else %}
+      <p class="mb-2">Se borra <b>del todo</b>, sin forma de recuperarlo: el historial, los adjuntos, la ficha comercial, la cotización, las
+        solicitudes de material y las visitas que aún no han pasado{% if eliminar.prueba %}, y también sus actas porque es del cliente PRUEBA{% endif %}.
+        Queda solo un registro en Configuración → Historial con el motivo{% if not user.es_direccion %}, y dirección recibe el aviso{% endif %}.</p>
+      <form method="post" action="{% url 'eliminar_ticket' ticket.radicado %}" class="row g-2"
+            onsubmit="return confirm('¿Eliminar {{ ticket.radicado }} del todo? No se puede deshacer.');">{% csrf_token %}
+        <div class="col-12"><textarea name="motivo" class="form-control form-control-sm" rows="2" required minlength="10" maxlength="500"
+          placeholder="Por qué se elimina (ej.: era una prueba radicada con un cliente real)"></textarea></div>
+        <div class="col-md-6"><input name="confirmar" class="form-control form-control-sm" required autocomplete="off"
+          placeholder="Escriba {{ ticket.radicado }} para confirmar" aria-label="Radicado para confirmar"></div>
+        <div class="col-md-6 d-grid"><button class="btn btn-sm btn-danger"><i class="bi bi-trash3"></i> Eliminar del todo</button></div>
+      </form>
+    {% endif %}
+  </div>
+</details>
+{% endif %}
