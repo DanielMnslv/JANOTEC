@@ -24,6 +24,7 @@ FIRMA = "data:image/png;base64," + __import__("base64").b64encode(bytes([137, 80
 MEDIA_TMP = tempfile.mkdtemp()
 E = Ticket.Estado
 COORD = "coordinadortic@janotec.app"
+URGENTE = {"urgente": "1", "motivo_urgencia": "El cliente la necesita hoy"}  # envío sin esperar a dirección
 FIRMA = "data:image/png;base64," + __import__("base64").b64encode(bytes([137, 80, 78, 71, 13, 10, 26, 10]) + b"0" * 40).decode()
 
 
@@ -338,7 +339,7 @@ class FlujoComercialTests(BaseFlujos):
         a.refresh_from_db()
         # Propuesta → cambios → versión 2 → aprobada → material → instalación
         self.client.force_login(self.sindy)
-        self.client.post(reverse("comercial:gestionar", args=[t.radicado]), {"etapa": "enviada", "valor_propuesta": "4000000",
+        self.client.post(reverse("comercial:gestionar", args=[t.radicado]), {**URGENTE, "etapa": "enviada", "valor_propuesta": "4000000",
                                                                             "comercial": self.sindy.pk, "visibilidad": "interno",
                                                                             "propuesta": self.pdf()})
         self.assertTrue(self.para("cliente@ganacampo.co"))
@@ -347,7 +348,7 @@ class FlujoComercialTests(BaseFlujos):
         self.client.post(reverse("comercial:responder", args=[t.radicado]), {"accion": "cambios", "cambios": "Marca Hikvision"})
         self.assertTrue(self.para(self.sindy.email), "el asesor recibe los cambios pedidos")
         self.client.force_login(self.sindy)
-        self.client.post(reverse("comercial:gestionar", args=[t.radicado]), {"etapa": "enviada", "valor_propuesta": "4300000",
+        self.client.post(reverse("comercial:gestionar", args=[t.radicado]), {**URGENTE, "etapa": "enviada", "valor_propuesta": "4300000",
                                                                             "comercial": self.sindy.pk, "visibilidad": "interno",
                                                                             "propuesta": self.pdf()})
         mail.outbox.clear()

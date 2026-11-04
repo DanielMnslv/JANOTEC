@@ -300,6 +300,55 @@ def _correos_comerciales(ficha):
     return list(dict.fromkeys(asesor + area)) or [settings.NOTIFICAR_SOPORTE_EMAIL]
 
 
+# --- Revisión de la propuesta por dirección ------------------------------------------------------
+def _correos_direccion():
+    from accounts.models import Usuario
+    return list(Usuario.objects.filter(rol=Usuario.Rol.DIRECCION, is_active=True).values_list("email", flat=True))
+
+
+def _enlace_cotizador(ficha):
+    from django.urls import reverse
+    return f"{settings.SITIO_URL.rstrip('/')}{reverse('comercial:cotizador', args=[ficha.ticket.radicado])}"
+
+
+def propuesta_para_aprobar(cotizacion, autor):
+    """A dirección: comercial envió la propuesta para que la revise y la apruebe."""
+    ficha, t = cotizacion.ficha, cotizacion.ficha.ticket
+    notif._enviar(
+        f"[{t.radicado}] Propuesta para aprobar: {t.asunto}",
+        "\n".join([f"{autor.get_full_name() or autor.username} envió la propuesta económica para su revisión y aprobación.",
+                   "", f"Empresa: {t.empresa}" + (f" · Sede: {t.sede}" if t.sede else ""), "",
+                   "Puede aprobarla (sale al cliente) o devolverla a comercial con lo que hay que corregir.",
+                   "", f"Revisar: {_enlace_cotizador(ficha)}"]),
+        _correos_direccion(),
+    )
+
+
+def propuesta_devuelta(cotizacion, autor, observaciones):
+    """A comercial: dirección devolvió la propuesta con observaciones."""
+    ficha, t = cotizacion.ficha, cotizacion.ficha.ticket
+    notif._enviar(
+        f"[{t.radicado}] Propuesta devuelta para corregir: {t.asunto}",
+        "\n".join([f"{autor.get_full_name() or autor.username} devolvió la propuesta para corregir:", "", observaciones,
+                   "", f"Corregir: {_enlace_cotizador(ficha)}"]),
+        _correos_comerciales(ficha),
+    )
+
+
+def propuesta_urgente(ficha, autor, motivo, codigo):
+    """A dirección: comercial envió la propuesta al cliente sin su aprobación por urgencia; la revisa después."""
+    t = ficha.ticket
+    notif._enviar(
+        f"[{t.radicado}] Propuesta enviada con urgencia, sin su aprobación: {t.asunto}",
+        "\n".join([f"{autor.get_full_name() or autor.username} envió la propuesta {codigo} al cliente sin su aprobación.",
+                   "", f"Motivo de la urgencia: {motivo}", "",
+                   f"Empresa: {t.empresa}" + (f" · Sede: {t.sede}" if t.sede else ""), "",
+                   "Revísela cuando pueda; si hay que corregir algo, avise a comercial.",
+                   "", f"Ver la solicitud: {settings.SITIO_URL.rstrip('/')}{ficha.get_absolute_url()}"]),
+        _correos_direccion(),
+    )
+
+
 def _enviar_con_ficha(asunto, cuerpo, destinatarios, ficha, interna):
     """Correo con el PDF «Ficha de requerimiento» adjunto (si el PDF falla, sale el correo sin él)."""
     destinatarios = [d for d in set(destinatarios) if d]

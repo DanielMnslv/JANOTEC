@@ -201,6 +201,14 @@ def gestionar(request, radicado):
     interno = d["visibilidad"] == "interno"
     mensaje = (d.get("mensaje") or "").strip()
     etapa_previa = ficha.etapa
+    # Enviar a mano un PDF de propuesta también pasa por dirección: solo ella, o comercial si es urgente (con motivo)
+    motivo_urgencia = ""
+    if d["etapa"] == F.Etapa.ENVIADA and etapa_previa != F.Etapa.ENVIADA and not request.user.es_direccion:
+        motivo_urgencia = " ".join(request.POST.get("motivo_urgencia", "").split())[:500]
+        if request.POST.get("urgente") != "1" or len(motivo_urgencia) < 10:
+            messages.error(request, "La propuesta la aprueba dirección antes de enviarla. Ármela en el cotizador y envíela "
+                                    "a dirección o, si es urgente, marque «Envío urgente» con el motivo.")
+            return redirect(ficha)
     pdf = None
     with transaction.atomic():
         # Sin asesor elegido, lo toma quien lo está gestionando (si es del área comercial)
@@ -241,6 +249,10 @@ def gestionar(request, radicado):
         ticket.save(update_fields=["actualizado"])
     if ficha.etapa == F.Etapa.ENVIADA and etapa_previa != F.Etapa.ENVIADA:
         servicios.propuesta_enviada(ficha, pdf)
+        if motivo_urgencia:
+            servicios._seguimiento(ticket, request.user, "Envío urgente de la propuesta sin aprobación de dirección. "
+                                                         f"Motivo: {motivo_urgencia}", interno=True)
+            servicios.propuesta_urgente(ficha, request.user, motivo_urgencia, "adjunta")
     messages.success(request, f"Solicitud actualizada: {ficha.get_etapa_display()}.")
     return redirect(ficha)
 
@@ -382,8 +394,21 @@ def cotizador(request, radicado):
         return redirect(ficha)
     cotizacion = coti.borrador(ficha)
     Lineas = formset_lineas()
+    es_direccion = request.user.es_direccion
     if request.method == "POST":
         accion = request.POST.get("accion", "guardar")
+        # En revisión solo dirección la toca: la corrige, la aprueba (sale al cliente) o la devuelve
+        if cotizacion.en_revision and not es_direccion:
+            messages.error(request, "La propuesta está en revisión de dirección: no se modifica hasta que la apruebe o la devuelva.")
+            return redirect("comercial:cotizador", radicado)
+        if accion == "devolver":
+            observaciones = " ".join(request.POST.get("observaciones", "").split())[:1000]
+            if not (es_direccion and cotizacion.en_revision) or len(observaciones) < 5:
+                messages.error(request, "Escriba qué hay que corregir para devolver la propuesta a comercial.")
+                return redirect("comercial:cotizador", radicado)
+            coti.devolver(cotizacion, request.user, observaciones)
+            messages.info(request, "Propuesta devuelta a comercial con sus observaciones.")
+            return redirect(ficha)
         form = CotizacionForm(request.POST, instance=cotizacion)
         lineas = Lineas(request.POST, instance=cotizacion, prefix="lineas")
         if form.is_valid() and lineas.is_valid():
@@ -399,13 +424,30 @@ def cotizador(request, radicado):
                 messages.success(request, f"Se agregaron {n} ítem(s) del informe del requerimiento. Revise cantidades y precios.")
             elif accion == "ver_pdf":
                 return redirect("comercial:cotizacion_pdf", radicado)
-            elif accion == "enviar":
+            elif accion == "a_direccion":
                 try:
-                    version = coti.enviar(cotizacion, request.user)
+                    coti.enviar_a_direccion(cotizacion, request.user)
                 except ValidationError as e:
                     messages.error(request, " ".join(e.messages))
                     return redirect("comercial:cotizador", radicado)
-                messages.success(request, f"Propuesta {version.codigo} enviada al cliente con los botones para responder.")
+                messages.success(request, "Propuesta enviada a dirección: cuando la apruebe le llega al cliente.")
+                return redirect(ficha)
+            elif accion == "enviar":
+                # Dirección la aprueba y sale; comercial solo la envía si es urgente, con el motivo
+                motivo = ""
+                if not es_direccion:
+                    motivo = " ".join(request.POST.get("motivo_urgencia", "").split())
+                    if request.POST.get("urgente") != "1" or len(motivo) < 10:
+                        messages.error(request, "La propuesta la aprueba dirección. Si es urgente, marque «Envío urgente» "
+                                                "y escriba el motivo (mínimo 10 caracteres).")
+                        return redirect("comercial:cotizador", radicado)
+                try:
+                    version = coti.enviar(cotizacion, request.user, motivo_urgencia=motivo)
+                except ValidationError as e:
+                    messages.error(request, " ".join(e.messages))
+                    return redirect("comercial:cotizador", radicado)
+                messages.success(request, f"Propuesta {version.codigo} " + ("aprobada y " if es_direccion else "") +
+                                 "enviada al cliente con los botones para responder.")
                 return redirect(ficha)
             else:
                 messages.success(request, "Cotización guardada.")
@@ -422,6 +464,7 @@ def cotizador(request, radicado):
         "palabras_categoria": LineaCotizacion.PALABRAS_CATEGORIA,
         "totales": cotizacion.totales(), "numero": (ficha.versiones.count() + 1),
         "codigo": coti.codigo(ficha, ficha.versiones.count() + 1),
+        "es_direccion": es_direccion, "bloqueada": cotizacion.en_revision and not es_direccion,
     })
 
 

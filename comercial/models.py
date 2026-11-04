@@ -283,6 +283,13 @@ class Cotizacion(models.Model):
     plazos = models.CharField("plazos en meses", max_length=30, default="6,12,24,36,48", help_text="Separados por coma.")
     opcion_compra = models.DecimalField("opción de compra %", max_digits=5, decimal_places=2, default=0,
                                         help_text="Lo que paga el cliente al final para quedarse con los equipos. 0 = sin opción de compra.")
+    # Revisión de dirección: comercial la envía, dirección la aprueba (y sale al cliente) o la devuelve con observaciones.
+    # Si es urgente, comercial la envía sin esperar y queda el motivo.
+    en_revision = models.BooleanField("en revisión de dirección", default=False)
+    observaciones_direccion = models.TextField("observaciones de dirección", blank=True)
+    aprobada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="+", verbose_name="aprobada por")
+    motivo_urgencia = models.CharField("motivo del envío urgente", max_length=500, blank=True)
     creado = models.DateTimeField(auto_now_add=True)
     actualizado = models.DateTimeField(auto_now=True)
 

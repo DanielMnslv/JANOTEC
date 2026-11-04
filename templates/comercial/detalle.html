@@ -169,7 +169,18 @@
           </div>
           <div class="mt-2 form-check-inline-list">{% for r in form_gestion.visibilidad %}<div class="form-check form-check-inline">{{ r.tag }}<label class="form-check-label" for="{{ r.id_for_label }}">{{ r.choice_label }}</label></div>{% endfor %}</div>
           {{ form_gestion.mensaje }}
-          <div class="small text-muted-jn mt-2"><i class="bi bi-info-circle"></i> Cada vez que pasa a «Propuesta enviada» con un PDF nuevo se crea una <b>versión</b> y le llega por correo al cliente. Si el cliente pide cambios (otra marca, otro alcance), elija «Ajustando propuesta» y escriba los cambios; luego envíe la nueva versión. Si respondió por otro medio, registre usted la aprobación.</div>
+          {% if not user.es_direccion and ficha.etapa != 'enviada' %}
+            <div class="border border-warning rounded p-2 mt-2 small">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="urgente" value="1" id="gest-urgente"
+                       onchange="document.getElementById('gest-motivo').classList.toggle('d-none', !this.checked)">
+                <label class="form-check-label fw-semibold" for="gest-urgente">Envío urgente del PDF, sin esperar a dirección</label>
+              </div>
+              <textarea name="motivo_urgencia" id="gest-motivo" class="form-control form-control-sm mt-2 d-none" rows="2" maxlength="500"
+                        placeholder="Motivo de la urgencia (dirección lo recibe por correo y queda en el historial)"></textarea>
+            </div>
+          {% endif %}
+          <div class="small text-muted-jn mt-2"><i class="bi bi-info-circle"></i> La propuesta la aprueba dirección antes de salir; solo si es urgente se envía sin esperar, con el motivo. Cada vez que pasa a «Propuesta enviada» con un PDF nuevo se crea una <b>versión</b> y le llega por correo al cliente. Si el cliente pide cambios (otra marca, otro alcance), elija «Ajustando propuesta» y escriba los cambios; luego envíe la nueva versión. Si respondió por otro medio, registre usted la aprobación.</div>
           <div class="text-end mt-2"><button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button></div>
         </form>
       </div>

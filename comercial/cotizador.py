@@ -3,6 +3,10 @@
 Cada versión de la propuesta tiene su cotización. Mientras no se envía es un borrador que el asesor ajusta;
 al enviarla queda fija (con su PDF y su código PE-AAAA-MM-DD-Vn) y, si el cliente pide cambios, la siguiente
 versión arranca como copia de la anterior.
+
+Ninguna propuesta sale sin dirección: comercial la envía a revisión (enviar_a_direccion), dirección la aprueba y sale
+al cliente (enviar) o la devuelve con observaciones (devolver). Si es urgente, comercial la envía con un motivo y
+dirección recibe el aviso para revisarla después.
 """
 import re
 from decimal import Decimal
@@ -99,10 +103,8 @@ def codigo(ficha, numero):
     return f"{base}-V{numero}"
 
 
-def enviar(cotizacion, autor):
-    """Genera el PDF, crea la versión de la propuesta y se la envía al cliente (con los botones para responder)."""
-    from .pdf import propuesta_pdf
-
+def validar(cotizacion):
+    """Lo que necesita una cotización para salir (a dirección o al cliente); si falta algo, ValidationError."""
     ficha = cotizacion.ficha
     t = ficha.ticket
     if cotizacion.enviada:
@@ -116,6 +118,43 @@ def enviar(cotizacion, autor):
         raise ValidationError("Cada ítem necesita cantidad y costo unitario.")
     if not cotizacion.margen:
         raise ValidationError(MARGEN_OBLIGATORIO)
+
+
+def enviar_a_direccion(cotizacion, autor):
+    """Comercial deja la cotización en revisión: nadie más la modifica y dirección recibe el aviso."""
+    validar(cotizacion)
+    t = cotizacion.ficha.ticket
+    with transaction.atomic():
+        cotizacion.en_revision, cotizacion.observaciones_direccion = True, ""
+        cotizacion.save(update_fields=["en_revision", "observaciones_direccion", "actualizado"])
+        servicios._seguimiento(t, autor, "Envió la propuesta a dirección para su revisión y aprobación.", interno=True)
+        transaction.on_commit(lambda: servicios.propuesta_para_aprobar(cotizacion, autor))
+
+
+def devolver(cotizacion, autor, observaciones):
+    """Dirección devuelve la cotización a comercial con lo que hay que corregir."""
+    t = cotizacion.ficha.ticket
+    with transaction.atomic():
+        cotizacion.en_revision, cotizacion.observaciones_direccion = False, observaciones
+        cotizacion.save(update_fields=["en_revision", "observaciones_direccion", "actualizado"])
+        servicios._seguimiento(t, autor, f"Devolvió la propuesta a comercial para corregir: {observaciones}", interno=True)
+        transaction.on_commit(lambda: servicios.propuesta_devuelta(cotizacion, autor, observaciones))
+
+
+def enviar(cotizacion, autor, motivo_urgencia=""):
+    """Genera el PDF, crea la versión de la propuesta y se la envía al cliente (con los botones para responder).
+
+    La envía dirección (queda como quien la aprobó) o comercial con un motivo de urgencia, del que dirección recibe aviso.
+    """
+    from .pdf import propuesta_pdf
+
+    validar(cotizacion)
+    ficha = cotizacion.ficha
+    t = ficha.ticket
+    es_direccion = getattr(autor, "es_direccion", False)
+    if not es_direccion and not motivo_urgencia:
+        raise ValidationError("La propuesta la aprueba dirección antes de enviarla al cliente. Si es urgente, márquelo "
+                              "y escriba el motivo.")
     totales = cotizacion.totales()
     numero = (ficha.versiones.order_by("-numero").values_list("numero", flat=True).first() or 0) + 1
     cod = codigo(ficha, numero)
@@ -138,7 +177,15 @@ def enviar(cotizacion, autor):
         version = servicios.enviar_version(ficha, autor, pdf)
         version.codigo = cod
         version.save(update_fields=["codigo"])
-        cotizacion.version = version
-        cotizacion.save(update_fields=["version", "actualizado"])
+        cotizacion.version, cotizacion.en_revision = version, False
+        if es_direccion:
+            cotizacion.aprobada_por = autor
+        else:
+            cotizacion.motivo_urgencia = motivo_urgencia[:500]
+            servicios._seguimiento(t, autor, f"Envío urgente de la propuesta sin aprobación de dirección. Motivo: "
+                                             f"{motivo_urgencia}", interno=True)
+        cotizacion.save(update_fields=["version", "en_revision", "aprobada_por", "motivo_urgencia", "actualizado"])
     servicios.propuesta_enviada(ficha, pdf)
+    if not es_direccion:
+        servicios.propuesta_urgente(ficha, autor, motivo_urgencia, cod)
     return version

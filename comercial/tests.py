@@ -15,6 +15,8 @@ from .models import FichaComercial
 MEDIA_TMP = tempfile.mkdtemp()
 F = FichaComercial
 T = Ticket
+# Envío urgente: comercial la envía sin esperar a dirección (la aprobación se prueba en CotizadorTests.test_direccion_*)
+URGENTE = {"urgente": "1", "motivo_urgencia": "El cliente la necesita hoy"}
 
 
 @override_settings(MEDIA_ROOT=MEDIA_TMP, NOTIFICAR_SOPORTE_EMAIL="coordinador@janotec.test",
@@ -175,11 +177,11 @@ class FlujoCompletoTests(BaseComercial):
         self.assertNotIn(numero, self.radicados(reverse("panel")))
         # 3. Comercial envía la propuesta (exige PDF) → le llega al cliente
         self.client.force_login(self.asesor)
-        self.client.post(reverse("comercial:gestionar", args=[numero]), {"etapa": "enviada", "visibilidad": "publico"})
+        self.client.post(reverse("comercial:gestionar", args=[numero]), {**URGENTE, "etapa": "enviada", "visibilidad": "publico"})
         t.refresh_from_db()
         self.assertEqual(t.ficha.etapa, "elaborando")
         mail.outbox.clear()
-        self.client.post(reverse("comercial:gestionar", args=[numero]), {"etapa": "enviada", "valor_propuesta": "4500000",
+        self.client.post(reverse("comercial:gestionar", args=[numero]), {**URGENTE, "etapa": "enviada", "valor_propuesta": "4500000",
                                                                          "visibilidad": "publico", "propuesta": self.pdf()})
         t.refresh_from_db()
         self.assertEqual((t.ficha.etapa, t.estado), ("enviada", "propuesta_enviada"))
@@ -363,7 +365,7 @@ class InformeYVersionesTests(BaseComercial):
         t = self.crear()
         numero = t.radicado
         self.client.post(reverse("comercial:gestionar", args=[numero]),
-                         {"etapa": "enviada", "visibilidad": "interno", "propuesta": self.pdf()})
+                         {**URGENTE, "etapa": "enviada", "visibilidad": "interno", "propuesta": self.pdf()})
         t.refresh_from_db()
         self.assertEqual(t.ficha.etapa, "gestion")  # sin informe no se envía
         self.assertContains(self.client.get(reverse("comercial:detalle", args=[numero])), "Sin visita: regístrelo usted")
@@ -377,7 +379,7 @@ class InformeYVersionesTests(BaseComercial):
         t = self.crear()
         numero = t.radicado
         self.client.post(reverse("comercial:informe", args=[numero]), {"necesidad": "CCTV", "materiales": "4 Cámara Dahua"})
-        self.client.post(reverse("comercial:gestionar", args=[numero]), {"etapa": "enviada", "valor_propuesta": "4000000",
+        self.client.post(reverse("comercial:gestionar", args=[numero]), {**URGENTE, "etapa": "enviada", "valor_propuesta": "4000000",
                                                                          "visibilidad": "interno", "propuesta": self.pdf()})
         t.refresh_from_db()
         self.assertEqual([(v.numero, v.estado) for v in t.ficha.versiones.all()], [(1, V.Estado.ENVIADA)])
@@ -393,11 +395,11 @@ class InformeYVersionesTests(BaseComercial):
         self.assertTrue(any("pidió cambios" in m.subject for m in mail.outbox))
         # El asesor envía la versión 2 (con un PDF nuevo) y le llega al cliente
         self.client.force_login(self.asesor)
-        self.client.post(reverse("comercial:gestionar", args=[numero]), {"etapa": "enviada", "visibilidad": "interno"})
+        self.client.post(reverse("comercial:gestionar", args=[numero]), {**URGENTE, "etapa": "enviada", "visibilidad": "interno"})
         t.refresh_from_db()
         self.assertEqual(t.ficha.etapa, "ajustes")  # cada versión lleva su PDF
         mail.outbox.clear()
-        self.client.post(reverse("comercial:gestionar", args=[numero]), {"etapa": "enviada", "valor_propuesta": "4300000",
+        self.client.post(reverse("comercial:gestionar", args=[numero]), {**URGENTE, "etapa": "enviada", "valor_propuesta": "4300000",
                                                                          "visibilidad": "interno", "propuesta": self.pdf()})
         t.refresh_from_db()
         self.assertEqual((t.ficha.etapa, t.estado), ("enviada", T.Estado.PROPUESTA_ENVIADA))
@@ -420,7 +422,7 @@ class RespuestaDesdeElCorreoTests(BaseComercial):
 
     def enviar(self, t, valor):
         self.client.force_login(self.asesor)
-        self.client.post(reverse("comercial:gestionar", args=[t.radicado]), {"etapa": "enviada", "valor_propuesta": valor,
+        self.client.post(reverse("comercial:gestionar", args=[t.radicado]), {**URGENTE, "etapa": "enviada", "valor_propuesta": valor,
                                                                             "visibilidad": "interno", "propuesta": self.pdf()})
         self.client.logout()
 
@@ -503,7 +505,7 @@ class CotizadorTests(BaseComercial):
         cot = t.ficha.cotizaciones.get()
         self.assertEqual([(l.descripcion, l.valor_unitario) for l in cot.lineas.all()],
                          [("Cable HDMI 15 m High Speed 4K", Decimal("73335.57")), ("Canaleta", Decimal("0"))])
-        r = self.client.post(url, {**self.lineas([("Canaleta 20x12", "6", "0", "0")]), "accion": "enviar"}, follow=True)
+        r = self.client.post(url, {**self.lineas([("Canaleta 20x12", "6", "0", "0")]), **URGENTE, "accion": "enviar"}, follow=True)
         self.assertContains(r, "Cada ítem necesita cantidad y costo unitario")
         cot.lineas.all().delete()
         self.client.post(url, self.lineas([("Cable HDMI 15 m High Speed 4K", "1", "73335.57", "12"), ("Canaleta 20x12", "6", "9635.85", "0")]))
@@ -514,7 +516,7 @@ class CotizadorTests(BaseComercial):
         pdf = self.client.get(reverse("comercial:cotizacion_pdf", args=[t.radicado]))
         self.assertEqual(pdf["Content-Type"], "application/pdf")
         mail.outbox.clear()
-        self.client.post(url, {**self.lineas([]), "margen": "1", "accion": "enviar"})
+        self.client.post(url, {**self.lineas([]), "margen": "1", **URGENTE, "accion": "enviar"})
         t.refresh_from_db()
         v1 = PropuestaVersion.objects.get(ficha=t.ficha)
         self.assertRegex(v1.codigo, r"^PE-\d{4}-\d{2}-\d{2}-V1$")
@@ -526,7 +528,7 @@ class CotizadorTests(BaseComercial):
         self.client.post(reverse("comercial:gestionar", args=[t.radicado]),
                          {"etapa": "ajustes", "visibilidad": "interno", "cambios": "Otra marca de cable"})
         self.assertContains(self.client.get(url), "Cable HDMI 15 m High Speed 4K")
-        self.client.post(url, {**self.lineas([]), "margen": "1", "accion": "enviar"})
+        self.client.post(url, {**self.lineas([]), "margen": "1", **URGENTE, "accion": "enviar"})
         v2 = PropuestaVersion.objects.get(ficha=t.ficha, numero=2)
         self.assertEqual(v2.codigo, v1.codigo.replace("-V1", "-V2"))
         self.assertEqual(t.ficha.cotizaciones.count(), 2)
@@ -590,7 +592,7 @@ class CotizadorTests(BaseComercial):
         self.assertEqual(cot.totales()["base"], Decimal("200000.00"))
         # Sin margen ni se envía ni sale el PDF
         self.assertEqual(self.client.get(reverse("comercial:cotizacion_pdf", args=[t.radicado])).status_code, 302)
-        self.client.post(url, {**lineas, "accion": "enviar"})
+        self.client.post(url, {**lineas, **URGENTE, "accion": "enviar"})
         t.ficha.refresh_from_db()
         self.assertEqual(t.ficha.versiones.count(), 0)
         for fuera in ("0", "99.01", "100", "-1"):
@@ -606,7 +608,7 @@ class CotizadorTests(BaseComercial):
         datos = {"lineas-TOTAL_FORMS": "1", "lineas-INITIAL_FORMS": "1", "lineas-MIN_NUM_FORMS": "0", "lineas-MAX_NUM_FORMS": "1000",
                  "lineas-0-id": linea.pk, "lineas-0-descripcion": "Terminal", "lineas-0-cantidad": "2", "lineas-0-valor_unitario": "100000",
                  "lineas-0-descuento": "0", "lineas-0-iva": "19"}
-        self.client.post(url, {**lineas, **datos, "margen": "30", "accion": "enviar"})
+        self.client.post(url, {**lineas, **datos, "margen": "30", **URGENTE, "accion": "enviar"})
         t.ficha.refresh_from_db()
         self.assertEqual(t.ficha.valor_propuesta, 285714)
         from comercial import cotizador as coti
@@ -702,13 +704,78 @@ class CotizadorTests(BaseComercial):
         url = reverse("comercial:cotizador", args=[t.radicado])
         self.client.post(url, self.lineas([("Cable HDMI 15 m", "1", "73335.57", "0"), ("Canaleta 20x12", "6", "9635.85", "0"),
                                            ("Servicio de traslado e instalación de pantalla", "1", "212831.02", "0")]))
-        self.client.post(url, {**self.lineas([]), "margen": "1", "accion": "enviar"})
+        self.client.post(url, {**self.lineas([]), "margen": "1", **URGENTE, "accion": "enviar"})
         t.refresh_from_db()
         com.registrar_respuesta(t.ficha, None, True)
         s = SolicitudMaterial.objects.get(ticket=t, origen="comercial")
         self.assertEqual(s.estado, "validacion")
         self.assertEqual(sorted(i.descripcion for i in s.items.all()), ["Cable HDMI 15 m", "Canaleta 20x12"])  # sin el servicio
         self.assertIn(t.ficha.versiones.get().codigo, s.nota)
+
+    def cotizacion_lista(self):
+        """Un requerimiento con informe y una cotización que ya cumple todo para salir."""
+        t = self.crear()
+        self.client.post(reverse("comercial:informe", args=[t.radicado]), {"necesidad": "Cámaras", "materiales": "2 Cámara IP"})
+        url = reverse("comercial:cotizador", args=[t.radicado])
+        self.client.post(url, {**self.lineas([("Cámara IP 4 MP", "2", "250000", "0")]), "margen": "30"})
+        return t, url
+
+    def test_direccion_aprueba_la_propuesta_antes_de_que_salga(self):
+        t, url = self.cotizacion_lista()
+        datos = {**self.lineas([]), "margen": "30"}
+        # Comercial no la envía al cliente sin dirección (ni a mano con el PDF)
+        self.client.post(url, {**datos, "accion": "enviar"})
+        self.client.post(reverse("comercial:gestionar", args=[t.radicado]),
+                         {"etapa": "enviada", "visibilidad": "interno", "propuesta": self.pdf()})
+        t.ficha.refresh_from_db()
+        self.assertEqual((t.ficha.etapa, t.ficha.versiones.count()), ("elaborando", 0))
+        # La envía a dirección: le llega el aviso y mientras la revisa comercial no la modifica
+        mail.outbox.clear()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(url, {**datos, "accion": "a_direccion"})
+        cot = t.ficha.cotizaciones.get()
+        self.assertTrue(cot.en_revision)
+        self.assertTrue(any("dir@janotec.test" in m.to and "aprobar" in m.subject for m in mail.outbox))
+        self.client.post(url, {**self.lineas([]), "margen": "50"})
+        cot.refresh_from_db()
+        self.assertEqual(cot.margen, 30)
+        # Dirección la devuelve con observaciones: comercial las recibe y la puede corregir
+        self.client.force_login(self.director)
+        self.client.post(url, {"accion": "devolver", "observaciones": ""})
+        self.assertTrue(t.ficha.cotizaciones.get().en_revision)  # sin observaciones no se devuelve
+        mail.outbox.clear()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(url, {"accion": "devolver", "observaciones": "Bajar el margen al 25 %"})
+        cot.refresh_from_db()
+        self.assertEqual((cot.en_revision, cot.observaciones_direccion), (False, "Bajar el margen al 25 %"))
+        self.assertTrue(any("asesor@janotec.test" in m.to for m in mail.outbox))
+        self.client.force_login(self.asesor)
+        self.assertContains(self.client.get(url), "Bajar el margen al 25 %")
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(url, {**self.lineas([]), "margen": "25", "accion": "a_direccion"})
+        # Dirección la aprueba y sale al cliente
+        self.client.force_login(self.director)
+        self.assertContains(self.client.get(url), "Aprobar y enviar al cliente")
+        mail.outbox.clear()
+        self.client.post(url, {**self.lineas([]), "margen": "25", "accion": "enviar"})
+        cot.refresh_from_db()
+        t.ficha.refresh_from_db()
+        self.assertEqual((t.ficha.etapa, cot.aprobada_por, cot.en_revision, cot.motivo_urgencia), ("enviada", self.director, False, ""))
+        self.assertTrue(any("leidy@a.co" in m.to for m in mail.outbox))
+
+    def test_direccion_recibe_aviso_del_envio_urgente(self):
+        t, url = self.cotizacion_lista()
+        datos = {**self.lineas([]), "margen": "30", "accion": "enviar", "urgente": "1"}
+        self.client.post(url, {**datos, "motivo_urgencia": "hoy"})  # el motivo es obligatorio
+        t.ficha.refresh_from_db()
+        self.assertEqual(t.ficha.etapa, "elaborando")
+        mail.outbox.clear()
+        self.client.post(url, {**datos, "motivo_urgencia": "Licitación cierra hoy a las 5"})
+        t.ficha.refresh_from_db()
+        cot = t.ficha.cotizaciones.get()
+        self.assertEqual((t.ficha.etapa, cot.aprobada_por, cot.motivo_urgencia), ("enviada", None, "Licitación cierra hoy a las 5"))
+        self.assertTrue(any("dir@janotec.test" in m.to and "urgencia" in m.subject for m in mail.outbox))
+        self.assertTrue(t.seguimientos.filter(interno=True, mensaje__contains="Licitación cierra hoy").exists())
 
 
 class PasoAPasoComercialTests(BaseComercial):
@@ -736,7 +803,7 @@ class PasoAPasoComercialTests(BaseComercial):
         from .pasos import calcular
         t = self.crear()
         self.client.post(reverse("comercial:informe", args=[t.radicado]), {"necesidad": "Cámaras en el parqueadero de noche", "materiales": "2 cámaras bala"})
-        self.client.post(reverse("comercial:gestionar", args=[t.radicado]), {"etapa": "enviada", "valor_propuesta": "1000000",
+        self.client.post(reverse("comercial:gestionar", args=[t.radicado]), {**URGENTE, "etapa": "enviada", "valor_propuesta": "1000000",
                                                                              "visibilidad": "interno", "propuesta": self.pdf()})
         t.refresh_from_db()
         self.assertEqual(t.ficha.etapa, "enviada")

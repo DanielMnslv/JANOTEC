@@ -10,7 +10,25 @@
   <a class="btn btn-sm btn-outline-secondary" href="{% url 'comercial:catalogo' %}" target="_blank" rel="noopener"><i class="bi bi-tags"></i> Catálogo de precios</a>
 </div>
 
+{% if cotizacion.en_revision %}
+  <div class="alert alert-info">
+    <span class="badge text-bg-info">En revisión de dirección</span>
+    {% if es_direccion %}Revísela: puede corregirla, aprobarla (sale al cliente) o devolverla a comercial con lo que hay que corregir.
+    {% else %}Dirección la está revisando; no se modifica hasta que la apruebe o la devuelva.{% endif %}
+    {% if es_direccion %}
+      <form method="post" class="mt-2">{% csrf_token %}
+        <textarea name="observaciones" class="form-control form-control-sm mb-2" rows="2" maxlength="1000" required minlength="5"
+                  placeholder="Qué hay que corregir"></textarea>
+        <button class="btn btn-outline-danger btn-sm" name="accion" value="devolver"><i class="bi bi-arrow-return-left"></i> Devolver a comercial</button>
+      </form>
+    {% endif %}
+  </div>
+{% elif cotizacion.observaciones_direccion %}
+  <div class="alert alert-warning"><b>Dirección la devolvió para corregir:</b> {{ cotizacion.observaciones_direccion }}</div>
+{% endif %}
+
 <form method="post" id="form-cotizacion">{% csrf_token %}
+  <fieldset {% if bloqueada %}disabled{% endif %}>
   {{ lineas.management_form }}
   <div class="row g-4">
     <div class="col-lg-8">
@@ -84,13 +102,30 @@
           <div class="d-grid gap-2">
             <button class="btn btn-outline-primary" name="accion" value="guardar"><i class="bi bi-save"></i> Guardar</button>
             <button class="btn btn-outline-secondary" name="accion" value="ver_pdf" formtarget="_blank" id="ver-pdf"><i class="bi bi-file-earmark-pdf"></i> Ver PDF (borrador)</button>
-            <button class="btn btn-accent" name="accion" value="enviar" id="enviar-propuesta"><i class="bi bi-send"></i> Enviar al cliente</button>
+            {% if es_direccion %}
+              <button class="btn btn-accent" name="accion" value="enviar" id="enviar-propuesta"><i class="bi bi-check2-circle"></i> Aprobar y enviar al cliente</button>
+            {% elif not bloqueada %}
+              <button class="btn btn-accent" name="accion" value="a_direccion" id="a-direccion"><i class="bi bi-person-check"></i> Enviar a dirección para aprobar</button>
+              <div class="border border-warning rounded p-2 small">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="urgente" value="1" id="coti-urgente"
+                         onchange="document.getElementById('bloque-urgente').classList.toggle('d-none', !this.checked)">
+                  <label class="form-check-label fw-semibold" for="coti-urgente">Envío urgente, sin esperar a dirección</label>
+                </div>
+                <div id="bloque-urgente" class="d-none mt-2">
+                  <textarea name="motivo_urgencia" class="form-control form-control-sm mb-2" rows="2" maxlength="500"
+                            placeholder="Motivo de la urgencia (dirección lo recibe por correo y queda en el historial)"></textarea>
+                  <button class="btn btn-warning btn-sm w-100" name="accion" value="enviar" id="enviar-propuesta"><i class="bi bi-send"></i> Enviar al cliente ya</button>
+                </div>
+              </div>
+            {% endif %}
           </div>
-          <p class="small text-muted-jn mt-2 mb-0">Al enviar se genera el PDF {{ codigo }}, queda como versión {{ numero }} y le llega al cliente con los botones para aprobar, pedir cambios o no aprobar. Guarde antes de ver el PDF.</p>
+          <p class="small text-muted-jn mt-2 mb-0">{% if es_direccion %}Al aprobar{% else %}Cuando dirección la aprueba{% endif %} se genera el PDF {{ codigo }}, queda como versión {{ numero }} y le llega al cliente con los botones para aprobar, pedir cambios o no aprobar. Guarde antes de ver el PDF.</p>
         </div>
       </div>
     </div>
   </div>
+  </fieldset>
 </form>
 {% endblock %}
 {% block scripts %}
@@ -170,7 +205,7 @@
   campoMargen.addEventListener('input', function () { campoMargen.setCustomValidity(''); });
   campoMargen.form.addEventListener('submit', function (e) {
     const accion = e.submitter ? e.submitter.value : '';
-    if ((accion === 'ver_pdf' || accion === 'enviar') && !campoMargen.value) {
+    if ((accion === 'ver_pdf' || accion === 'enviar' || accion === 'a_direccion') && !campoMargen.value) {
       e.preventDefault();
       campoMargen.setCustomValidity('Digite el margen de utilidad, de 1 % a 99 %.');
       campoMargen.reportValidity();
@@ -210,7 +245,8 @@
     if (vacio) vacio.hidden = true;
     fila.querySelector('.descripcion').focus();
   });
-  document.getElementById('enviar-propuesta').addEventListener('click', function (ev) {
+  const botonEnviar = document.getElementById('enviar-propuesta');
+  if (botonEnviar) botonEnviar.addEventListener('click', function (ev) {
     if (!confirm('¿Enviar la propuesta {{ codigo|escapejs }} al cliente? Se genera el PDF y le llega por correo para que responda.')) ev.preventDefault();
   });
   recalcular();
