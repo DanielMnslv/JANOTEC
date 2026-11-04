@@ -130,8 +130,10 @@ def inicio(request):
         return redirect("panel")
     if request.user.es_bodega:  # también la de bodega que atiende lo comercial (tiene el enlace en la barra)
         return redirect("inventario:panel")
-    if request.user.es_comercial or request.user.es_administrativo:
+    if request.user.es_comercial:
         return redirect("comercial:bandeja")
+    if request.user.es_administrativo:
+        return redirect("comercial:propuestas")
     return redirect("mis_tickets")  # cliente y central de atención
 
 

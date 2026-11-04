@@ -868,6 +868,39 @@ class CotizadorTests(BaseComercial):
         self.assertContains(r, "Su propuesta económica está lista")
         self.assertEqual(self.client.get(reverse("descargar_adjunto", args=[v.archivo_id])).status_code, 200)
 
+    def test_modulo_administrativo_ordena_las_propuestas(self):
+        solo_comercial, administrativa = self.areas()
+        t, url = self.cotizacion_lista()
+        modulo = reverse("comercial:propuestas")
+        # Comercial no entra al módulo administrativo ni lo ve en su menú
+        self.client.force_login(solo_comercial)
+        self.assertEqual(self.client.get(modulo).status_code, 403)
+        self.assertNotContains(self.client.get(reverse("comercial:bandeja")), modulo)
+        # Administrativa: la tiene por armar y su menú lleva al módulo
+        self.client.force_login(administrativa)
+        r = self.client.get(modulo)
+        self.assertContains(r, t.radicado)
+        self.assertEqual(r.context["por_armar"], [t.ficha])
+        self.client.post(url, {**self.lineas([]), "margen": "30", "accion": "a_direccion"})
+        # Dirección: arriba las que debe aprobar, con el contador en el menú
+        self.client.force_login(self.director)
+        r = self.client.get(modulo)
+        self.assertEqual((r.context["por_aprobar"], r.context["por_armar"]), ([t.ficha], []))
+        self.assertContains(r, "Por aprobar: las revisa usted")
+        self.assertContains(r, 'title="Propuestas esperando su aprobación">1<')
+        self.client.post(url, {"accion": "devolver", "observaciones": "Revisar el precio del switch"})
+        # Devuelta: administrativa la ve con las observaciones de dirección
+        self.client.force_login(administrativa)
+        r = self.client.get(modulo)
+        self.assertEqual(r.context["devueltas"], [t.ficha])
+        self.assertContains(r, "Revisar el precio del switch")
+        # Aprobada por medio de comercial: aparece en la bandeja comercial por entregar
+        self.client.force_login(self.director)
+        self.client.post(url, {**self.lineas([]), "margen": "30", "accion": "enviar", "entrega": "comercial"})
+        self.assertEqual(self.client.get(modulo).context["enviadas"], [t.ficha])
+        self.client.force_login(solo_comercial)
+        self.assertContains(self.client.get(reverse("comercial:bandeja")), "Propuestas aprobadas para que usted las entregue")
+
 
 class PasoAPasoComercialTests(BaseComercial):
     def test_muestra_el_paso_actual_y_solo_las_etapas_que_siguen(self):

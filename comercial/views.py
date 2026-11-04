@@ -27,7 +27,7 @@ from tickets.permisos import cliente_requerido, obtener_ticket, personal_requeri
 from . import pasos, servicios
 from .pdf import ficha_pdf
 from .forms import CotizacionClienteForm, FichaForm, GestionComercialForm, InformeForm
-from .models import FichaComercial, InformeRequerimiento, LineaCotizacion
+from .models import FichaComercial, InformeRequerimiento, LineaCotizacion, PropuestaVersion
 from .permisos import comercial_requerido, obtener_ticket_comercial, propuestas_requerido, requerimientos_requerido
 
 F = FichaComercial
@@ -78,6 +78,46 @@ def bandeja(request):
         "pagina": pagina, "vista": vista, "q": q, "conteo": conteo, "vencidas": vencidas, "params": params.urlencode(),
         "etapas": F.Etapa.choices,
         "en_tecnica": base.filter(area=T.Area.TECNICA).exclude(estado__in=T.ESTADOS_FINALES).count(),
+        # Aprobadas por dirección para que comercial las lleve en persona
+        "por_entregar": PropuestaVersion.objects.filter(ficha__ticket__in=base, por_comercial=True, entregada_cliente__isnull=True,
+                                                        estado=PropuestaVersion.Estado.ENVIADA)
+                        .select_related("ficha__ticket__empresa"),
+    })
+
+
+# --- Módulo del área administrativa: las propuestas ---------------------------------------
+@login_required
+@propuestas_requerido
+def propuestas(request):
+    """Bandeja del área administrativa: lo que hay que hacer con cada propuesta, en orden de urgencia.
+
+    En revisión de dirección (para dirección, arriba: las que debe aprobar), devueltas por dirección para corregir,
+    cambios que pidió el cliente, por armar (con el informe listo) y las enviadas, a las que comercial hace seguimiento.
+    Cada requerimiento aparece en un solo grupo.
+    """
+    from .models import Cotizacion
+    base = (FichaComercial.objects.filter(ticket__in=tickets_visibles(request.user))
+            .select_related("ticket", "ticket__empresa", "ticket__sede", "comercial").order_by("fecha_max_propuesta", "creado"))
+    en_revision = set(Cotizacion.objects.filter(en_revision=True).values_list("ficha_id", flat=True))
+    observadas = dict(Cotizacion.objects.filter(en_revision=False, version__isnull=True).exclude(observaciones_direccion="")
+                      .values_list("ficha_id", "observaciones_direccion"))
+    armando = [F.Etapa.GESTION, F.Etapa.ELABORANDO, F.Etapa.AJUSTES]
+    abiertas = list(base.filter(etapa__in=armando, ticket__area=T.Area.COMERCIAL))
+    por_aprobar = [f for f in abiertas if f.pk in en_revision]
+    devueltas, cambios, por_armar = [], [], []
+    for f in abiertas:
+        if f.pk in en_revision:
+            continue
+        if f.pk in observadas:
+            f.observaciones = observadas[f.pk]
+            devueltas.append(f)
+        elif f.etapa == F.Etapa.AJUSTES:
+            cambios.append(f)
+        elif InformeRequerimiento.objects.filter(ficha=f).exists():
+            por_armar.append(f)
+    return render(request, "comercial/propuestas.html", {
+        "por_aprobar": por_aprobar, "devueltas": devueltas, "cambios": cambios, "por_armar": por_armar,
+        "enviadas": list(base.filter(etapa=F.Etapa.ENVIADA)), "es_direccion": request.user.es_direccion,
     })
 
 

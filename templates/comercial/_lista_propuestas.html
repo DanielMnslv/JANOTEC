@@ -1,0 +1,20 @@
+{# Lista de requerimientos del módulo administrativo. Recibe: fichas, vacio, boton (abre el cotizador), observaciones, cambios_cliente. #}
+<ul class="list-group list-group-flush">
+  {% for f in fichas %}{% with t=f.ticket %}
+  <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div class="me-auto">
+      <a class="radicado" href="{% url 'comercial:detalle' t.radicado %}">{{ t.radicado }}</a>
+      <span class="badge text-bg-{{ f.color_etapa }} ms-1">{{ f.get_etapa_display }}</span>
+      {% if f.propuesta_vencida %}<span class="small text-danger ms-1"><i class="bi bi-alarm"></i> Vencida</span>
+      {% elif f.fecha_max_propuesta and f.abierta %}<span class="small text-muted-jn ms-1">antes del {{ f.fecha_max_propuesta|date:"j M" }}</span>{% endif %}
+      <div class="small">{{ t.asunto|truncatechars:80 }}</div>
+      <div class="small text-muted-jn">{{ t.empresa.razon_social }}{% if t.sede %} · {{ t.sede }}{% endif %} · Asesor: {{ f.comercial|default:"—" }}{% if f.valor_propuesta %} · ${{ f.valor_propuesta|floatformat:"0g" }} antes de IVA{% endif %}</div>
+      {% if observaciones and f.observaciones %}<div class="small mt-1 p-2 rounded bg-light"><b>Dirección:</b> {{ f.observaciones }}</div>{% endif %}
+      {% if cambios_cliente and f.version_actual.cambios %}<div class="small mt-1 p-2 rounded bg-light"><b>Cambios pedidos:</b> {{ f.version_actual.cambios }}</div>{% endif %}
+    </div>
+    {% if boton %}<a class="btn btn-sm btn-accent text-nowrap" href="{% url 'comercial:cotizador' t.radicado %}"><i class="bi bi-calculator"></i> {{ boton }}</a>{% endif %}
+  </li>
+  {% endwith %}{% empty %}
+  <li class="list-group-item text-muted-jn small">{{ vacio|default:"Nada por ahora." }}</li>
+  {% endfor %}
+</ul>

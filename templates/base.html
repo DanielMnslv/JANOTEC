@@ -33,7 +33,8 @@
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'actas_lista' or request.resolver_match.url_name == 'acta_detalle' %}active{% endif %}" href="{% url 'actas_lista' %}"><i class="bi bi-clipboard-check"></i> Actas</a></li>
           {% if user.ve_inventario %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'inventario' %}active{% endif %}" href="{% if user.gestiona_inventario %}{% url 'inventario:productos' %}{% else %}{% url 'inventario:mi_material' %}{% endif %}"><i class="bi bi-boxes"></i> {% if user.gestiona_inventario %}Inventario{% else %}Mi material{% endif %}</a></li>
           {% elif user.es_coordinador %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'inventario' %}active{% endif %}" href="{% url 'inventario:funcionarios' %}"><i class="bi bi-people"></i> Funcionarios</a></li>{% endif %}
-          {% if user.ve_comercial %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'comercial' %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Comercial</a></li>
+          {% if user.ve_comercial %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'comercial' and request.resolver_match.url_name not in modulo_administrativo %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Comercial</a></li>
+          {% if user.arma_propuestas %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name in modulo_administrativo %}active{% endif %}" href="{% url 'comercial:propuestas' %}"><i class="bi bi-calculator"></i> Administrativo{% if propuestas_por_aprobar %} <span class="badge text-bg-warning" title="Propuestas esperando su aprobación">{{ propuestas_por_aprobar }}</span>{% endif %}</a></li>{% endif %}
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'oportunidades' %}active{% endif %}" href="{% url 'oportunidades' %}"><i class="bi bi-graph-up-arrow"></i> Oportunidades</a></li>{% endif %}
           {% if user.es_supervisor %}<li class="nav-item"><a class="nav-link {% if 'cliente' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'clientes' %}"><i class="bi bi-building"></i> Clientes</a></li>{% endif %}
           {% if user.es_supervisor %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'reportes' %}active{% endif %}" href="{% url 'reportes' %}"><i class="bi bi-bar-chart"></i> Reportes</a></li>{% endif %}
@@ -51,9 +52,12 @@
               {% endfor %}
             </ul>
           </li>
-          {% if user.ve_comercial %}{# bodega que también atiende lo comercial o arma las propuestas (administrativa) #}
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'comercial' %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> {% if user.es_comercial %}Comercial{% else %}Propuestas{% endif %}</a></li>
+          {% if user.es_comercial %}{# bodega que también atiende lo comercial #}
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'comercial' and request.resolver_match.url_name not in modulo_administrativo %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Comercial</a></li>
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'oportunidades' %}active{% endif %}" href="{% url 'oportunidades' %}"><i class="bi bi-graph-up-arrow"></i> Oportunidades</a></li>
+          {% endif %}
+          {% if user.es_administrativo %}{# bodega que también arma las propuestas (área administrativa) #}
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'comercial' %}active{% endif %}" href="{% url 'comercial:propuestas' %}"><i class="bi bi-calculator"></i> Administrativo</a></li>
           {% endif %}
         {% elif user.es_comercial %}
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
@@ -63,8 +67,7 @@
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'nuevo_ticket' or request.resolver_match.url_name == 'mis_tickets' %}active{% endif %}" href="{% url 'mis_tickets' %}"><i class="bi bi-tools"></i> Solicitudes técnicas</a></li>
         {% elif user.es_administrativo %}{# área administrativa: arma las propuestas #}
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'bandeja' %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Propuestas</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'catalogo' %}active{% endif %}" href="{% url 'comercial:catalogo' %}"><i class="bi bi-tags"></i> Catálogo de precios</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'comercial' %}active{% endif %}" href="{% url 'comercial:propuestas' %}"><i class="bi bi-calculator"></i> Administrativo</a></li>
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'inventario' %}active{% endif %}" href="{% url 'inventario:cotizaciones' %}"><i class="bi bi-envelope-paper"></i> Cotizar con proveedores</a></li>
         {% elif user.es_central %}
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>

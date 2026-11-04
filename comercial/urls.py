@@ -10,6 +10,7 @@ urlpatterns = [
     path("solicitar-cotizacion/", views.nuevo_cliente, name="nuevo_cliente"),
     path("propuesta/<str:firma>/", respuesta.respuesta, name="respuesta"),
     path("catalogo/", views.catalogo, name="catalogo"),
+    path("propuestas/", views.propuestas, name="propuestas"),
     path("<str:radicado>/", views.detalle, name="detalle"),
     path("<str:radicado>/ficha.pdf", views.ficha_descargar, name="ficha_pdf"),
     path("<str:radicado>/gestionar/", views.gestionar, name="gestionar"),
