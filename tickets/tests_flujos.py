@@ -310,7 +310,11 @@ class FlujoComercialTests(BaseFlujos):
         self.assertTrue(a.ticket.area == Ticket.Area.COMERCIAL)
 
     def test_12_requerimiento_comercial_completo(self):
-        self.client.force_login(self.sindy)
+        # Como quedó el 04/11/2026: Yuri y Sindy arman las propuestas (también administrativa) y, mientras el área
+        # comercial no tenga usuario, dirección (Miguel) radica, pide el levantamiento y le llegan sus avisos
+        Usuario.objects.filter(pk__in=[self.yuri.pk, self.sindy.pk]).update(tambien_comercial=False, tambien_administrativo=True)
+        self.sindy.refresh_from_db()
+        self.client.force_login(self.miguel)
         mail.outbox.clear()
         self.client.post(reverse("comercial:nuevo"), {"empresa": self.emp.pk, "contacto_nombre": "Daniel", "contacto_telefono": "3214061219",
                                                       "contacto_email": "cliente@ganacampo.co", "asunto": "Cámaras en el parqueadero",
@@ -340,21 +344,22 @@ class FlujoComercialTests(BaseFlujos):
         # Propuesta → cambios → versión 2 → aprobada → material → instalación
         self.client.force_login(self.sindy)
         self.client.post(reverse("comercial:gestionar", args=[t.radicado]), {**URGENTE, "etapa": "enviada", "valor_propuesta": "4000000",
-                                                                            "comercial": self.sindy.pk, "visibilidad": "interno",
+                                                                            "visibilidad": "interno",
                                                                             "propuesta": self.pdf()})
         self.assertTrue(self.para("cliente@ganacampo.co"))
         mail.outbox.clear()
         self.client.force_login(self.cliente)
         self.client.post(reverse("comercial:responder", args=[t.radicado]), {"accion": "cambios", "cambios": "Marca Hikvision"})
-        self.assertTrue(self.para(self.sindy.email), "el asesor recibe los cambios pedidos")
+        self.assertTrue(self.para(self.sindy.email), "administrativa recibe los cambios pedidos")
         self.client.force_login(self.sindy)
         self.client.post(reverse("comercial:gestionar", args=[t.radicado]), {**URGENTE, "etapa": "enviada", "valor_propuesta": "4300000",
-                                                                            "comercial": self.sindy.pk, "visibilidad": "interno",
+                                                                            "visibilidad": "interno",
                                                                             "propuesta": self.pdf()})
         mail.outbox.clear()
         self.client.force_login(self.cliente)
         self.client.post(reverse("comercial:responder", args=[t.radicado]), {"accion": "aprobar"})
-        self.assertTrue(self.para(self.sindy.email), "el asesor sabe que la aprobaron")
+        self.assertTrue(self.para(self.sindy.email), "administrativa sabe que la aprobaron")
+        self.assertTrue(self.para(self.miguel.email), "dirección, que cubre comercial, también")
         from inventario.models import SolicitudMaterial
         s = SolicitudMaterial.objects.get(ticket=t, origen="comercial")
         self.assertEqual(s.estado, "validacion", "el material aprobado va directo a revisión de bodega")
@@ -368,7 +373,7 @@ class FlujoComercialTests(BaseFlujos):
         with self.captureOnCommitCallbacks(execute=True):
             self.client.post(reverse("inventario:solicitud_accion", args=[s.pk, "validar"]),
                              {"cargo": "cliente", "modalidad": "venta", **{f"listo_{i.pk}": "on" for i in s.items.all()}})
-        self.assertTrue(any("Bodega revisó el material" in x for x in self.para(self.sindy.email)), "el asesor sabe cómo va")
+        self.assertTrue(any("Bodega revisó el material" in x for x in self.para(self.miguel.email)), "comercial (hoy dirección) sabe cómo va")
         self.client.force_login(self.jguana)
         self.assertContains(self.client.get(t.get_absolute_url()), "1. Aprobado por el cliente")
         self.client.post(reverse("inventario_listo", args=[t.radicado]), {"nota": "Instalar la otra semana"})

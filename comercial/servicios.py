@@ -137,7 +137,7 @@ def devolver_a_comercial(ficha, autor, resultado, servicios="", materiales=None)
     notif._enviar(f"[{t.radicado}] Levantamiento listo · {t.empresa}",
                   "\n".join([f"{tecnico or autor} terminó el levantamiento de «{t.asunto}».", "", resultado, "",
                              f"Elaborar la propuesta: {settings.SITIO_URL.rstrip('/')}{ficha.get_absolute_url()}"]),
-                  _correos_comerciales(ficha))
+                  _correos_propuesta(ficha))
 
 
 def pasar_a_propuesta(ticket, autor, informe, servicios="", materiales=None):
@@ -245,7 +245,7 @@ def solicitar_cambios(ficha, autor, cambios):
     notif._enviar(f"[{t.radicado}] El cliente pidió cambios a la propuesta{n} · {t.empresa}",
                   f"{autor or 'El cliente (desde el correo)'} pidió estos cambios:\n\n{cambios}\n\nPrepare la nueva versión: "
                   f"{settings.SITIO_URL.rstrip('/')}{ficha.get_absolute_url()}",
-                  _correos_comerciales(ficha))
+                  _correos_propuesta(ficha))
 
 
 def registrar_respuesta(ficha, autor, aprobada, motivo=""):
@@ -280,7 +280,7 @@ def registrar_respuesta(ficha, autor, aprobada, motivo=""):
             cancelar(s, autor, "El cliente no aprobó la propuesta.")
     notif._enviar(f"[{t.radicado}] Propuesta {'aprobada' if aprobada else 'no aprobada'} · {t.empresa}",
                   f"{seg.mensaje}\n\n{settings.SITIO_URL.rstrip('/')}{ficha.get_absolute_url()}",
-                  _correos_comerciales(ficha))
+                  _correos_propuesta(ficha))
 
 
 # --- Avisos ------------------------------------------------------------------------
@@ -294,16 +294,35 @@ def _acciones_propuesta(version):
 
 
 def _correos_comerciales(ficha):
-    """El asesor de la ficha y el buzón comercial; sin asesor ni buzón, todo el área comercial (o el coordinador)."""
+    """Área comercial: el asesor de la ficha y el buzón comercial; sin asesor ni buzón, todo el área comercial.
+
+    Mientras el área comercial no tenga a nadie, le llega a dirección, que cubre su trabajo (o, sin ella, al coordinador).
+    """
     asesor = [ficha.comercial.email] if ficha.comercial and ficha.comercial.email else []
     area = [settings.NOTIFICAR_COMERCIAL_EMAIL] if settings.NOTIFICAR_COMERCIAL_EMAIL else ([] if asesor else notif.correos_area_comercial())
-    return list(dict.fromkeys(asesor + area)) or [settings.NOTIFICAR_SOPORTE_EMAIL]
+    return list(dict.fromkeys(asesor + area)) or _correos_direccion() or [settings.NOTIFICAR_SOPORTE_EMAIL]
+
+
+def _correos_administrativos():
+    """Área administrativa (arma las propuestas): por rol o con «también área administrativa». Sin nadie, dirección."""
+    from django.db.models import Q
+
+    from accounts.models import Usuario
+    correos = list(Usuario.objects.filter(Q(rol=Usuario.Rol.ADMINISTRATIVO) | Q(tambien_administrativo=True), is_active=True,
+                                          is_superuser=False).exclude(email="").values_list("email", flat=True))
+    return correos or _correos_direccion() or [settings.NOTIFICAR_SOPORTE_EMAIL]
+
+
+def _correos_propuesta(ficha):
+    """Lo que toca a la propuesta y al cliente a la vez: administrativa (la arma) y comercial (le hace seguimiento)."""
+    return list(dict.fromkeys(_correos_administrativos() + _correos_comerciales(ficha)))
 
 
 # --- Revisión de la propuesta por dirección ------------------------------------------------------
 def _correos_direccion():
     from accounts.models import Usuario
-    return list(Usuario.objects.filter(rol=Usuario.Rol.DIRECCION, is_active=True).values_list("email", flat=True))
+    return list(Usuario.objects.filter(rol=Usuario.Rol.DIRECCION, is_active=True).exclude(email="")
+                .values_list("email", flat=True))
 
 
 def _enlace_cotizador(ficha):
@@ -318,20 +337,20 @@ def propuesta_para_aprobar(cotizacion, autor):
         f"[{t.radicado}] Propuesta para aprobar: {t.asunto}",
         "\n".join([f"{autor.get_full_name() or autor.username} envió la propuesta económica para su revisión y aprobación.",
                    "", f"Empresa: {t.empresa}" + (f" · Sede: {t.sede}" if t.sede else ""), "",
-                   "Puede aprobarla (sale al cliente) o devolverla a comercial con lo que hay que corregir.",
+                   "Puede aprobarla (sale al cliente) o devolverla al área administrativa con lo que hay que corregir.",
                    "", f"Revisar: {_enlace_cotizador(ficha)}"]),
         _correos_direccion(),
     )
 
 
 def propuesta_devuelta(cotizacion, autor, observaciones):
-    """A comercial: dirección devolvió la propuesta con observaciones."""
+    """Al área administrativa: dirección devolvió la propuesta con observaciones."""
     ficha, t = cotizacion.ficha, cotizacion.ficha.ticket
     notif._enviar(
         f"[{t.radicado}] Propuesta devuelta para corregir: {t.asunto}",
         "\n".join([f"{autor.get_full_name() or autor.username} devolvió la propuesta para corregir:", "", observaciones,
                    "", f"Corregir: {_enlace_cotizador(ficha)}"]),
-        _correos_comerciales(ficha),
+        _correos_administrativos(),
     )
 
 
@@ -343,10 +362,35 @@ def propuesta_urgente(ficha, autor, motivo, codigo):
         "\n".join([f"{autor.get_full_name() or autor.username} envió la propuesta {codigo} al cliente sin su aprobación.",
                    "", f"Motivo de la urgencia: {motivo}", "",
                    f"Empresa: {t.empresa}" + (f" · Sede: {t.sede}" if t.sede else ""), "",
-                   "Revísela cuando pueda; si hay que corregir algo, avise a comercial.",
+                   "Revísela cuando pueda; si hay que corregir algo, avise al área administrativa.",
                    "", f"Ver la solicitud: {settings.SITIO_URL.rstrip('/')}{ficha.get_absolute_url()}"]),
         _correos_direccion(),
     )
+
+
+def propuesta_para_entregar(ficha, pdf_adjunto, version, autor):
+    """Al asesor comercial: dirección aprobó la propuesta para que él se la entregue al cliente (con el PDF adjunto)."""
+    t = ficha.ticket
+    cuerpo = "\n".join([
+        f"{autor.get_full_name() or autor.username} aprobó la propuesta {version.codigo or f'v{version.numero}'} para que "
+        "usted se la entregue al cliente. Al cliente no le llegó por correo.", "",
+        f"Empresa: {t.empresa}" + (f" · Sede: {t.sede}" if t.sede else ""), f"Requerimiento: {t.asunto}",
+        f"Valor: ${version.valor:,.0f} antes de IVA".replace(",", ".") if version.valor else "", "",
+        "Cuando la entregue, márquela como «Entregada al cliente» con la fecha; luego registre lo que responda.", "",
+        f"Ver el requerimiento: {settings.SITIO_URL.rstrip('/')}{ficha.get_absolute_url()}"])
+    asunto = f"[{t.radicado}] Propuesta para entregar al cliente · {t.empresa}"
+    correo = EmailMultiAlternatives(asunto, cuerpo, settings.DEFAULT_FROM_EMAIL, _correos_comerciales(ficha))
+    correo.attach_alternative(notif.html_desde_texto(asunto, cuerpo), "text/html")
+    if pdf_adjunto:
+        try:
+            with pdf_adjunto.archivo.open("rb") as f:
+                correo.attach(pdf_adjunto.nombre_original, f.read(), "application/pdf")
+        except Exception:  # noqa: BLE001
+            log.exception("No se pudo adjuntar la propuesta de %s", t.radicado)
+    try:
+        correo.send(fail_silently=False)
+    except Exception:  # noqa: BLE001 — el correo nunca debe tumbar la operación
+        log.exception("No se pudo enviar «%s»", asunto)
 
 
 def _enviar_con_ficha(asunto, cuerpo, destinatarios, ficha, interna):
@@ -415,7 +459,7 @@ def propuesta_enviada(ficha, pdf_adjunto):
     titulo = "Le enviamos su propuesta económica" + (f" (versión {version.numero})" if version and version.numero > 1 else "")
     notif.enviar_al_cliente(
         f"[{t.radicado}] Propuesta económica JANOTEC" + (f" · versión {version.numero}" if version and version.numero > 1 else ""),
-        destinatarios + [c for c in _correos_comerciales(ficha) if c != settings.NOTIFICAR_SOPORTE_EMAIL],
+        destinatarios + [c for c in _correos_propuesta(ficha) if c != settings.NOTIFICAR_SOPORTE_EMAIL],
         titulo, parrafos,
         saludo=notif._saludo(t), radicado=t.radicado, estado="Propuesta enviada",
         datos=[("Requerimiento", t.asunto), ("Cliente", str(t.empresa)), ("Propuesta", (version.codigo or f"Versión {version.numero}") if version else ""),

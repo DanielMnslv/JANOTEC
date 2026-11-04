@@ -58,10 +58,10 @@
       {% else %} <i class="bi bi-check2"></i>{% endif %}</li>
     <li class="{% if material_pendiente %}text-muted-jn{% else %}fw-semibold{% endif %}">Traspase la instalación al área técnica: asignará al técnico y seguirá hasta el cierre, con el mismo número.</li>
   </ol>
-  <form method="post" action="{% url 'comercial:traspasar' ticket.radicado %}" class="d-flex flex-wrap gap-2">{% csrf_token %}
+  {% if user.gestiona_requerimientos %}<form method="post" action="{% url 'comercial:traspasar' ticket.radicado %}" class="d-flex flex-wrap gap-2">{% csrf_token %}
     <input name="nota" class="form-control" style="max-width:520px" placeholder="Lo acordado con el cliente (alcance, fechas, condiciones)…" {% if material_pendiente %}disabled{% endif %}>
     <button class="btn btn-success" {% if material_pendiente %}disabled title="Primero bodega revisa el material"{% endif %}><i class="bi bi-send"></i> Traspasar al área técnica</button>
-  </form>
+  </form>{% else %}<div class="small text-muted-jn">El traspaso lo hace el área comercial.</div>{% endif %}
 </div></div>
 {% endif %}
 
@@ -121,7 +121,7 @@
             {% include "comercial/_form_informe.html" with boton="Guardar informe" %}
           </div>
           {% endif %}
-          {% if en_comercial and ficha.abierta and ficha.etapa != 'enviada' and ficha.etapa != 'aprobada' %}
+          {% if en_comercial and ficha.abierta and ficha.etapa != 'enviada' and ficha.etapa != 'aprobada' and user.gestiona_requerimientos %}
           <div class="border rounded p-3 no-imprimir">
             <div class="fw-semibold mb-2"><i class="bi bi-geo-alt"></i> Con visita: pida un levantamiento al área técnica</div>
         <form method="post" action="{% url 'comercial:levantamiento' ticket.radicado %}" class="no-imprimir">{% csrf_token %}
@@ -149,27 +149,27 @@
     {% if form_gestion %}
     <div class="card mb-4 border-primary no-imprimir" id="gestion-comercial">
       <div class="card-header"><i class="bi bi-sliders"></i> Gestionar propuesta</div>
-      {% if ficha.etapa == 'gestion' or ficha.etapa == 'elaborando' or ficha.etapa == 'ajustes' %}
+      {% if user.arma_propuestas %}{% if ficha.etapa == 'gestion' or ficha.etapa == 'elaborando' or ficha.etapa == 'ajustes' %}
       <div class="card-body border-bottom bg-light">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
           <div class="small"><b>Arme la propuesta en la plataforma:</b> ítems del catálogo de precios, descuento, IVA y el PDF con su código PE, listo para enviar.</div>
           <a class="btn btn-accent" href="{% url 'comercial:cotizador' ticket.radicado %}"><i class="bi bi-calculator"></i> {% if ficha.etapa == 'ajustes' %}Ajustar en el cotizador{% else %}Abrir el cotizador{% endif %}</a>
         </div>
       </div>
-      {% endif %}
+      {% endif %}{% endif %}
       <div class="card-body">
         <form method="post" action="{% url 'comercial:gestionar' ticket.radicado %}" enctype="multipart/form-data">{% csrf_token %}
           <div class="row g-2">
             <div class="col-md-4"><label class="form-label small mb-1">Etapa</label>{{ form_gestion.etapa }}</div>
             <div class="col-md-4"><label class="form-label small mb-1">Asesor comercial</label>{{ form_gestion.comercial }}</div>
-            <div class="col-md-4"><label class="form-label small mb-1">Valor propuesta (antes de IVA)</label>{{ form_gestion.valor_propuesta }}</div>
-            <div class="col-md-6"><label class="form-label small mb-1">Propuesta (PDF)</label>{{ form_gestion.propuesta }}</div>
+            {% if form_gestion.propuesta %}<div class="col-md-4"><label class="form-label small mb-1">Valor propuesta (antes de IVA)</label>{{ form_gestion.valor_propuesta }}</div>
+            <div class="col-md-6"><label class="form-label small mb-1">Propuesta (PDF)</label>{{ form_gestion.propuesta }}</div>{% endif %}
             <div class="col-md-6"><label class="form-label small mb-1">Motivo (si no se aprobó)</label>{{ form_gestion.motivo_rechazo }}</div>
             <div class="col-12"><label class="form-label small mb-1">Cambios que pidió el cliente <span class="text-muted-jn">(etapa «Ajustando propuesta»)</span></label>{{ form_gestion.cambios }}</div>
           </div>
           <div class="mt-2 form-check-inline-list">{% for r in form_gestion.visibilidad %}<div class="form-check form-check-inline">{{ r.tag }}<label class="form-check-label" for="{{ r.id_for_label }}">{{ r.choice_label }}</label></div>{% endfor %}</div>
           {{ form_gestion.mensaje }}
-          {% if not user.es_direccion and ficha.etapa != 'enviada' %}
+          {% if not user.es_direccion and user.arma_propuestas and ficha.etapa != 'enviada' %}
             <div class="border border-warning rounded p-2 mt-2 small">
               <div class="form-check">
                 <input class="form-check-input" type="checkbox" name="urgente" value="1" id="gest-urgente"
@@ -220,6 +220,13 @@
           </div>
           <div class="text-muted-jn">{{ v.enviada|date:"d/m/Y h:i a" }}{% if v.valor %} · ${{ v.valor|floatformat:"0g" }}{% endif %}</div>
           {% if v.archivo %}<a href="{% url 'descargar_adjunto' v.archivo.pk %}"><i class="bi bi-file-earmark-pdf text-danger"></i> {{ v.archivo.nombre_original }}</a>{% endif %}
+          {% if v.por_entregar %}
+            <div class="mt-2 p-2 rounded border border-warning"><i class="bi bi-person-walking"></i> <b>Por entregar al cliente</b> por medio de comercial{% if ficha.comercial %} ({{ ficha.comercial }}){% endif %}.
+              {% if user.gestiona_requerimientos %}<form method="post" action="{% url 'comercial:entregada' ticket.radicado v.numero %}" class="d-flex gap-2 mt-2 no-imprimir">{% csrf_token %}
+                <input type="date" name="fecha" class="form-control form-control-sm" required value="{% now 'Y-m-d' %}" max="{% now 'Y-m-d' %}" aria-label="Fecha de entrega">
+                <button class="btn btn-sm btn-warning text-nowrap"><i class="bi bi-check2"></i> Entregada al cliente</button>
+              </form>{% endif %}</div>
+          {% elif v.entregada_cliente %}<div class="text-muted-jn mt-1"><i class="bi bi-person-check"></i> Entregada por comercial el {{ v.entregada_cliente|date:"d/m/Y" }}{% if v.entregada_por %} · {{ v.entregada_por }}{% endif %}</div>{% endif %}
           {% if v.cambios %}<div class="mt-1 p-2 rounded bg-light"><b>Cambios pedidos:</b> {{ v.cambios }}</div>{% endif %}
           {% if v.motivo %}<div class="mt-1 text-danger">{{ v.motivo }}</div>{% endif %}
         </li>

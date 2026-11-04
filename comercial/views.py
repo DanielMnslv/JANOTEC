@@ -28,7 +28,7 @@ from . import pasos, servicios
 from .pdf import ficha_pdf
 from .forms import CotizacionClienteForm, FichaForm, GestionComercialForm, InformeForm
 from .models import FichaComercial, InformeRequerimiento, LineaCotizacion
-from .permisos import comercial_requerido, obtener_ticket_comercial
+from .permisos import comercial_requerido, obtener_ticket_comercial, propuestas_requerido, requerimientos_requerido
 
 F = FichaComercial
 T = Ticket
@@ -83,7 +83,7 @@ def bandeja(request):
 
 # --- Radicar -------------------------------------------------------------------------
 @login_required
-@comercial_requerido
+@requerimientos_requerido
 def nuevo(request):
     """El asesor radica un requerimiento (empresa existente o prospecto nuevo).
 
@@ -175,7 +175,7 @@ def detalle(request, radicado):
         "ticket": ticket, "ficha": ficha, "pasos": F.PASOS_CLIENTE,
         "seguimientos": ticket.seguimientos.select_related("autor").prefetch_related("adjuntos"),
         "adjuntos_inicio": ticket.adjuntos.filter(seguimiento__tipo=Seguimiento.Tipo.CREACION),
-        "versiones": ficha.versiones.select_related("archivo", "enviada_por").order_by("-numero"),
+        "versiones": ficha.versiones.select_related("archivo", "enviada_por", "entregada_por").order_by("-numero"),
         "informe": InformeRequerimiento.objects.filter(ficha=ficha).select_related("elaborado_por").first(),
         "adjuntos_informe": ticket.adjuntos.filter(es_informe=True),
         "en_comercial": ticket.area == T.Area.COMERCIAL,
@@ -185,8 +185,8 @@ def detalle(request, radicado):
         from inventario.solicitudes import pendiente_de_revision
         contexto["material_pendiente"] = pendiente_de_revision(ficha)
     if contexto["en_comercial"] and ficha.abierta:
-        contexto["form_gestion"] = GestionComercialForm(ficha=ficha)
-        if ficha.etapa in (F.Etapa.GESTION, F.Etapa.ELABORANDO, F.Etapa.AJUSTES):
+        contexto["form_gestion"] = GestionComercialForm(ficha=ficha, usuario=request.user)
+        if request.user.gestiona_requerimientos and ficha.etapa in (F.Etapa.GESTION, F.Etapa.ELABORANDO, F.Etapa.AJUSTES):
             contexto["form_informe"] = InformeForm(informe=contexto["informe"])
     return render(request, "comercial/detalle.html", contexto)
 
@@ -225,7 +225,7 @@ def gestionar(request, radicado):
     ficha = ticket.ficha
     if not _en_comercial(request, ticket):
         return redirect(ficha)
-    form = GestionComercialForm(request.POST, request.FILES, ficha=ficha)
+    form = GestionComercialForm(request.POST, request.FILES, ficha=ficha, usuario=request.user)
     if not form.is_valid():
         _errores(request, form)
         return redirect(ficha)
@@ -290,7 +290,7 @@ def gestionar(request, radicado):
 
 
 @login_required
-@comercial_requerido
+@requerimientos_requerido
 @require_POST
 def informe(request, radicado):
     """El área comercial registra el informe del requerimiento cuando no hizo falta visita."""
@@ -311,7 +311,7 @@ def informe(request, radicado):
 
 
 @login_required
-@comercial_requerido
+@requerimientos_requerido
 @require_POST
 def solicitar_levantamiento(request, radicado):
     """Comercial pide la visita técnica de levantamiento (qué revisar y la jornada): el ticket pasa a técnica."""
@@ -331,7 +331,7 @@ def solicitar_levantamiento(request, radicado):
 
 
 @login_required
-@comercial_requerido
+@requerimientos_requerido
 @require_POST
 def traspasar(request, radicado):
     """Propuesta aprobada → área técnica para la instalación, cuando bodega ya revisó el material."""
@@ -347,6 +347,30 @@ def traspasar(request, radicado):
         else:
             servicios.traspasar_a_instalacion(ticket.ficha, request.user, request.POST.get("nota", "").strip())
             messages.success(request, f"{ticket.radicado} pasó al área técnica para la instalación. El cliente sigue con el mismo número.")
+    return redirect(ticket.ficha)
+
+
+@login_required
+@requerimientos_requerido
+@require_POST
+def entregada(request, radicado, numero):
+    """Comercial marca como entregada al cliente (con la fecha) la propuesta aprobada «por medio de comercial»."""
+    from datetime import date
+
+    from django.core.exceptions import ValidationError
+
+    from . import cotizador as coti
+    ticket = obtener_ticket_comercial(request.user, radicado)
+    version = get_object_or_404(ticket.ficha.versiones, numero=numero)
+    try:
+        fecha = date.fromisoformat(request.POST.get("fecha", ""))
+        coti.marcar_entregada(version, request.user, fecha)
+    except ValueError:
+        messages.error(request, "Escriba la fecha en que entregó la propuesta.")
+    except ValidationError as e:
+        messages.error(request, " ".join(e.messages))
+    else:
+        messages.success(request, f"Propuesta v{version.numero} marcada como entregada al cliente el {fecha:%d/%m/%Y}.")
     return redirect(ticket.ficha)
 
 
@@ -418,7 +442,7 @@ def responder(request, radicado):
 
 # --- Cotizador: la propuesta se arma con el catálogo y sale en PDF ---------------------------
 @login_required
-@comercial_requerido
+@propuestas_requerido
 def cotizador(request, radicado):
     """Cotizador: la propuesta se arma con el catálogo (descuento, IVA, margen) y sale en PDF con su código PE.
 
@@ -486,13 +510,15 @@ def cotizador(request, radicado):
                         messages.error(request, "La propuesta la aprueba dirección. Si es urgente, marque «Envío urgente» "
                                                 "y escriba el motivo (mínimo 10 caracteres).")
                         return redirect("comercial:cotizador", radicado)
+                por_comercial = request.POST.get("entrega") == "comercial"
                 try:
-                    version = coti.enviar(cotizacion, request.user, motivo_urgencia=motivo)
+                    version = coti.enviar(cotizacion, request.user, motivo_urgencia=motivo, por_comercial=por_comercial)
                 except ValidationError as e:
                     messages.error(request, " ".join(e.messages))
                     return redirect("comercial:cotizador", radicado)
-                messages.success(request, f"Propuesta {version.codigo} " + ("aprobada y " if es_direccion else "") +
-                                 "enviada al cliente con los botones para responder.")
+                messages.success(request, f"Propuesta {version.codigo} " + ("aprobada y " if es_direccion else "") + (
+                    "enviada al asesor comercial para que la entregue al cliente." if por_comercial
+                    else "enviada al cliente con los botones para responder."))
                 return redirect(ficha)
             else:
                 messages.success(request, "Cotización guardada.")
@@ -514,7 +540,7 @@ def cotizador(request, radicado):
 
 
 @login_required
-@comercial_requerido
+@propuestas_requerido
 def cotizacion_pdf(request, radicado):
     """Vista previa del PDF de la cotización en borrador (con la marca «BORRADOR»)."""
     from . import cotizador as coti
@@ -533,7 +559,7 @@ def cotizacion_pdf(request, radicado):
 
 
 @login_required
-@comercial_requerido
+@propuestas_requerido
 def catalogo(request):
     """Catálogo de precios: lo que se cotiza seguido, con su valor de referencia."""
     from .forms import ItemCatalogoForm

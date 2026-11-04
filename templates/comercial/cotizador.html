@@ -13,13 +13,13 @@
 {% if cotizacion.en_revision %}
   <div class="alert alert-info">
     <span class="badge text-bg-info">En revisión de dirección</span>
-    {% if es_direccion %}Revísela: puede corregirla, aprobarla (sale al cliente) o devolverla a comercial con lo que hay que corregir.
+    {% if es_direccion %}Revísela: puede corregirla, aprobarla (sale al cliente) o devolverla al área administrativa con lo que hay que corregir.
     {% else %}Dirección la está revisando; no se modifica hasta que la apruebe o la devuelva.{% endif %}
     {% if es_direccion %}
       <form method="post" class="mt-2">{% csrf_token %}
         <textarea name="observaciones" class="form-control form-control-sm mb-2" rows="2" maxlength="1000" required minlength="5"
                   placeholder="Qué hay que corregir"></textarea>
-        <button class="btn btn-outline-danger btn-sm" name="accion" value="devolver"><i class="bi bi-arrow-return-left"></i> Devolver a comercial</button>
+        <button class="btn btn-outline-danger btn-sm" name="accion" value="devolver"><i class="bi bi-arrow-return-left"></i> Devolver al área administrativa</button>
       </form>
     {% endif %}
   </div>
@@ -99,6 +99,15 @@
             <div class="small text-muted-jn">Mano de obra aparte: <span id="t-mano"></span></div>
             <div class="small text-muted-jn">Opción de compra al final: <span id="t-compra"></span></div>
           </div>
+          {% if es_direccion or not bloqueada %}
+          <fieldset class="border rounded p-2 mb-2 small" id="modo-entrega">
+            <legend class="float-none w-auto px-1 fs-6 mb-0 small fw-semibold">Cómo llega al cliente</legend>
+            <div class="form-check"><input class="form-check-input" type="radio" name="entrega" value="cliente" id="entrega-cliente" checked>
+              <label class="form-check-label" for="entrega-cliente">Directo al cliente <span class="text-muted-jn">(correo con los botones para responder)</span></label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="entrega" value="comercial" id="entrega-comercial">
+              <label class="form-check-label" for="entrega-comercial">Por medio de comercial <span class="text-muted-jn">(el PDF le llega al asesor, que la entrega y la marca como entregada)</span></label></div>
+          </fieldset>
+          {% endif %}
           <div class="d-grid gap-2">
             <button class="btn btn-outline-primary" name="accion" value="guardar"><i class="bi bi-save"></i> Guardar</button>
             <button class="btn btn-outline-secondary" name="accion" value="ver_pdf" formtarget="_blank" id="ver-pdf"><i class="bi bi-file-earmark-pdf"></i> Ver PDF (borrador)</button>

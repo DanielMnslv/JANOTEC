@@ -34,11 +34,11 @@ class SedeAdmin(admin.ModelAdmin):
 
 @admin.register(Usuario)
 class UsuarioAdmin(UserAdmin):
-    list_display = ("username", "get_full_name", "email", "rol", "tambien_comercial", "tambien_tecnico", "empresa", "is_active")
+    list_display = ("username", "get_full_name", "email", "rol", "tambien_comercial", "tambien_administrativo", "tambien_tecnico", "empresa", "is_active")
     list_filter = ("rol", "empresa", "is_active")
     search_fields = ("username", "first_name", "last_name", "email", "documento", "empresa__razon_social")
     fieldsets = UserAdmin.fieldsets + (
-        ("JANOTEC", {"fields": ("rol", "tambien_comercial", "tambien_tecnico", "empresa", "documento", "telefono", "cargo", "area", "sede")}),
+        ("JANOTEC", {"fields": ("rol", "tambien_comercial", "tambien_administrativo", "tambien_tecnico", "empresa", "documento", "telefono", "cargo", "area", "sede")}),
     )
     add_fieldsets = UserAdmin.add_fieldsets + (
         ("Datos JANOTEC", {"fields": ("first_name", "last_name", "email", "rol", "empresa", "documento", "telefono", "cargo")}),

@@ -107,11 +107,18 @@ class Usuario(AbstractUser):
         DIRECCION = "direccion", "Dirección (ve todas las áreas)"
         CENTRAL = "central", "Central de atención"
         BODEGA = "bodega", "Administración y bodega (inventario)"
+        ADMINISTRATIVO = "administrativo", "Área administrativa (propuestas)"
 
     rol = models.CharField(max_length=20, choices=Rol.choices, default=Rol.CLIENTE)
     tambien_comercial = models.BooleanField(
         "también área comercial", default=False,
-        help_text="Además de su rol (p. ej. bodega y logística), atiende los requerimientos comerciales.",
+        help_text="Además de su rol (p. ej. bodega y logística), atiende los requerimientos comerciales: radica, "
+                  "pide el levantamiento, hace seguimiento al cliente y registra su respuesta.",
+    )
+    tambien_administrativo = models.BooleanField(
+        "también área administrativa", default=False,
+        help_text="Además de su rol (p. ej. bodega y logística), arma las propuestas: cotizador, catálogo de precios, "
+                  "cotización con proveedores y envío a dirección para su aprobación.",
     )
     tambien_tecnico = models.BooleanField(
         "también técnico", default=False,
@@ -174,14 +181,34 @@ class Usuario(AbstractUser):
         """Dirige el área técnica: asigna técnicos, fija prioridad, programa visitas."""
         return self.is_superuser or self.rol in (self.Rol.SUPERVISOR, self.Rol.DIRECCION)
 
+    # --- Comercial y administrativa: dos áreas sobre el mismo requerimiento ---------------------------
+    # Comercial trae los requerimientos y les hace seguimiento (radica, pide el levantamiento, registra la respuesta
+    # del cliente y lo pasa a instalación). Administrativa arma la propuesta (cotizador, catálogo, proveedores) y la
+    # envía a dirección. Dirección hace las dos cosas (y cubre comercial mientras esa área no tenga usuario).
     @property
     def es_comercial(self):
+        """Área comercial: por rol o con la opción «también área comercial»."""
         return (self.rol == self.Rol.COMERCIAL or self.tambien_comercial) and not self.is_superuser
 
     @property
+    def es_administrativo(self):
+        """Área administrativa (propuestas): por rol o con la opción «también área administrativa»."""
+        return (self.rol == self.Rol.ADMINISTRATIVO or self.tambien_administrativo) and not self.is_superuser
+
+    @property
     def ve_comercial(self):
-        """Quién trabaja lo comercial: el área comercial y dirección (no el coordinador técnico)."""
+        """Entra a los requerimientos comerciales: comercial, administrativa y dirección (no el coordinador técnico)."""
+        return self.es_comercial or self.es_administrativo or self.es_direccion
+
+    @property
+    def gestiona_requerimientos(self):
+        """Radica, pide el levantamiento, registra la respuesta del cliente y traspasa: comercial y dirección."""
         return self.es_comercial or self.es_direccion
+
+    @property
+    def arma_propuestas(self):
+        """Cotizador, catálogo de precios y cotización con proveedores: administrativa y dirección."""
+        return self.es_administrativo or self.es_direccion
 
     @property
     def es_bodega(self):
@@ -209,13 +236,15 @@ class Usuario(AbstractUser):
     @property
     def radica_para_clientes(self):
         """Radica solicitudes a nombre de cualquier cliente: personal JANOTEC, central de atención y comercial."""
-        return self.es_personal or self.es_central or self.es_comercial
+        return self.es_personal or self.es_central or self.es_comercial or self.es_administrativo
 
     @property
     def rol_corto(self):
         """Para la barra: «Dirección», «Área técnica», «Encargado»… (sin la aclaración entre paréntesis)."""
         if self.is_superuser and self.rol != self.Rol.SUPERVISOR:
             return "Admin"
+        if self.rol == self.Rol.BODEGA and self.tambien_administrativo:
+            return "Bodega y administrativa"
         if self.rol == self.Rol.BODEGA and self.tambien_comercial:
             return "Bodega y comercial"
         return self.get_rol_display().split(" (")[0] + (" y técnico" if self.tambien_tecnico else "")

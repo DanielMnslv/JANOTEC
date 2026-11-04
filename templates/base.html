@@ -51,8 +51,8 @@
               {% endfor %}
             </ul>
           </li>
-          {% if user.es_comercial %}{# bodega que también atiende lo comercial #}
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'comercial' %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Comercial</a></li>
+          {% if user.ve_comercial %}{# bodega que también atiende lo comercial o arma las propuestas (administrativa) #}
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'comercial' %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> {% if user.es_comercial %}Comercial{% else %}Propuestas{% endif %}</a></li>
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'oportunidades' %}active{% endif %}" href="{% url 'oportunidades' %}"><i class="bi bi-graph-up-arrow"></i> Oportunidades</a></li>
           {% endif %}
         {% elif user.es_comercial %}
@@ -61,6 +61,11 @@
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'nuevo' %}active{% endif %}" href="{% url 'comercial:nuevo' %}"><i class="bi bi-plus-circle"></i> Nuevo requerimiento</a></li>
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'oportunidades' %}active{% endif %}" href="{% url 'oportunidades' %}"><i class="bi bi-graph-up-arrow"></i> Oportunidades</a></li>
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'nuevo_ticket' or request.resolver_match.url_name == 'mis_tickets' %}active{% endif %}" href="{% url 'mis_tickets' %}"><i class="bi bi-tools"></i> Solicitudes técnicas</a></li>
+        {% elif user.es_administrativo %}{# área administrativa: arma las propuestas #}
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'bandeja' %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Propuestas</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'catalogo' %}active{% endif %}" href="{% url 'comercial:catalogo' %}"><i class="bi bi-tags"></i> Catálogo de precios</a></li>
+          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'inventario' %}active{% endif %}" href="{% url 'inventario:cotizaciones' %}"><i class="bi bi-envelope-paper"></i> Cotizar con proveedores</a></li>
         {% elif user.es_central %}
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'nuevo_ticket' %}active{% endif %}" href="{% url 'nuevo_ticket' %}"><i class="bi bi-plus-circle"></i> Registrar solicitud</a></li>

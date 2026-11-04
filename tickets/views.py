@@ -130,7 +130,7 @@ def inicio(request):
         return redirect("panel")
     if request.user.es_bodega:  # también la de bodega que atiende lo comercial (tiene el enlace en la barra)
         return redirect("inventario:panel")
-    if request.user.es_comercial:
+    if request.user.es_comercial or request.user.es_administrativo:
         return redirect("comercial:bandeja")
     return redirect("mis_tickets")  # cliente y central de atención
 
@@ -320,7 +320,7 @@ def ticket_detalle(request, radicado):
     cierre.revisar_si_toca()
     ticket = obtener_ticket(request.user, radicado)
     gestiona = gestiona_ticket(request.user, ticket)
-    if request.user.es_comercial and hasattr(ticket, "ficha") and not gestiona:
+    if (request.user.es_comercial or request.user.es_administrativo) and hasattr(ticket, "ficha") and not gestiona:
         return redirect("comercial:detalle", radicado)  # el área comercial trabaja desde su propia vista
     seguimientos = ticket.seguimientos.select_related("autor").prefetch_related("adjuntos")
     adjuntos_inicio = ticket.adjuntos.filter(seguimiento__tipo=Seguimiento.Tipo.CREACION)

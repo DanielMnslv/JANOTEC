@@ -30,7 +30,8 @@
           {% elif p.clave == 'informe' %}
             <a class="btn btn-accent btn-sm" href="#informe"><i class="bi bi-file-earmark-text"></i> Ir al informe del requerimiento</a>
           {% elif p.clave == 'propuesta' %}
-            <a class="btn btn-accent btn-sm" href="{% url 'comercial:cotizador' ticket.radicado %}"><i class="bi bi-calculator"></i> Abrir el cotizador</a>
+            {% if user.arma_propuestas %}<a class="btn btn-accent btn-sm" href="{% url 'comercial:cotizador' ticket.radicado %}"><i class="bi bi-calculator"></i> Abrir el cotizador</a>
+            {% else %}<span class="small"><i class="bi bi-person-gear"></i> La arma el área administrativa; usted ve aquí las versiones enviadas y su valor.</span>{% endif %}
           {% elif p.clave == 'respuesta' %}
             <a class="btn btn-outline-primary btn-sm" href="#gestion-comercial"><i class="bi bi-reply"></i> Registrar la respuesta del cliente</a>
           {% elif p.clave == 'traspaso' %}

@@ -45,7 +45,8 @@ def correos_comercial_y_bodega():
     from accounts.models import Usuario
 
     correos = {e.lower() for e in Usuario.objects.exclude(email="").filter(
-        Q(rol__in=[Usuario.Rol.BODEGA, Usuario.Rol.COMERCIAL]) | Q(tambien_comercial=True)).values_list("email", flat=True)}
+        Q(rol__in=[Usuario.Rol.BODEGA, Usuario.Rol.COMERCIAL, Usuario.Rol.ADMINISTRATIVO]) | Q(tambien_comercial=True)
+        | Q(tambien_administrativo=True)).values_list("email", flat=True)}
     for buzon in (settings.NOTIFICAR_COMERCIAL_EMAIL, settings.NOTIFICAR_ADMINISTRATIVA_EMAIL):
         correos |= {c.strip().lower() for c in buzon.replace(",", ";").split(";") if c.strip()}
     return correos

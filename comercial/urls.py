@@ -18,6 +18,7 @@ urlpatterns = [
     path("<str:radicado>/cotizador/vista-previa.pdf", views.cotizacion_pdf, name="cotizacion_pdf"),
     path("<str:radicado>/levantamiento/", views.solicitar_levantamiento, name="levantamiento"),
     path("<str:radicado>/traspasar/", views.traspasar, name="traspasar"),
+    path("<str:radicado>/version/<int:numero>/entregada/", views.entregada, name="entregada"),
     path("<str:radicado>/devolver/", views.devolver, name="devolver"),
     path("<str:radicado>/responder/", views.responder, name="responder"),
 ]

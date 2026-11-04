@@ -206,6 +206,14 @@ class PropuestaVersion(models.Model):
     enviada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="+")
     enviada = models.DateTimeField()
     respondida = models.DateTimeField(null=True, blank=True)
+    # Entrega por medio de comercial: con algunos clientes el asesor la lleva en persona en vez de que salga por correo
+    por_comercial = models.BooleanField(
+        "se entrega por medio de comercial", default=False,
+        help_text="Dirección la aprobó para que el asesor comercial se la entregue al cliente (no sale por correo).",
+    )
+    entregada_cliente = models.DateField("entregada al cliente", null=True, blank=True)
+    entregada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name="+", verbose_name="entregada por")
 
     class Meta:
         ordering = ["numero"]
@@ -220,6 +228,11 @@ class PropuestaVersion(models.Model):
     def color(self):
         """Color del distintivo del estado (clases de Bootstrap)."""
         return {"enviada": "warning", "cambios": "primary", "aprobada": "success", "rechazada": "danger"}[self.estado]
+
+    @property
+    def por_entregar(self):
+        """Aprobada para entrega por comercial y el asesor aún no la ha entregado al cliente."""
+        return self.por_comercial and not self.entregada_cliente and self.estado == self.Estado.ENVIADA
 
 
 def ruta_archivo(instancia, nombre):

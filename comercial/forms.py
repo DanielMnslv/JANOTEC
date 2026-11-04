@@ -293,10 +293,22 @@ class GestionComercialForm(BootstrapMixin, forms.Form):
     visibilidad = forms.ChoiceField(choices=[("publico", "Al cliente (lo ve)"), ("interno", "Nota interna")],
                                     initial="interno", widget=forms.RadioSelect)
 
-    def __init__(self, *args, ficha=None, **kwargs):
+    # Qué etapas mueve cada área: administrativa arma y envía la propuesta; comercial registra lo que responde el
+    # cliente y cancela. Dirección hace todo.
+    ETAPAS_ADMINISTRATIVA = {F.Etapa.GESTION, F.Etapa.ELABORANDO, F.Etapa.ENVIADA}
+    ETAPAS_COMERCIAL = {F.Etapa.GESTION, F.Etapa.ELABORANDO, F.Etapa.AJUSTES, F.Etapa.APROBADA, F.Etapa.RECHAZADA,
+                        F.Etapa.CANCELADA}
+
+    def __init__(self, *args, ficha=None, usuario=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.ficha = ficha
         etapas = list(self.ETAPAS_COMERCIALES)
+        if usuario is not None and not usuario.es_direccion:
+            propias = (self.ETAPAS_COMERCIAL if usuario.es_comercial else set()) | (
+                self.ETAPAS_ADMINISTRATIVA if usuario.es_administrativo else set())
+            etapas = [e for e in etapas if e in propias]
+        if usuario is not None and not usuario.arma_propuestas:  # comercial ve el valor, pero no sube ni cambia la propuesta
+            del self.fields["propuesta"], self.fields["valor_propuesta"]
         if ficha is not None and ficha.etapa not in etapas:
             etapas.insert(0, ficha.etapa)  # etapa actual (p. ej. levantamiento) aunque no se elija desde aquí
         if ficha is not None:  # paso a paso: solo la etapa actual y las que siguen

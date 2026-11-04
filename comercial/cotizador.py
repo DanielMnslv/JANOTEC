@@ -155,10 +155,12 @@ def devolver(cotizacion, autor, observaciones):
         transaction.on_commit(lambda: servicios.propuesta_devuelta(cotizacion, autor, observaciones))
 
 
-def enviar(cotizacion, autor, motivo_urgencia=""):
+def enviar(cotizacion, autor, motivo_urgencia="", por_comercial=False):
     """Genera el PDF, crea la versión de la propuesta y se la envía al cliente (con los botones para responder).
 
-    La envía dirección (queda como quien la aprobó) o comercial con un motivo de urgencia, del que dirección recibe aviso.
+    La envía dirección (queda como quien la aprobó) o administrativa con un motivo de urgencia, del que dirección
+    recibe aviso. Con ``por_comercial`` no sale por correo al cliente: el PDF le llega al asesor comercial, que se la
+    entrega en persona y luego la marca como entregada (hasta entonces el cliente no la ve en su consulta).
     """
     from .pdf import propuesta_pdf
 
@@ -185,12 +187,13 @@ def enviar(cotizacion, autor, motivo_urgencia=""):
         seg = servicios._seguimiento(t, autor, f"Propuesta económica {cod} por ${ficha.valor_propuesta:,.0f} antes de IVA "
                                                f"(${totales['total']:,.0f} con IVA)".replace(",", ".")
                                        + ("" if cotizacion.modalidad == cotizacion.Modalidad.VENTA
-                                          else f" · {cotizacion.get_modalidad_display()}") + ". Puede descargarla aquí.")
+                                          else f" · {cotizacion.get_modalidad_display()}") + ". Puede descargarla aquí.",
+                                       interno=por_comercial)
         servicios.guardar_adjuntos(t, [ContentFile(contenido, name=nombre)], autor, seg, es_propuesta=True)
         pdf = t.adjuntos.filter(es_propuesta=True).order_by("-pk").first()
         version = servicios.enviar_version(ficha, autor, pdf)
-        version.codigo = cod
-        version.save(update_fields=["codigo"])
+        version.codigo, version.por_comercial = cod, por_comercial
+        version.save(update_fields=["codigo", "por_comercial"])
         cotizacion.version, cotizacion.en_revision = version, False
         if es_direccion:
             cotizacion.aprobada_por = autor
@@ -199,7 +202,31 @@ def enviar(cotizacion, autor, motivo_urgencia=""):
             servicios._seguimiento(t, autor, f"Envío urgente de la propuesta sin aprobación de dirección. Motivo: "
                                              f"{motivo_urgencia}", interno=True)
         cotizacion.save(update_fields=["version", "en_revision", "aprobada_por", "motivo_urgencia", "actualizado"])
-    servicios.propuesta_enviada(ficha, pdf)
+    if por_comercial:
+        servicios.propuesta_para_entregar(ficha, pdf, version, autor)
+    else:
+        servicios.propuesta_enviada(ficha, pdf)
     if not es_direccion:
         servicios.propuesta_urgente(ficha, autor, motivo_urgencia, cod)
     return version
+
+
+def marcar_entregada(version, autor, fecha):
+    """Comercial entregó al cliente la propuesta que dirección aprobó «por medio de comercial».
+
+    Queda la fecha y quién la entregó, y la propuesta pasa a verse en la consulta del cliente.
+    """
+    if not version.por_entregar:
+        raise ValidationError("Esta versión no está pendiente de entrega por comercial.")
+    if fecha > timezone.localdate():
+        raise ValidationError("La fecha de entrega no puede ser futura.")
+    t = version.ficha.ticket
+    with transaction.atomic():
+        version.entregada_cliente, version.entregada_por = fecha, autor
+        version.save(update_fields=["entregada_cliente", "entregada_por"])
+        if version.archivo and version.archivo.seguimiento_id:  # el PDF ya lo puede descargar el cliente
+            version.archivo.seguimiento.interno = False
+            version.archivo.seguimiento.save(update_fields=["interno"])
+        servicios._seguimiento(t, autor, f"Propuesta {version.codigo or f'v{version.numero}'} entregada al cliente "
+                                         f"por el área comercial el {fecha:%d/%m/%Y}.", interno=True)
+

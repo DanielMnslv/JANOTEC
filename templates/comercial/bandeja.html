@@ -7,8 +7,8 @@
     <p class="text-muted-jn mb-0">Requerimientos y propuestas. Cada solicitud conserva su número cuando pasa al área técnica.</p>
   </div>
   <div class="d-flex flex-wrap gap-2">
-    <a href="{% url 'comercial:catalogo' %}" class="btn btn-outline-secondary"><i class="bi bi-tags"></i> Catálogo de precios</a>
-    <a href="{% url 'comercial:nuevo' %}" class="btn btn-accent"><i class="bi bi-plus-lg"></i> Nuevo requerimiento</a>
+    {% if user.arma_propuestas %}<a href="{% url 'comercial:catalogo' %}" class="btn btn-outline-secondary"><i class="bi bi-tags"></i> Catálogo de precios</a>{% endif %}
+    {% if user.gestiona_requerimientos %}<a href="{% url 'comercial:nuevo' %}" class="btn btn-accent"><i class="bi bi-plus-lg"></i> Nuevo requerimiento</a>{% endif %}
   </div>
 </div>
 {% include "tickets/_casos_area.html" with area_1="Comercial" %}

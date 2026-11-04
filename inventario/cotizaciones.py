@@ -35,6 +35,21 @@ from .pdf import solicitud_cotizacion_pdf, solicitud_pdf
 from .productos import _registro
 from .views import gestion_requerida
 
+
+def cotiza_requerido(vista):
+    """Las solicitudes de cotización las manejan bodega, dirección y el área administrativa (que arma las propuestas).
+    La orden de compra que sale de una cotización sigue siendo de bodega (gestion_requerida)."""
+    from functools import wraps
+
+    from django.core.exceptions import PermissionDenied
+
+    @wraps(vista)
+    def envoltura(request, *args, **kwargs):
+        if not (request.user.gestiona_inventario or request.user.arma_propuestas):
+            raise PermissionDenied
+        return vista(request, *args, **kwargs)
+    return envoltura
+
 E = SolicitudCotizacion.Estado
 
 
@@ -279,7 +294,7 @@ def reabrir(orden):
 
 
 @login_required
-@gestion_requerida
+@cotiza_requerido
 def listado(request):
     estado = request.GET.get("estado", "abiertas")
     qs = (SolicitudCotizacion.objects.select_related("solicitud", "solicitud__ticket", "propuesta__ticket")
@@ -296,7 +311,7 @@ def listado(request):
 
 
 @login_required
-@gestion_requerida
+@cotiza_requerido
 @require_POST
 def nueva(request):
     """Solicitud en preparación. Desde un ticket en comercial llega con los materiales y equipos de su informe; desde
@@ -329,7 +344,7 @@ def nueva(request):
 
 
 @login_required
-@gestion_requerida
+@cotiza_requerido
 def detalle(request, pk):
     pedido = get_object_or_404(SolicitudCotizacion.objects.select_related("solicitud", "solicitud__ticket",
                                                                           "propuesta__ticket__empresa"), pk=pk)
@@ -393,7 +408,7 @@ def detalle(request, pk):
 
 
 @login_required
-@gestion_requerida
+@cotiza_requerido
 def respuesta(request, pk, cot_pk):
     """El proveedor respondió: sus precios por línea, la fecha de entrega y el PDF que mandó."""
     pedido = get_object_or_404(SolicitudCotizacion, pk=pk)
@@ -441,7 +456,7 @@ def respuesta(request, pk, cot_pk):
 
 
 @login_required
-@gestion_requerida
+@cotiza_requerido
 def pdf(request, pk, cot_pk):
     cotizacion = get_object_or_404(CotizacionProveedor.objects.select_related("proveedor", "solicitud"), pk=cot_pk, solicitud_id=pk)
     nombre, contenido = solicitud_cotizacion_pdf(cotizacion)
@@ -451,7 +466,7 @@ def pdf(request, pk, cot_pk):
 
 
 @login_required
-@gestion_requerida
+@cotiza_requerido
 def archivo(request, pk, cot_pk):
     cotizacion = get_object_or_404(CotizacionProveedor, pk=cot_pk, solicitud_id=pk)
     if not cotizacion.archivo:

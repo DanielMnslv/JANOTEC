@@ -37,7 +37,10 @@ class BaseComercial(TestCase):
         self.sede = Sede.objects.create(empresa=self.emp, nombre="Bodega")
         self.cli = Usuario.objects.create_user("cli", "cli@a.co", "Clave-segura-1", rol="cliente", empresa=self.emp)
         self.cli_b = Usuario.objects.create_user("cli_b", "b@b.co", "Clave-segura-1", rol="cliente", empresa=self.otra)
-        self.asesor = Usuario.objects.create_user("asesor", "asesor@janotec.test", "Clave-segura-1", rol="comercial")
+        # El asesor de estas pruebas atiende las dos áreas (como un equipo pequeño): radica y arma la propuesta.
+        # La separación entre comercial y administrativa se prueba en CotizadorTests.test_*_area_*
+        self.asesor = Usuario.objects.create_user("asesor", "asesor@janotec.test", "Clave-segura-1", rol="comercial",
+                                                  tambien_administrativo=True)
         self.tecnico = Usuario.objects.create_user("tec", "tec@janotec.test", "Clave-segura-1", rol="agente")
         self.coord = Usuario.objects.create_user("coord", "coord@janotec.test", "Clave-segura-1", rol="supervisor")
         self.director = Usuario.objects.create_user("director", "dir@janotec.test", "Clave-segura-1", rol="direccion")
@@ -776,6 +779,94 @@ class CotizadorTests(BaseComercial):
         self.assertEqual((t.ficha.etapa, cot.aprobada_por, cot.motivo_urgencia), ("enviada", None, "Licitación cierra hoy a las 5"))
         self.assertTrue(any("dir@janotec.test" in m.to and "urgencia" in m.subject for m in mail.outbox))
         self.assertTrue(t.seguimientos.filter(interno=True, mensaje__contains="Licitación cierra hoy").exists())
+
+    # --- Comercial (requerimientos y seguimiento) vs administrativa (propuestas) --------------------------
+    def areas(self):
+        """Una persona solo comercial y una solo administrativa."""
+        solo_comercial = Usuario.objects.create_user("vendedor", "vendedor@janotec.test", "Clave-segura-1", rol="comercial")
+        administrativa = Usuario.objects.create_user("yuri", "yuri@janotec.test", "Clave-segura-1", rol="bodega",
+                                                     tambien_administrativo=True)
+        return solo_comercial, administrativa
+
+    def test_cada_area_hace_lo_suyo(self):
+        solo_comercial, administrativa = self.areas()
+        t, url = self.cotizacion_lista()
+        ficha = reverse("comercial:detalle", args=[t.radicado])
+        # Comercial: entra al requerimiento y ve el valor, pero no al cotizador ni al catálogo
+        self.client.force_login(solo_comercial)
+        self.assertEqual(self.client.get(url).status_code, 403)
+        self.assertEqual(self.client.get(reverse("comercial:catalogo")).status_code, 403)
+        self.assertEqual(self.client.get(reverse("comercial:cotizacion_pdf", args=[t.radicado])).status_code, 403)
+        html = self.client.get(ficha).content.decode()
+        self.assertNotIn(url, html)
+        self.assertIn("La arma el área administrativa", html)
+        self.assertNotIn('name="propuesta"', html)  # no sube el PDF a mano
+        self.assertEqual(self.client.get(reverse("comercial:nuevo")).status_code, 200)
+        # Administrativa (bodega con «también administrativa»): arma la propuesta y cotiza con proveedores
+        self.client.force_login(administrativa)
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(self.client.get(reverse("comercial:catalogo")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("inventario:cotizaciones")).status_code, 200)
+        self.assertContains(self.client.get(reverse("comercial:bandeja")), t.radicado)
+        # …pero no radica, no pide el levantamiento ni registra la respuesta del cliente
+        self.assertEqual(self.client.get(reverse("comercial:nuevo")).status_code, 403)
+        self.assertEqual(self.client.post(reverse("comercial:levantamiento", args=[t.radicado]),
+                                          {"nota": "Revisar el poste", "jornada": "manana"}).status_code, 403)
+        html = self.client.get(ficha).content.decode()
+        self.assertNotIn('value="aprobada"', html)
+        self.assertIn('value="enviada"', html)
+        self.assertEqual(administrativa.rol_corto, "Bodega y administrativa")
+
+    def test_avisos_a_cada_area(self):
+        from .servicios import _correos_administrativos, _correos_comerciales, _correos_propuesta
+        solo_comercial, administrativa = self.areas()
+        t = self.crear()
+        t.ficha.comercial = solo_comercial
+        t.ficha.save()
+        self.assertEqual(_correos_comerciales(t.ficha), ["vendedor@janotec.test"])
+        self.assertEqual(set(_correos_administrativos()), {"yuri@janotec.test", "asesor@janotec.test"})
+        self.assertIn("vendedor@janotec.test", _correos_propuesta(t.ficha))
+        # Sin nadie en el área comercial, le llega a dirección (que cubre su trabajo mientras tanto)
+        Usuario.objects.filter(rol="comercial").update(is_active=False)
+        t.ficha.comercial = None
+        t.ficha.save()
+        self.assertEqual(_correos_comerciales(t.ficha), ["dir@janotec.test"])
+
+    def test_propuesta_entregada_por_medio_de_comercial(self):
+        solo_comercial, _ = self.areas()
+        t, url = self.cotizacion_lista()
+        t.ficha.comercial = solo_comercial
+        t.ficha.save()
+        self.client.force_login(self.director)
+        self.assertContains(self.client.get(url), "Por medio de comercial")
+        mail.outbox.clear()
+        self.client.post(url, {**self.lineas([]), "margen": "30", "accion": "enviar", "entrega": "comercial"})
+        v = t.ficha.versiones.get()
+        self.assertTrue(v.por_entregar)
+        # Al cliente no le llega; al asesor sí, con el PDF
+        self.assertFalse(any("leidy@a.co" in m.to for m in mail.outbox))
+        aviso = next(m for m in mail.outbox if "vendedor@janotec.test" in m.to)
+        self.assertIn("para entregar", aviso.subject)
+        self.assertEqual(aviso.attachments[0][2], "application/pdf")
+        # El cliente aún no la ve en su consulta
+        self.client.force_login(self.cli)
+        self.assertNotContains(self.client.get(t.get_absolute_url()), "Su propuesta económica está lista")
+        # Comercial la entrega y la marca con la fecha (no futura)
+        self.client.force_login(solo_comercial)
+        entregada = reverse("comercial:entregada", args=[t.radicado, v.numero])
+        self.assertContains(self.client.get(reverse("comercial:detalle", args=[t.radicado])), "Por entregar al cliente")
+        mañana = timezone.localdate() + timezone.timedelta(days=1)
+        self.client.post(entregada, {"fecha": mañana.isoformat()})
+        v.refresh_from_db()
+        self.assertIsNone(v.entregada_cliente)
+        self.client.post(entregada, {"fecha": timezone.localdate().isoformat()})
+        v.refresh_from_db()
+        self.assertEqual((v.entregada_cliente, v.entregada_por, v.por_entregar), (timezone.localdate(), solo_comercial, False))
+        self.assertTrue(t.seguimientos.filter(interno=True, mensaje__contains="entregada al cliente por el área comercial").exists())
+        self.client.force_login(self.cli)
+        r = self.client.get(t.get_absolute_url())
+        self.assertContains(r, "Su propuesta económica está lista")
+        self.assertEqual(self.client.get(reverse("descargar_adjunto", args=[v.archivo_id])).status_code, 200)
 
 
 class PasoAPasoComercialTests(BaseComercial):
