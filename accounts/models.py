@@ -108,6 +108,7 @@ class Usuario(AbstractUser):
         CENTRAL = "central", "Central de atención"
         BODEGA = "bodega", "Administración y bodega (inventario)"
         ADMINISTRATIVO = "administrativo", "Área administrativa (propuestas)"
+        FINANCIERA = "financiera", "Área financiera (pagos y facturas)"
 
     rol = models.CharField(max_length=20, choices=Rol.choices, default=Rol.CLIENTE)
     tambien_comercial = models.BooleanField(
@@ -119,6 +120,10 @@ class Usuario(AbstractUser):
         "también área administrativa", default=False,
         help_text="Además de su rol (p. ej. bodega y logística), arma las propuestas: cotizador, catálogo de precios, "
                   "cotización con proveedores y envío a dirección para su aprobación.",
+    )
+    tambien_financiera = models.BooleanField(
+        "también área financiera", default=False,
+        help_text="Además de su rol, paga las órdenes de compra (sube el soporte de pago) y valida las facturas de los proveedores.",
     )
     tambien_tecnico = models.BooleanField(
         "también técnico", default=False,
@@ -209,6 +214,16 @@ class Usuario(AbstractUser):
     def arma_propuestas(self):
         """Cotizador, catálogo de precios y cotización con proveedores: administrativa y dirección."""
         return self.es_administrativo or self.es_direccion
+
+    @property
+    def es_financiera(self):
+        """Área financiera: por rol o con la opción «también área financiera»."""
+        return (self.rol == self.Rol.FINANCIERA or self.tambien_financiera) and not self.is_superuser
+
+    @property
+    def ve_financiera(self):
+        """Paga las órdenes de compra y valida facturas: financiera y dirección (que la cubre mientras no tenga usuario)."""
+        return self.es_financiera or self.es_direccion
 
     @property
     def es_bodega(self):

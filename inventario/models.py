@@ -603,13 +603,29 @@ class PrecioCotizado(models.Model):
 
 
 class OrdenCompra(models.Model):
-    """Lo que ya se decidió comprar: proveedor, costo, fecha estimada de llegada y soporte."""
+    """Lo que ya se decidió comprar: proveedor, costo, fecha estimada de llegada y soporte.
+
+    El camino de una orden:
+    1. Bodega la arma (en preparación) y la envía a dirección; dirección la aprueba o la devuelve con observaciones.
+       Si es urgente y dirección no puede, bodega la pasa con un motivo y dirección recibe el aviso.
+    2. Pago anticipado: financiera la paga y sube el soporte (por pagar → lista). A crédito: queda lista de una vez y
+       financiera la paga después, contra la factura, al vencer el plazo.
+    3. Bodega se la envía al proveedor (con el soporte de pago si lo hay) y recibe lo que llega.
+    4. La factura llega a financiera, que la registra y la compara con la orden. Cerrada = recibida, pagada y facturada.
+    """
 
     class Estado(models.TextChoices):
         BORRADOR = "borrador", "En preparación"
+        REVISION = "revision", "En revisión de dirección"
+        POR_PAGAR = "por_pagar", "Por pagar (financiera)"
+        LISTA = "lista", "Lista para enviar al proveedor"
         ENVIADA = "enviada", "Enviada al proveedor"
         RECIBIDA = "recibida", "Recibida en bodega"
         CANCELADA = "cancelada", "Cancelada"
+
+    class FormaPago(models.TextChoices):
+        ANTICIPADO = "anticipado", "Pago anticipado (antes del despacho)"
+        CREDITO = "credito", "Crédito (se paga contra factura)"
 
     proveedor = models.ForeignKey(Proveedor, on_delete=models.SET_NULL, null=True, blank=True, related_name="ordenes")
     solicitud = models.ForeignKey(SolicitudMaterial, on_delete=models.SET_NULL, null=True, blank=True,
@@ -625,6 +641,29 @@ class OrdenCompra(models.Model):
     fecha_factura = models.DateField("fecha de la factura", null=True, blank=True)
     recibida_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     recibida_en = models.DateTimeField(null=True, blank=True)
+    forma_pago = models.CharField("forma de pago", max_length=12, choices=FormaPago.choices, default=FormaPago.ANTICIPADO)
+    dias_credito = models.PositiveSmallIntegerField("días de crédito", null=True, blank=True,
+                                                    help_text="Solo a crédito: cuántos días después de la factura se paga.")
+    # Aprobación de dirección (o paso urgente con motivo)
+    aprobada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="+", verbose_name="aprobada por")
+    aprobada_en = models.DateTimeField(null=True, blank=True)
+    observaciones_direccion = models.TextField("observaciones de dirección", blank=True)
+    motivo_urgencia = models.CharField("motivo del paso urgente", max_length=500, blank=True)
+    # Pago (financiera)
+    pagada_en = models.DateField("fecha del pago", null=True, blank=True)
+    valor_pagado = models.DecimalField("valor pagado", max_digits=14, decimal_places=2, null=True, blank=True)
+    medio_pago = models.CharField("medio de pago", max_length=80, blank=True, help_text="Transferencia, consignación…")
+    soporte_pago = models.FileField("soporte de pago", upload_to="compras/pagos/%Y/%m/", blank=True)
+    pago_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    enviada_proveedor_en = models.DateTimeField("enviada al proveedor", null=True, blank=True)
+    # Factura del proveedor: llega a financiera, que la compara con la orden
+    factura_valor = models.DecimalField("valor total de la factura (con IVA)", max_digits=14, decimal_places=2, null=True, blank=True)
+    factura_pdf = models.FileField("factura (PDF)", upload_to="compras/facturas/%Y/%m/", blank=True)
+    factura_nota = models.CharField("nota de la factura", max_length=300, blank=True)
+    factura_validada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                             related_name="+")
+    factura_validada_en = models.DateTimeField(null=True, blank=True)
     creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="+")
     creado = models.DateTimeField(auto_now_add=True)
     actualizado = models.DateTimeField(auto_now=True)
@@ -646,12 +685,53 @@ class OrdenCompra(models.Model):
 
     @property
     def color_estado(self):
-        return {"borrador": "secondary", "enviada": "warning", "recibida": "success", "cancelada": "dark"}[self.estado]
+        return {"borrador": "secondary", "revision": "info", "por_pagar": "danger", "lista": "primary", "enviada": "warning",
+                "recibida": "success", "cancelada": "dark"}[self.estado]
+
+    # --- Pago y factura ---------------------------------------------------------------------
+    @property
+    def a_credito(self):
+        return self.forma_pago == self.FormaPago.CREDITO
+
+    @property
+    def pagada(self):
+        return bool(self.pagada_en)
+
+    @property
+    def vence(self):
+        """A crédito: fecha en que hay que pagarla (factura + días de crédito)."""
+        from datetime import timedelta
+        if self.a_credito and self.fecha_factura:
+            return self.fecha_factura + timedelta(days=self.dias_credito or 0)
+        return None
+
+    @property
+    def factura_registrada(self):
+        return self.factura_valor is not None
+
+    @property
+    def diferencia_factura(self):
+        """Factura menos orden (con IVA). Positiva: facturaron de más."""
+        if self.factura_valor is None:
+            return None
+        return self.factura_valor - self.totales()["total"]
+
+    @property
+    def factura_cuadra(self):
+        """La factura coincide con la orden (con un margen de $1.000 por redondeos)."""
+        d = self.diferencia_factura
+        return d is not None and abs(d) <= 1000
+
+    @property
+    def cerrada(self):
+        """Compra terminada: recibida en bodega, pagada y con la factura validada por financiera."""
+        return self.estado == self.Estado.RECIBIDA and self.pagada and bool(self.factura_validada_en)
 
     @property
     def atrasada(self):
         from django.utils import timezone
-        return self.estado == self.Estado.ENVIADA and self.fecha_estimada and self.fecha_estimada < timezone.localdate()
+        return (self.estado in (self.Estado.LISTA, self.Estado.ENVIADA) and self.fecha_estimada
+                and self.fecha_estimada < timezone.localdate())
 
     def totales(self):
         from decimal import Decimal

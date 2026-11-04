@@ -14,6 +14,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.models import Usuario
 
+from . import financiera
 from . import servicios
 from .forms import (
     CambioEstadoForm, CompraActivoForm, CompraInsumoForm, DevolucionForm, EntregaForm, MaterialMixin, tecnicos,
@@ -77,13 +78,13 @@ def _filas_insumos(insumos, saldos, costos):
 @login_required
 @gestion_requerida
 def ordenes(request):
-    """Órdenes de compra de bodega: las abiertas primero, con su fecha estimada de llegada."""
+    """Órdenes de compra de bodega: las abiertas (de la preparación a la recepción), con su fecha estimada de llegada."""
     from .models import OrdenCompra
 
     estado = request.GET.get("estado", "abiertas")
     qs = OrdenCompra.objects.select_related("proveedor", "solicitud", "solicitud__ticket").prefetch_related("lineas")
     if estado == "abiertas":
-        qs = qs.filter(estado__in=["borrador", "enviada"])
+        qs = qs.filter(estado__in=["borrador", "revision", "por_pagar", "lista", "enviada"])
     elif estado in OrdenCompra.Estado.values:
         qs = qs.filter(estado=estado)
     return render(request, "inventario/ordenes.html", {"ordenes": qs[:200], "estado": estado,
@@ -114,18 +115,26 @@ def orden_nueva(request):
 
 
 @login_required
-@gestion_requerida
+@financiera.compras_requerido
 def orden_detalle(request, pk):
+    """La orden de compra y su camino: bodega la arma y la envía a dirección; dirección la ajusta y la aprueba (o la
+    devuelve); financiera paga y valida la factura; bodega se la envía al proveedor y recibe lo que llega.
+
+    Los ítems los edita bodega mientras está en preparación, y dirección mientras la revisa.
+    """
     from .forms import OrdenCompraForm, formset_orden
     from .models import OrdenCompra
 
+    E = OrdenCompra.Estado
     orden = get_object_or_404(OrdenCompra.objects.select_related("proveedor", "solicitud", "solicitud__ticket"), pk=pk)
-    editable = orden.estado in (OrdenCompra.Estado.BORRADOR, OrdenCompra.Estado.ENVIADA)
+    u = request.user
+    editable = (orden.estado == E.BORRADOR and u.gestiona_inventario) or (orden.estado == E.REVISION and u.es_direccion)
+    cancelable = u.gestiona_inventario and orden.estado not in (E.RECIBIDA, E.CANCELADA) and not orden.pagada
     form = OrdenCompraForm(request.POST or None, request.FILES or None, instance=orden)
     lineas = formset_orden()(request.POST or None, instance=orden, prefix="lineas")
     if request.method == "POST":
         accion = request.POST.get("accion", "guardar")
-        if accion == "cancelar":  # lo que llega se recibe con la factura (orden_recibir)
+        if accion == "cancelar" and cancelable:  # lo que llega se recibe con la factura (orden_recibir)
             orden.estado = OrdenCompra.Estado.CANCELADA
             orden.save(update_fields=["estado", "actualizado"])
             from .cotizaciones import reabrir
@@ -141,24 +150,33 @@ def orden_detalle(request, pk):
                 lineas.save()
                 from .cotizaciones import reabrir
                 reabrir(orden)
-                if accion == "enviar":
-                    faltan = [t for t, v in (("el proveedor", orden.proveedor_id), ("la fecha estimada de llegada", orden.fecha_estimada),
-                                             ("al menos un ítem", orden.lineas.exists())) if not v]
-                    if faltan:
-                        messages.error(request, "Para enviarla falta " + ", ".join(faltan) + ".")
-                        return redirect(orden)
-                    orden.estado = OrdenCompra.Estado.ENVIADA
-                    orden.save(update_fields=["estado", "actualizado"])
-                    if orden.solicitud:
-                        from . import solicitudes as sol
-                        sol._nota(orden.solicitud, request.user, f"orden de compra {orden.numero} enviada a {orden.proveedor}; "
-                                                                 f"llega el {orden.fecha_estimada:%d/%m/%Y}.")
-            messages.success(request, f"{orden.numero} enviada al proveedor: descargue el PDF y envíeselo." if accion == "enviar"
-                             else f"{orden.numero} guardada.")
+            # Bodega la pasa a dirección (o, si es urgente, sigue con el motivo); dirección la aprueba
+            if accion in ("a_direccion", "aprobar"):
+                from django.core.exceptions import ValidationError
+                orden.refresh_from_db()
+                motivo = " ".join(request.POST.get("motivo_urgencia", "").split()) if request.POST.get("urgente") == "1" else ""
+                try:
+                    if accion == "aprobar" and u.es_direccion:
+                        financiera.aprobar(orden, u)
+                    else:
+                        financiera.enviar_a_direccion(orden, u, motivo)
+                except ValidationError as e:
+                    messages.error(request, " ".join(e.messages))
+                    return redirect(orden)
+                messages.success(request, {
+                    E.REVISION: f"{orden.numero} enviada a dirección para su aprobación.",
+                    E.POR_PAGAR: f"{orden.numero} aprobada: pasó a financiera para el pago.",
+                    E.LISTA: f"{orden.numero} aprobada (a crédito): ya puede enviarla al proveedor.",
+                }.get(orden.estado, f"{orden.numero} guardada."))
+                return redirect(orden)
+            messages.success(request, f"{orden.numero} guardada.")
             return redirect(orden)
         messages.error(request, "Revise los datos de la orden.")
-    return render(request, "inventario/orden.html", {"orden": orden, "form": form, "lineas": lineas, "editable": editable,
-                                                     "totales": orden.totales()})
+    return render(request, "inventario/orden.html", {
+        "orden": orden, "form": form, "lineas": lineas, "editable": editable, "cancelable": cancelable,
+        "totales": orden.totales(), "hoy": servicios.timezone.localdate(), "whatsapp": financiera.whatsapp_proveedor(orden),
+        "correos_proveedor": financiera.correos_proveedor(orden.proveedor) if orden.proveedor else [],
+    })
 
 
 @login_required
@@ -169,8 +187,9 @@ def orden_recibir(request, pk):
     from .models import OrdenCompra
 
     orden = get_object_or_404(OrdenCompra.objects.select_related("proveedor", "solicitud", "solicitud__ticket"), pk=pk)
-    if orden.estado not in (OrdenCompra.Estado.BORRADOR, OrdenCompra.Estado.ENVIADA):
-        messages.error(request, f"{orden.numero} está {orden.get_estado_display().lower()}: no hay nada por recibir.")
+    if orden.estado not in (OrdenCompra.Estado.LISTA, OrdenCompra.Estado.ENVIADA):
+        messages.error(request, f"{orden.numero} está {orden.get_estado_display().lower()}: se recibe cuando ya está aprobada"
+                                " (y pagada, si es de pago anticipado).")
         return redirect(orden)
     inicial = {"proveedor": orden.proveedor.razon_social if orden.proveedor else "", "factura": orden.factura,
                "fecha": orden.fecha_factura or servicios.timezone.localdate()}
@@ -185,6 +204,9 @@ def orden_recibir(request, pk):
             else:
                 insumos, placas = recepcion.recibir(orden, cabecera.cleaned_data, datos, request.user,
                                                     soporte=cabecera.cleaned_data.get("soporte"))
+                orden.refresh_from_db()
+                if orden.estado == OrdenCompra.Estado.RECIBIDA:
+                    financiera.recibida(orden)  # financiera valida la factura
                 _liberar_compras(request)
                 partes = ([f"insumos: {', '.join(insumos)}"] if insumos else []) + ([f"equipos: {', '.join(placas)}"] if placas else [])
                 messages.success(request, f"Factura {cabecera.cleaned_data['factura']} recibida. Entraron a bodega " + "; ".join(partes)
@@ -202,7 +224,7 @@ def orden_recibir(request, pk):
 
 
 @login_required
-@gestion_requerida
+@financiera.compras_requerido
 def orden_archivo(request, pk, cual):
     """El PDF de la orden para el proveedor, o el soporte (cotización/factura) que subió bodega."""
     from django.http import FileResponse, HttpResponse

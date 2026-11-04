@@ -351,7 +351,7 @@ class FuncionarioForm(_Estilos, BootstrapMixin, forms.ModelForm):
 class OrdenCompraForm(BootstrapMixin, forms.ModelForm):
     class Meta:
         model = OrdenCompra
-        fields = ["proveedor", "fecha_estimada", "notas", "soporte"]
+        fields = ["proveedor", "fecha_estimada", "forma_pago", "dias_credito", "notas", "soporte"]
         widgets = {"fecha_estimada": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
                    "notas": forms.Textarea(attrs={"rows": 2, "placeholder": "Forma de pago, entrega en bodega, garantía…"})}
 
@@ -359,7 +359,19 @@ class OrdenCompraForm(BootstrapMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["proveedor"].empty_label = "— Elija el proveedor —"
         self.fields["soporte"].widget.attrs["accept"] = ".pdf,image/*"
+        self.fields["soporte"].label = "Cotización del proveedor (PDF)"
+        self.fields["forma_pago"].required = False  # si no se elige, pago anticipado
         self._aplicar_estilos()
+
+    def clean_forma_pago(self):
+        return self.cleaned_data.get("forma_pago") or OrdenCompra.FormaPago.ANTICIPADO
+
+    def clean(self):
+        """A crédito lleva los días; anticipada no."""
+        datos = super().clean()
+        if datos.get("forma_pago") != OrdenCompra.FormaPago.CREDITO:
+            datos["dias_credito"] = None
+        return datos
 
 
 class LineaOrdenForm(BootstrapMixin, forms.ModelForm):

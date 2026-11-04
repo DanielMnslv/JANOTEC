@@ -1,0 +1,87 @@
+{% load inventario_extras %}
+{# El camino de la orden de compra y lo que le toca hacer ahora a cada área (dirección, financiera, bodega). #}
+<div class="card mb-3" id="camino">
+  <div class="card-header"><i class="bi bi-signpost-split"></i> Camino de la compra
+    <span class="small text-muted-jn fw-normal">· {{ orden.get_forma_pago_display }}{% if orden.a_credito and orden.dias_credito %} a {{ orden.dias_credito }} días{% endif %}</span></div>
+  <div class="card-body">
+    <ol class="list-unstyled d-flex flex-wrap gap-2 small mb-3 camino-orden">
+      <li class="badge {% if orden.estado != 'borrador' %}text-bg-success{% else %}text-bg-secondary{% endif %}">1. Preparación (bodega)</li>
+      <li class="badge {% if orden.aprobada_en %}text-bg-success{% elif orden.estado == 'revision' %}text-bg-info{% else %}text-bg-light border{% endif %}">2. Aprobación (dirección){% if orden.motivo_urgencia %} · urgente{% endif %}</li>
+      <li class="badge {% if orden.pagada %}text-bg-success{% elif orden.estado == 'por_pagar' %}text-bg-danger{% else %}text-bg-light border{% endif %}">3. Pago (financiera){% if orden.a_credito and not orden.pagada %} · a crédito{% endif %}</li>
+      <li class="badge {% if orden.estado == 'enviada' or orden.estado == 'recibida' %}text-bg-success{% elif orden.estado == 'lista' %}text-bg-primary{% else %}text-bg-light border{% endif %}">4. Envío al proveedor (bodega)</li>
+      <li class="badge {% if orden.estado == 'recibida' %}text-bg-success{% else %}text-bg-light border{% endif %}">5. Recepción (bodega)</li>
+      <li class="badge {% if orden.factura_validada_en %}text-bg-success{% elif orden.factura_registrada %}text-bg-warning{% else %}text-bg-light border{% endif %}">6. Factura (financiera)</li>
+    </ol>
+    {% if orden.cerrada %}<div class="alert alert-success small py-2 mb-2"><i class="bi bi-check2-all"></i> Compra cerrada: recibida, pagada y con la factura validada.</div>{% endif %}
+
+    {# Lo que ya pasó #}
+    <ul class="small mb-2 ps-3">
+      {% if orden.aprobada_en %}<li>{% if orden.aprobada_por %}Aprobada por {{ orden.aprobada_por.get_full_name|default:orden.aprobada_por.username }}{% else %}Pasada sin aprobación de dirección por urgencia: <em>{{ orden.motivo_urgencia }}</em>{% endif %} el {{ orden.aprobada_en|date:"d/m/Y h:i a" }}.</li>{% endif %}
+      {% if orden.pagada %}<li>Pagada el {{ orden.pagada_en|date:"d/m/Y" }}: {{ orden.valor_pagado|pesos }}{% if orden.medio_pago %} por {{ orden.medio_pago }}{% endif %}{% if orden.pago_por %} · {{ orden.pago_por.get_full_name|default:orden.pago_por.username }}{% endif %}
+        {% if orden.soporte_pago %}· <a href="{% url 'inventario:orden_archivo_financiera' orden.pk 'soporte_pago' %}" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i> Soporte de pago</a>{% endif %}</li>
+      {% elif orden.vence %}<li>A crédito: se paga antes del <b {% if orden.vence < hoy %}class="text-danger"{% endif %}>{{ orden.vence|date:"d/m/Y" }}</b>.</li>{% endif %}
+      {% if orden.enviada_proveedor_en %}<li>Enviada al proveedor el {{ orden.enviada_proveedor_en|date:"d/m/Y h:i a" }}.</li>{% endif %}
+      {% if orden.factura_registrada %}<li>Factura {{ orden.factura }} del {{ orden.fecha_factura|date:"d/m/Y" }} por {{ orden.factura_valor|pesos }}
+        {% if orden.factura_pdf %}· <a href="{% url 'inventario:orden_archivo_financiera' orden.pk 'factura_pdf' %}" target="_blank" rel="noopener"><i class="bi bi-receipt"></i> PDF</a>{% endif %}
+        {% if orden.factura_cuadra %}<span class="text-success">· cuadra con la orden</span>{% else %}<span class="text-danger fw-semibold">· diferencia de {{ orden.diferencia_factura|pesos }}</span>{% if orden.factura_validada_en %} (aceptada: {{ orden.factura_nota }}){% endif %}{% endif %}</li>{% endif %}
+    </ul>
+
+    {# Lo que le toca hacer ahora a quien la está viendo #}
+    {% if orden.estado == 'borrador' and orden.observaciones_direccion %}
+      <div class="alert alert-warning small py-2 mb-0"><b>Dirección la devolvió para corregir:</b> {{ orden.observaciones_direccion }}</div>
+    {% endif %}
+
+    {% if orden.estado == 'revision' %}
+      {% if user.es_direccion %}
+      <div class="border border-info rounded p-2">
+        <div class="small mb-2"><b>Revísela:</b> puede corregir los ítems y aprobarla abajo, o devolverla a bodega.</div>
+        <form method="post" action="{% url 'inventario:orden_paso' orden.pk 'devolver' %}" class="d-flex flex-wrap gap-2">{% csrf_token %}
+          <input name="observaciones" class="form-control form-control-sm" style="max-width:520px" required minlength="5" placeholder="Qué hay que corregir">
+          <button class="btn btn-sm btn-outline-danger"><i class="bi bi-arrow-return-left"></i> Devolver a bodega</button>
+        </form>
+      </div>
+      {% else %}<div class="small text-muted-jn"><i class="bi bi-hourglass-split"></i> En revisión de dirección: no se modifica hasta que la apruebe o la devuelva.</div>{% endif %}
+    {% endif %}
+
+    {% if user.ve_financiera and not orden.pagada %}{% if orden.estado == 'por_pagar' or orden.a_credito and orden.estado in 'lista enviada recibida' %}
+      <form method="post" enctype="multipart/form-data" action="{% url 'inventario:orden_paso' orden.pk 'pago' %}" class="border border-danger rounded p-2 mt-2" id="form-pago">{% csrf_token %}
+        <div class="fw-semibold small mb-2"><i class="bi bi-cash-coin"></i> Registrar el pago (financiera)</div>
+        <div class="row g-2">
+          <div class="col-sm-3"><label class="form-label small mb-0" for="pago-fecha">Fecha</label><input type="date" name="fecha" id="pago-fecha" class="form-control form-control-sm" required value="{{ hoy|date:'Y-m-d' }}" max="{{ hoy|date:'Y-m-d' }}"></div>
+          <div class="col-sm-3"><label class="form-label small mb-0" for="pago-valor">Valor pagado</label><input type="number" step="any" min="1" name="valor" id="pago-valor" class="form-control form-control-sm" required value="{{ totales.total|floatformat:'0' }}"></div>
+          <div class="col-sm-3"><label class="form-label small mb-0" for="pago-medio">Medio</label><input name="medio" id="pago-medio" class="form-control form-control-sm" maxlength="80" placeholder="Transferencia…"></div>
+          <div class="col-sm-3"><label class="form-label small mb-0" for="pago-soporte">Soporte de pago</label><input type="file" name="soporte_pago" id="pago-soporte" class="form-control form-control-sm" required accept=".pdf,image/*"></div>
+        </div>
+        <div class="text-end mt-2"><button class="btn btn-sm btn-danger"><i class="bi bi-check2"></i> Registrar pago</button></div>
+      </form>
+    {% endif %}{% endif %}
+
+    {% if orden.estado == 'lista' and user.gestiona_inventario %}
+      <div class="border border-primary rounded p-2 mt-2 d-flex flex-wrap gap-2 align-items-center">
+        <span class="small me-auto"><i class="bi bi-send"></i> <b>Envíele al proveedor</b> la orden{% if orden.pagada %} y el soporte de pago{% endif %}.
+          {% if correos_proveedor %}Sale por correo a {{ correos_proveedor|join:", " }}.{% else %}<span class="text-danger">El proveedor no tiene correo: use WhatsApp.</span>{% endif %}</span>
+        {% if whatsapp %}<a class="btn btn-sm btn-outline-success" href="{{ whatsapp }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> WhatsApp</a>{% endif %}
+        <form method="post" action="{% url 'inventario:orden_paso' orden.pk 'proveedor' %}">{% csrf_token %}
+          <button class="btn btn-sm btn-primary"><i class="bi bi-envelope"></i> {% if correos_proveedor %}Enviar al proveedor{% else %}Marcar enviada{% endif %}</button></form>
+      </div>
+    {% endif %}
+
+    {% if user.ve_financiera and not orden.factura_validada_en and orden.estado in 'lista enviada recibida' %}
+      <form method="post" enctype="multipart/form-data" action="{% url 'inventario:orden_paso' orden.pk 'factura' %}" class="border border-warning rounded p-2 mt-2" id="form-factura">{% csrf_token %}
+        <div class="fw-semibold small mb-2"><i class="bi bi-receipt"></i> Factura del proveedor (financiera) <span class="fw-normal text-muted-jn">· la orden suma {{ totales.total|pesos }} con IVA</span></div>
+        <div class="row g-2">
+          <div class="col-sm-3"><label class="form-label small mb-0" for="fac-numero">N.º de factura</label><input name="numero" id="fac-numero" class="form-control form-control-sm" required maxlength="60" value="{{ orden.factura }}"></div>
+          <div class="col-sm-3"><label class="form-label small mb-0" for="fac-fecha">Fecha</label><input type="date" name="fecha" id="fac-fecha" class="form-control form-control-sm" required value="{{ orden.fecha_factura|date:'Y-m-d'|default:'' }}" max="{{ hoy|date:'Y-m-d' }}"></div>
+          <div class="col-sm-3"><label class="form-label small mb-0" for="fac-valor">Valor total (con IVA)</label><input type="number" step="any" min="1" name="valor" id="fac-valor" class="form-control form-control-sm" required value="{{ orden.factura_valor|default_if_none:''|floatformat:'0' }}"></div>
+          <div class="col-sm-3"><label class="form-label small mb-0" for="fac-pdf">PDF</label><input type="file" name="factura_pdf" id="fac-pdf" class="form-control form-control-sm" accept=".pdf,image/*"></div>
+        </div>
+        {% if orden.factura_registrada and not orden.factura_cuadra %}
+        <div class="mt-2 small"><div class="form-check"><input class="form-check-input" type="checkbox" name="acepta" value="1" id="fac-acepta">
+          <label class="form-check-label" for="fac-acepta">Acepto la diferencia de {{ orden.diferencia_factura|pesos }}</label></div>
+          <input name="nota" class="form-control form-control-sm mt-1" maxlength="300" placeholder="Motivo (flete, redondeo, descuento…)" value="{{ orden.factura_nota }}"></div>
+        {% endif %}
+        <div class="text-end mt-2"><button class="btn btn-sm btn-warning"><i class="bi bi-check2"></i> Registrar y comparar</button></div>
+      </form>
+    {% endif %}
+  </div>
+</div>

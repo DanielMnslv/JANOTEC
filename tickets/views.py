@@ -134,6 +134,8 @@ def inicio(request):
         return redirect("comercial:bandeja")
     if request.user.es_administrativo:
         return redirect("comercial:propuestas")
+    if request.user.es_financiera:
+        return redirect("inventario:financiera")
     return redirect("mis_tickets")  # cliente y central de atención
 
 

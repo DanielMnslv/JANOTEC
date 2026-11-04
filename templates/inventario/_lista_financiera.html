@@ -1,0 +1,21 @@
+{% load inventario_extras %}
+{# Un grupo de órdenes del módulo financiero. Recibe: ordenes, id, titulo, icono, borde, vacio, vence, diferencia. #}
+<div class="card mb-4 {{ borde }}" id="{{ id }}">
+  <div class="card-header"><i class="bi {{ icono }}"></i> {{ titulo }}</div>
+  <ul class="list-group list-group-flush">
+    {% for o in ordenes %}
+    <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2 small">
+      <div class="me-auto">
+        <a class="radicado" href="{{ o.get_absolute_url }}">{{ o.numero }}</a>
+        <span class="badge text-bg-{{ o.color_estado }} ms-1">{{ o.get_estado_display }}</span>
+        <b class="ms-1">{{ o.proveedor|default:"—" }}</b> · {{ o.totales.total|pesos }} con IVA
+        {% if o.solicitud %}<span class="text-muted-jn"> · {{ o.solicitud.ticket.radicado }} · {{ o.solicitud.ticket.empresa }}</span>{% endif %}
+        {% if vence %}<div>{% if o.vence %}Vence el <b {% if o.vence < hoy %}class="text-danger"{% endif %}>{{ o.vence|date:"d/m/Y" }}</b>{% else %}<span class="text-muted-jn">Vence {{ o.dias_credito|default:0 }} días después de la factura (aún sin factura).</span>{% endif %}</div>{% endif %}
+        {% if diferencia %}<div class="text-danger">Factura {{ o.factura }} por {{ o.factura_valor|pesos }}: diferencia de {{ o.diferencia_factura|pesos }}</div>{% endif %}
+        {% if o.estado == 'recibida' and not o.factura_registrada %}<div class="text-warning-emphasis"><i class="bi bi-box-seam"></i> Ya llegó a bodega{% if o.factura %} con la factura {{ o.factura }}{% endif %}.</div>{% endif %}
+      </div>
+      <a class="btn btn-sm btn-outline-primary" href="{{ o.get_absolute_url }}#camino">Abrir</a>
+    </li>
+    {% empty %}<li class="list-group-item text-muted-jn small">{{ vacio }}</li>{% endfor %}
+  </ul>
+</div>

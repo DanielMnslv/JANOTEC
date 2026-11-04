@@ -1391,13 +1391,22 @@ class OrdenesDeCompraTests(BaseInventario):
         self.assertEqual([(l.descripcion, l.cantidad) for l in orden.lineas.all()], [("Cable UTP", 95)])
         datos = {"lineas-TOTAL_FORMS": "1", "lineas-INITIAL_FORMS": "1", "lineas-MIN_NUM_FORMS": "0", "lineas-MAX_NUM_FORMS": "1000",
                  "lineas-0-id": orden.lineas.get().pk, "lineas-0-orden": orden.pk, "lineas-0-descripcion": "Cable UTP exterior",
-                 "lineas-0-cantidad": "95", "lineas-0-valor_unitario": "1000", "lineas-0-iva": "19", "accion": "enviar"}
+                 "lineas-0-cantidad": "95", "lineas-0-valor_unitario": "1000", "lineas-0-iva": "19", "accion": "a_direccion"}
         r = self.client.post(orden.get_absolute_url(), datos, follow=True)
         self.assertContains(r, "falta el proveedor")
         llega = timezone.localdate() + timedelta(days=3)
+        # Urgente (dirección no está): pasa con el motivo, sin esperar; financiera paga y bodega la envía
+        datos.update(accion="a_direccion", urgente="1", motivo_urgencia="La instalación es el lunes")
         self.client.post(orden.get_absolute_url(), {**datos, "proveedor": proveedor.pk, "fecha_estimada": f"{llega:%Y-%m-%d}"})
         orden.refresh_from_db()
-        self.assertEqual((orden.estado, orden.totales()["total"]), ("enviada", 113050))
+        self.assertEqual((orden.estado, orden.totales()["total"], orden.motivo_urgencia), ("por_pagar", 113050, "La instalación es el lunes"))
+        from .financiera import enviar_al_proveedor, registrar_pago
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        registrar_pago(orden, self.bodega, timezone.localdate(), Decimal("113050"), "Transferencia",
+                       SimpleUploadedFile("pago.pdf", b"%PDF-1.4 pago", content_type="application/pdf"))
+        enviar_al_proveedor(orden, self.bodega)
+        orden.refresh_from_db()
+        self.assertEqual(orden.estado, "enviada")
         self.assertEqual(self.client.get(reverse("inventario:orden_archivo", args=[orden.pk, "pdf"]))["Content-Type"], "application/pdf")
         # Coordinación lo ve en la lista de alistamiento del ticket
         self.client.force_login(self.supervisor)
@@ -1441,6 +1450,159 @@ class OrdenesDeCompraTests(BaseInventario):
         self.assertEqual(sol.apartados()["CAB-UTP-EXT"][0][1], 400)
         self.client.force_login(self.supervisor)
         self.assertEqual(self.client.get(reverse("inventario:ordenes")).status_code, 403)
+
+
+class CompraConFinancieraTests(BaseInventario):
+    """La orden de compra pasa por dirección, financiera paga y valida la factura, bodega envía y recibe."""
+
+    def setUp(self):
+        super().setUp()
+        from .models import AsesorProveedor, LineaOrdenCompra, OrdenCompra, Proveedor
+        self.miguel = Usuario.objects.create_user("miguel", "dir@janotec.test", "Clave-segura-1", rol="direccion")
+        self.financiera = Usuario.objects.create_user("fin", "fin@janotec.test", "Clave-segura-1", rol="financiera")
+        self.proveedor = Proveedor.objects.create(razon_social="SYSCOM COLOMBIA", nit="900", correo="ventas@syscom.test")
+        AsesorProveedor.objects.create(proveedor=self.proveedor, nombre="Laura", celular="300 111 2233")
+        self.orden = OrdenCompra.objects.create(proveedor=self.proveedor, creado_por=self.bodega,
+                                                fecha_estimada=timezone.localdate())
+        self.linea = LineaOrdenCompra.objects.create(orden=self.orden, descripcion="Cable UTP", cantidad=100, valor_unitario=1000)
+
+    def datos(self, **extra):
+        o, l = self.orden, self.linea
+        return {"proveedor": self.proveedor.pk, "fecha_estimada": f"{o.fecha_estimada:%Y-%m-%d}", "forma_pago": o.forma_pago,
+                "dias_credito": o.dias_credito or "", "notas": "",
+                "lineas-TOTAL_FORMS": "1", "lineas-INITIAL_FORMS": "1", "lineas-MIN_NUM_FORMS": "0", "lineas-MAX_NUM_FORMS": "1000",
+                "lineas-0-id": l.pk, "lineas-0-orden": o.pk, "lineas-0-descripcion": l.descripcion, "lineas-0-cantidad": "100",
+                "lineas-0-adicional": "0", "lineas-0-valor_unitario": "1000", "lineas-0-iva": "19", **extra}
+
+    def pdf(self, nombre="soporte.pdf"):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        return SimpleUploadedFile(nombre, b"%PDF-1.4 x", content_type="application/pdf")
+
+    def test_anticipada_de_bodega_a_la_factura(self):
+        from django.core import mail
+        url, hoy = self.orden.get_absolute_url(), timezone.localdate()
+        paso = lambda cual: reverse("inventario:orden_paso", args=[self.orden.pk, cual])  # noqa: E731
+        # Bodega la envía a dirección; le llega el aviso y bodega ya no la modifica
+        self.client.force_login(self.bodega)
+        mail.outbox.clear()
+        self.client.post(url, self.datos(accion="a_direccion"))
+        self.orden.refresh_from_db()
+        self.assertEqual(self.orden.estado, "revision")
+        self.assertTrue(any("dir@janotec.test" in m.to and "para aprobar" in m.subject for m in mail.outbox))
+        self.client.post(url, self.datos(**{"lineas-0-valor_unitario": "5"}))
+        self.linea.refresh_from_db()
+        self.assertEqual(self.linea.valor_unitario, 1000)
+        # Dirección la devuelve con observaciones; bodega corrige y la vuelve a enviar; dirección la aprueba
+        self.client.force_login(self.miguel)
+        self.client.post(paso("devolver"), {"observaciones": "Pedir 10 m más para bodega"})
+        self.orden.refresh_from_db()
+        self.assertEqual((self.orden.estado, self.orden.observaciones_direccion), ("borrador", "Pedir 10 m más para bodega"))
+        self.client.force_login(self.bodega)
+        self.assertContains(self.client.get(url), "Pedir 10 m más para bodega")
+        self.client.post(url, self.datos(accion="a_direccion", **{"lineas-0-adicional": "10"}))
+        self.client.force_login(self.miguel)
+        mail.outbox.clear()
+        self.client.post(url, self.datos(accion="aprobar", **{"lineas-0-adicional": "10"}))
+        self.orden.refresh_from_db()
+        self.assertEqual((self.orden.estado, self.orden.aprobada_por), ("por_pagar", self.miguel))
+        aviso = next(m for m in mail.outbox if "fin@janotec.test" in m.to)
+        self.assertIn("por pagar", aviso.subject)
+        self.assertEqual(aviso.attachments[0][2], "application/pdf")  # la orden para pagar
+        # Bodega no puede enviarla al proveedor ni recibir sin el pago
+        self.client.force_login(self.bodega)
+        self.client.post(paso("proveedor"))
+        self.orden.refresh_from_db()
+        self.assertEqual(self.orden.estado, "por_pagar")
+        self.assertEqual(self.client.get(reverse("inventario:orden_recibir", args=[self.orden.pk])).status_code, 302)
+        # Financiera: la ve en su módulo y registra el pago con el soporte
+        self.client.force_login(self.financiera)
+        r = self.client.get(reverse("inventario:financiera"))
+        self.assertEqual(r.context["anticipadas"], [self.orden])
+        self.assertContains(r, 'title="Órdenes de compra por pagar">1<')
+        self.assertEqual(self.client.get(reverse("inventario:ordenes")).status_code, 403)  # no es bodega
+        self.client.post(paso("pago"), {"fecha": f"{hoy:%Y-%m-%d}", "valor": "130900", "medio": "Transferencia"})
+        self.orden.refresh_from_db()
+        self.assertFalse(self.orden.pagada)  # sin soporte no
+        mail.outbox.clear()
+        self.client.post(paso("pago"), {"fecha": f"{hoy:%Y-%m-%d}", "valor": "130900", "medio": "Transferencia",
+                                        "soporte_pago": self.pdf("pago.pdf")})
+        self.orden.refresh_from_db()
+        self.assertEqual((self.orden.estado, self.orden.valor_pagado, self.orden.pago_por), ("lista", 130900, self.financiera))
+        self.assertTrue(any("b@janotec.test" in m.to and "reenvíe el soporte" in m.subject for m in mail.outbox))
+        # Bodega se la envía al proveedor con la orden y el soporte de pago
+        self.client.force_login(self.bodega)
+        self.assertContains(self.client.get(url), "https://wa.me/573001112233")
+        mail.outbox.clear()
+        self.client.post(paso("proveedor"))
+        self.orden.refresh_from_db()
+        self.assertEqual(self.orden.estado, "enviada")
+        correo = next(m for m in mail.outbox if "ventas@syscom.test" in m.to)
+        self.assertEqual(len(correo.attachments), 2)  # la orden y el soporte de pago
+        # Llega: se recibe en bodega y financiera recibe el aviso para validar la factura
+        from . import recepcion
+        mail.outbox.clear()
+        recepcion.recibir(self.orden, {"proveedor": "SYSCOM COLOMBIA", "factura": "FE-1", "fecha": hoy},
+                          [{"linea": self.linea.pk, "clase": "insumo", "descripcion": "Cable UTP", "cantidad": Decimal("110"),
+                            "valor_unitario": Decimal("1000"), "iva": Decimal("19"), "codigo": "CAB-UTP-EXT", "unidad": "Metro"}],
+                          self.bodega)
+        self.orden.refresh_from_db()
+        self.assertEqual(self.orden.estado, "recibida")
+        # Factura con diferencia: queda marcada; financiera la acepta con una nota y la compra queda cerrada
+        self.client.force_login(self.financiera)
+        self.client.post(paso("factura"), {"numero": "FE-1", "fecha": f"{hoy:%Y-%m-%d}", "valor": "150000",
+                                           "factura_pdf": self.pdf("fe1.pdf")})
+        self.orden.refresh_from_db()
+        self.assertEqual((self.orden.factura_cuadra, self.orden.factura_validada_en, self.orden.cerrada), (False, None, False))
+        self.assertEqual(self.client.get(reverse("inventario:financiera")).context["con_diferencia"], [self.orden])
+        self.client.post(paso("factura"), {"numero": "FE-1", "fecha": f"{hoy:%Y-%m-%d}", "valor": "150000", "acepta": "1",
+                                           "nota": "Incluye el flete"})
+        self.orden.refresh_from_db()
+        self.assertTrue(self.orden.cerrada)
+        self.assertEqual(self.client.get(reverse("inventario:financiera")).context["cerradas"], [self.orden])
+
+    def test_credito_va_al_proveedor_sin_pagar_y_vence_con_la_factura(self):
+        from datetime import timedelta
+        self.orden.forma_pago, self.orden.dias_credito = "credito", None
+        self.orden.save()
+        url = self.orden.get_absolute_url()
+        self.client.force_login(self.miguel)  # dirección la arma y la aprueba de una vez
+        self.assertContains(self.client.post(url, self.datos(accion="aprobar"), follow=True), "los días de crédito")
+        self.client.post(url, self.datos(accion="aprobar", dias_credito="30"))
+        self.orden.refresh_from_db()
+        self.assertEqual((self.orden.estado, self.orden.dias_credito), ("lista", 30))
+        self.client.force_login(self.bodega)
+        self.client.post(reverse("inventario:orden_paso", args=[self.orden.pk, "proveedor"]))
+        self.orden.refresh_from_db()
+        self.assertEqual(self.orden.estado, "enviada")
+        # La factura llega y cuadra: el pago vence 30 días después
+        hace = timezone.localdate() - timedelta(days=2)
+        self.client.force_login(self.financiera)
+        self.client.post(reverse("inventario:orden_paso", args=[self.orden.pk, "factura"]),
+                         {"numero": "FE-9", "fecha": f"{hace:%Y-%m-%d}", "valor": "119000"})
+        self.orden.refresh_from_db()
+        self.assertTrue(self.orden.factura_cuadra and self.orden.factura_validada_en)
+        self.assertEqual(self.orden.vence, hace + timedelta(days=30))
+        self.assertEqual(self.client.get(reverse("inventario:financiera")).context["credito"], [self.orden])
+
+    def test_urgente_sin_direccion_le_avisa_y_sin_financiera_le_llega_a_direccion(self):
+        from django.core import mail
+        self.financiera.delete()
+        self.client.force_login(self.bodega)
+        url = self.orden.get_absolute_url()
+        self.client.post(url, self.datos(accion="a_direccion", urgente="1", motivo_urgencia="corto"))
+        self.orden.refresh_from_db()
+        self.assertEqual(self.orden.estado, "borrador")  # el motivo es obligatorio
+        mail.outbox.clear()
+        self.client.post(url, self.datos(accion="a_direccion", urgente="1", motivo_urgencia="El proveedor solo lo separa hoy"))
+        self.orden.refresh_from_db()
+        self.assertEqual((self.orden.estado, self.orden.aprobada_por), ("por_pagar", None))
+        asuntos = [m.subject for m in mail.outbox if "dir@janotec.test" in m.to]
+        self.assertTrue(any("urgencia" in a for a in asuntos))
+        self.assertTrue(any("por pagar" in a for a in asuntos))  # dirección cubre a financiera
+        self.client.force_login(self.miguel)
+        self.assertEqual(self.client.get(reverse("inventario:financiera")).status_code, 200)
+        self.client.force_login(self.bodega)
+        self.assertEqual(self.client.get(reverse("inventario:financiera")).status_code, 403)
 
 
 class BandejaBodegaTests(BaseInventario):
