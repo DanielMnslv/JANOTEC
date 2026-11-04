@@ -4,10 +4,11 @@ La solicitud solo pregunta precio y fecha de entrega, no compromete a JANOTEC. S
 respuesta se registra con sus precios y se comparan lado a lado. De la cotización elegida sale la orden de compra, que sí
 es el compromiso; si conviene comprarle cada cosa a uno distinto, lo que quede sin ordenar se ordena con otra cotización.
 
-Los elementos llegan de una solicitud de material (lo que falta en bodega), de una propuesta comercial aún sin aprobar
-(los equipos y materiales que se le indican al cliente) o se escriben a mano. Cada línea dice si es equipo o material y
-puede llevar el proveedor que se sabe que lo maneja, con su último precio (la plataforma lo sugiere del historial). Al
-enviar, a cada proveedor le llega por correo el PDF solo con lo suyo; también hay un PDF general y el enlace de WhatsApp.
+Su razón de ser es armar la propuesta comercial: bodega trae del informe del ticket los materiales y equipos que
+necesita el cliente, ve con qué precio se ha manejado cada uno (historial de compras y cotizaciones o el catálogo de
+precios) y en rojo lo que no tiene precio o proveedor. También llegan de una solicitud de material (lo que falta en
+bodega) o se escriben a mano. Cada línea es equipo o material y va a UN proveedor: se genera un PDF y un correo por
+proveedor, solo con sus elementos (cámara a uno y cable a otro = dos solicitudes), y su enlace de WhatsApp.
 """
 import re
 from decimal import Decimal, InvalidOperation
@@ -62,7 +63,7 @@ class LineaForm(BootstrapMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["cantidad"].required = self.fields["adicional"].required = self.fields["tipo"].required = False
         self.fields["proveedor"].queryset = Proveedor.objects.order_by("razon_social")
-        self.fields["proveedor"].empty_label = "A todos"
+        self.fields["proveedor"].empty_label = "— Elija el proveedor —"
         self._aplicar_estilos()
 
     def clean(self):
@@ -111,36 +112,39 @@ def _precios(post, lineas):
     return precios
 
 
-# --- Elementos de la propuesta y proveedor sugerido --------------------------------------------------
-ETAPAS_POR_COTIZAR = ("elaborando", "enviada", "ajustes")  # propuesta armada, aún sin respuesta del cliente
+# --- Elementos del informe del ticket y precio de referencia ---------------------------------------
+ETAPAS_POR_COTIZAR = ("gestion", "elaborando", "enviada", "ajustes")  # en comercial, antes de que el cliente apruebe
 
 
-def _tipo_de(linea_propuesta):
-    """Equipo o material según la categoría que la línea tiene en la propuesta."""
+def tipo_de(descripcion):
+    """Equipo o material según la descripción (las mismas palabras con las que el cotizador agrupa la propuesta)."""
+    from comercial.models import LineaCotizacion
+
     T = LineaSolicitudCotizacion.Tipo
-    return T.EQUIPO if linea_propuesta.categoria == "equipos" else T.MATERIAL
+    # Switch, router, UPS… van en conectividad o energía en la propuesta, pero son equipos
+    es_equipo = (LineaCotizacion(descripcion=descripcion).categoria_final == "equipos"
+                 or re.search(r"\b(switch|router|ups|regulador|transformador|antena)", descripcion.lower()))
+    return T.EQUIPO if es_equipo else T.MATERIAL
 
 
-def elementos_de_la_propuesta(ficha):
-    """Los equipos y materiales de la última cotización de la propuesta (sin la mano de obra): [(línea, tipo)]."""
-    for cotizacion in ficha.cotizaciones.prefetch_related("lineas").order_by("-creado"):
-        lineas = [l for l in cotizacion.lineas.all() if l.categoria != "mano_obra" and l.cantidad > 0]
-        if lineas:
-            return [(l, _tipo_de(l)) for l in lineas]
-    return []
+def elementos_del_informe(ficha):
+    """Los materiales y equipos que pide el informe del requerimiento del ticket: [(cantidad, descripción, tipo)]."""
+    from comercial.cotizador import materiales_del_informe
+
+    return [(cantidad, descripcion, tipo_de(descripcion)) for cantidad, descripcion in materiales_del_informe(ficha)]
 
 
-def propuestas_por_cotizar():
-    """Las propuestas armadas y aún sin aprobar por el cliente que traen equipos o materiales para cotizar."""
+def tickets_por_cotizar():
+    """Los tickets en comercial (aún sin propuesta aprobada) cuyo informe pide materiales o equipos."""
     from comercial.models import FichaComercial
 
-    fichas = (FichaComercial.objects.filter(etapa__in=ETAPAS_POR_COTIZAR, cotizaciones__lineas__isnull=False)
-              .select_related("ticket", "ticket__empresa").prefetch_related("solicitudes_cotizacion").distinct())
+    fichas = (FichaComercial.objects.filter(etapa__in=ETAPAS_POR_COTIZAR, informe__isnull=False)
+              .exclude(informe__materiales="").select_related("ticket", "ticket__empresa", "informe")
+              .prefetch_related("solicitudes_cotizacion"))
     salida = []
     for ficha in fichas.order_by("-ticket__creado")[:50]:
-        elementos = elementos_de_la_propuesta(ficha)
-        if elementos:
-            ficha.n_elementos = len(elementos)
+        ficha.n_elementos = len(elementos_del_informe(ficha))
+        if ficha.n_elementos:
             ficha.ya_cotizada = [p for p in ficha.solicitudes_cotizacion.all() if p.estado != E.CANCELADA]
             salida.append(ficha)
     return salida
@@ -165,13 +169,35 @@ def historial_de_precios(limite=500):
 
 
 def sugerir_proveedor(lineas, conocidos=None):
-    """A las líneas sin proveedor les pone el que se sabe que maneja el elemento y su último precio (si hay historial)."""
+    """Llena el proveedor y el precio de referencia de las líneas que no los tienen.
+
+    Primero el historial (a quién se le compró o quién lo cotizó, y a cuánto); si no hay, el precio del catálogo de
+    precios (sin proveedor). Lo que quede sin precio o sin proveedor sale en rojo para que bodega lo complete.
+    """
+    from comercial.cotizador import _buscar_en_catalogo
+
     conocidos = historial_de_precios() if conocidos is None else conocidos
     for l in lineas:
-        dato = conocidos.get(l.descripcion.strip().lower())
-        if dato and not l.proveedor_id:
-            l.proveedor_id, l.precio_referencia = dato
-            l.save(update_fields=["proveedor", "precio_referencia"])
+        if l.proveedor_id and l.precio_referencia:
+            continue
+        proveedor, precio = conocidos.get(l.descripcion.strip().lower(), (None, None))
+        if precio is None:
+            item = _buscar_en_catalogo(l.descripcion)
+            precio = item.valor_unitario if item and item.valor_unitario > 0 else None
+        l.proveedor_id = l.proveedor_id or proveedor
+        l.precio_referencia = l.precio_referencia or precio
+        l.save(update_fields=["proveedor", "precio_referencia"])
+
+
+def sincronizar_proveedores(pedido):
+    """A quién se le pregunta sale de las líneas: un proveedor por cada uno elegido en ellas.
+
+    Se quita el que ya no tiene líneas (si aún no respondió).
+    """
+    elegidos = {l.proveedor_id for l in pedido.lineas.all() if l.proveedor_id}
+    for proveedor_id in elegidos:
+        CotizacionProveedor.objects.get_or_create(solicitud=pedido, proveedor_id=proveedor_id)
+    pedido.cotizaciones.exclude(proveedor_id__in=elegidos).filter(recibida_en__isnull=True).delete()
 
 
 # --- Envío a los proveedores: correo con su PDF y enlace de WhatsApp -------------------------------
@@ -192,16 +218,15 @@ def enlace_whatsapp(cotizacion):
 
 
 def enviar_a_proveedores(pedido, usuario):
-    """Le manda a cada proveedor de la solicitud su PDF por correo (solo con lo que se le pregunta a él).
+    """Le manda a cada proveedor de la solicitud su PDF por correo, solo con los elementos que son suyos.
 
-    Devuelve (enviados, sin_correo, sin_elementos) con los nombres de los proveedores, para avisarle a bodega a quién
-    hay que mandárselo por otro medio.
+    Devuelve (enviados, sin_correo) con los nombres de los proveedores, para avisarle a bodega a quién hay que
+    mandárselo por WhatsApp u otro medio.
     """
-    enviados, sin_correo, sin_elementos = [], [], []
+    enviados, sin_correo = [], []
     for c in pedido.cotizaciones.select_related("proveedor").prefetch_related("proveedor__asesores"):
         pr = c.proveedor
         if not pedido.lineas_para(pr):
-            sin_elementos.append(pr.razon_social)
             continue
         destinos = _correos_proveedor(pr)
         if not destinos:
@@ -222,7 +247,7 @@ def enviar_a_proveedores(pedido, usuario):
             enviados.append(pr.razon_social)
         except Exception:  # noqa: BLE001 — el correo no debe tumbar el envío; se avisa como «sin correo»
             sin_correo.append(pr.razon_social)
-    return enviados, sin_correo, sin_elementos
+    return enviados, sin_correo
 
 
 def comparacion(pedido):
@@ -239,7 +264,7 @@ def comparacion(pedido):
     for c in recibidas:
         precios = list(c.precios.all())
         c.total = sum((p.subtotal * (100 + p.iva) / 100 for p in precios), Decimal(0))
-        c.sin_cotizar = len(filas) - len(precios)
+        c.sin_cotizar = len(pedido.lineas_para(c.proveedor)) - len(precios)  # de lo que se le preguntó a él
         c.por_comprar = sum(1 for p in precios if p.linea_id in pendientes)
         c.vigentes = [o for o in c.ordenes.all() if o.estado != OrdenCompra.Estado.CANCELADA]
     return recibidas, filas
@@ -267,46 +292,47 @@ def listado(request):
     for p in filas:
         p.recibidas = sum(1 for c in p.cotizaciones.all() if c.recibida_en)
     return render(request, "inventario/cotizaciones.html", {"pedidos": filas, "estado": estado, "estados": E.choices,
-                                                            "propuestas": propuestas_por_cotizar()})
+                                                            "por_cotizar": tickets_por_cotizar()})
 
 
 @login_required
 @gestion_requerida
 @require_POST
 def nueva(request):
-    """Solicitud en preparación; desde una solicitud de material llega con lo que falta y desde una propuesta (aún
-    sin aprobar) con sus equipos y materiales. A cada línea se le sugiere el proveedor y el último precio conocido."""
+    """Solicitud en preparación. Desde un ticket en comercial llega con los materiales y equipos de su informe; desde
+    una solicitud de material, con lo que falta. A cada línea se le sugiere el proveedor y el precio de referencia."""
     from comercial.models import FichaComercial
 
-    solicitud = propuesta = None
+    solicitud = ficha = None
     if str(request.POST.get("solicitud", "")).isdigit():
         solicitud = get_object_or_404(SolicitudMaterial, pk=request.POST["solicitud"])
     elif str(request.POST.get("propuesta", "")).isdigit():
-        propuesta = get_object_or_404(FichaComercial.objects.select_related("ticket"), pk=request.POST["propuesta"])
-        if not elementos_de_la_propuesta(propuesta):
-            messages.error(request, "Esa propuesta no tiene equipos ni materiales para cotizar.")
+        ficha = get_object_or_404(FichaComercial.objects.select_related("ticket"), pk=request.POST["propuesta"])
+        if not elementos_del_informe(ficha):
+            messages.error(request, "El informe de ese ticket no pide materiales ni equipos.")
             return redirect("inventario:cotizaciones")
-    pedido = SolicitudCotizacion.objects.create(solicitud=solicitud, propuesta=propuesta, creado_por=request.user)
-    if propuesta:
-        for linea, tipo in elementos_de_la_propuesta(propuesta):
-            LineaSolicitudCotizacion.objects.create(solicitud=pedido, tipo=tipo, descripcion=linea.descripcion[:300],
-                                                    cantidad=linea.cantidad)
+    pedido = SolicitudCotizacion.objects.create(solicitud=solicitud, propuesta=ficha, creado_por=request.user)
+    if ficha:
+        for cantidad, descripcion, tipo in elementos_del_informe(ficha):
+            LineaSolicitudCotizacion.objects.create(solicitud=pedido, tipo=tipo, descripcion=descripcion[:300], cantidad=cantidad)
         from comercial.servicios import _seguimiento
-        _seguimiento(propuesta.ticket, request.user, f"Bodega pidió cotización a proveedores ({pedido.numero}) de los equipos "
-                                                     "y materiales de la propuesta.", interno=True)
+        _seguimiento(ficha.ticket, request.user, f"Bodega pidió cotización a proveedores ({pedido.numero}) de los materiales "
+                                                 "y equipos del informe, para armar la propuesta.", interno=True)
     if solicitud:
         for f in sol.faltantes(solicitud):
             LineaSolicitudCotizacion.objects.create(solicitud=pedido, item=f["item"], descripcion=f["item"].descripcion[:300],
                                                     cantidad=f["falta"])
         sol._nota(solicitud, request.user, f"bodega preparó la solicitud de cotización {pedido.numero}.")
     sugerir_proveedor(pedido.lineas.all())
+    sincronizar_proveedores(pedido)
     return redirect(pedido)
 
 
 @login_required
 @gestion_requerida
 def detalle(request, pk):
-    pedido = get_object_or_404(SolicitudCotizacion.objects.select_related("solicitud", "solicitud__ticket"), pk=pk)
+    pedido = get_object_or_404(SolicitudCotizacion.objects.select_related("solicitud", "solicitud__ticket",
+                                                                          "propuesta__ticket__empresa"), pk=pk)
     editable = pedido.estado == E.BORRADOR  # lo que ya se le mandó al proveedor no cambia
     form = SolicitudForm(request.POST or None, instance=pedido) if editable else None
     lineas = formset_lineas()(request.POST or None, instance=pedido, prefix="lineas") if editable else None
@@ -327,13 +353,14 @@ def detalle(request, pk):
                 form.save()
                 lineas.save()
                 sugerir_proveedor(lineas.new_objects)
+                sincronizar_proveedores(pedido)
                 if accion == "enviar":
-                    for proveedor_id in {l.proveedor_id for l in pedido.lineas.all() if l.proveedor_id}:
-                        CotizacionProveedor.objects.get_or_create(solicitud=pedido, proveedor_id=proveedor_id)
-                    faltan = [t for t, v in (("al menos un producto", pedido.lineas.exists()),
-                                             ("al menos un proveedor", pedido.cotizaciones.exists())) if not v]
-                    if faltan:
-                        messages.error(request, "Para enviarla falta " + " y ".join(faltan) + ".")
+                    sin_proveedor = [l.descripcion for l in pedido.lineas.all() if not l.proveedor_id]
+                    if not pedido.lineas.exists():
+                        messages.error(request, "Para enviarla falta al menos un elemento.")
+                        return redirect(pedido)
+                    if sin_proveedor:
+                        messages.error(request, "Elija el proveedor de: " + ", ".join(sin_proveedor) + " (en rojo).")
                         return redirect(pedido)
                     pedido.estado = E.ENVIADA
                     pedido.save(update_fields=["estado", "actualizado"])
@@ -341,13 +368,11 @@ def detalle(request, pk):
                         nombres = ", ".join(c.proveedor.razon_social for c in pedido.cotizaciones.select_related("proveedor"))
                         sol._nota(pedido.solicitud, request.user, f"solicitud de cotización {pedido.numero} enviada a {nombres}.")
             if accion == "enviar" and pedido.estado == E.ENVIADA:
-                enviados, sin_correo, sin_elementos = enviar_a_proveedores(pedido, request.user)
+                enviados, sin_correo = enviar_a_proveedores(pedido, request.user)
                 if enviados:
                     messages.success(request, f"{pedido.numero} enviada por correo a: {', '.join(enviados)}.")
                 if sin_correo:
-                    messages.warning(request, f"Sin correo; envíele el PDF por WhatsApp u otro medio a: {', '.join(sin_correo)}.")
-                if sin_elementos:
-                    messages.info(request, f"No se le envió nada a {', '.join(sin_elementos)}: todos los elementos tienen otro proveedor.")
+                    messages.warning(request, f"Sin correo; envíele su PDF por WhatsApp u otro medio a: {', '.join(sin_correo)}.")
             else:
                 messages.success(request, f"{pedido.numero} guardada.")
             return redirect(pedido)
@@ -355,39 +380,16 @@ def detalle(request, pk):
     recibidas, filas = comparacion(pedido)
     cotizaciones = list(pedido.cotizaciones.select_related("proveedor").prefetch_related("proveedor__asesores"))
     for c in cotizaciones:
-        c.whatsapp = enlace_whatsapp(c)
+        c.whatsapp, c.n_elementos = enlace_whatsapp(c), len(pedido.lineas_para(c.proveedor))
+    conocidos = LineaSolicitudCotizacion.objects.order_by("-pk").values_list("descripcion", flat=True)[:300]
     return render(request, "inventario/cotizacion.html", {
-        "conocidos": sorted({d for d in LineaSolicitudCotizacion.objects.order_by("-pk").values_list("descripcion", flat=True)[:300]}),
+        "conocidos": sorted(set(conocidos)),
         "pedido": pedido, "form": form, "lineas": lineas, "editable": editable, "recibidas": recibidas, "filas": filas,
         "cotizaciones": cotizaciones,
         "abierta": pedido.estado in (E.BORRADOR, E.ENVIADA),
-        "proveedores": Proveedor.objects.exclude(cotizaciones__solicitud=pedido).order_by("razon_social"),
+        # En rojo: lo que aún no tiene precio de referencia o proveedor que lo maneje
+        "sin_completar": sum(1 for l in pedido.lineas.all() if not (l.proveedor_id and l.precio_referencia)),
         "ordenes": OrdenCompra.objects.filter(cotizacion__solicitud=pedido).select_related("proveedor")})
-
-
-@login_required
-@gestion_requerida
-@require_POST
-def agregar_proveedor(request, pk):
-    pedido = get_object_or_404(SolicitudCotizacion, pk=pk)
-    proveedor = Proveedor.objects.filter(pk=request.POST.get("proveedor") or None).first()
-    if pedido.estado not in (E.BORRADOR, E.ENVIADA) or proveedor is None:
-        messages.error(request, "Elija un proveedor.")
-    else:
-        CotizacionProveedor.objects.get_or_create(solicitud=pedido, proveedor=proveedor)
-    return redirect(pedido)
-
-
-@login_required
-@gestion_requerida
-@require_POST
-def quitar_proveedor(request, pk, cot_pk):
-    cotizacion = get_object_or_404(CotizacionProveedor, pk=cot_pk, solicitud_id=pk)
-    if cotizacion.recibida_en:
-        messages.error(request, "Ese proveedor ya respondió: su cotización no se quita.")
-    else:
-        cotizacion.delete()
-    return redirect("inventario:cotizacion", pk)
 
 
 @login_required
@@ -405,7 +407,7 @@ def respuesta(request, pk, cot_pk):
         return redirect(pedido)
     inicial = {"fecha": cotizacion.fecha or timezone.localdate()}
     form = RespuestaForm(request.POST or None, request.FILES or None, instance=cotizacion, initial=inicial)
-    lineas = list(pedido.lineas.all())
+    lineas = pedido.lineas_para(cotizacion.proveedor)  # solo lo que se le preguntó a este proveedor
     if request.method == "POST":
         precios = _precios(request.POST, lineas)
         if precios is None:
@@ -443,16 +445,6 @@ def respuesta(request, pk, cot_pk):
 def pdf(request, pk, cot_pk):
     cotizacion = get_object_or_404(CotizacionProveedor.objects.select_related("proveedor", "solicitud"), pk=cot_pk, solicitud_id=pk)
     nombre, contenido = solicitud_cotizacion_pdf(cotizacion)
-    r = HttpResponse(contenido, content_type="application/pdf")
-    r["Content-Disposition"] = f'inline; filename="{nombre}"'
-    return r
-
-
-@login_required
-@gestion_requerida
-def pdf_general(request, pk):
-    """La solicitud completa en PDF, para enviarla por WhatsApp, Telegram u otro medio."""
-    nombre, contenido = solicitud_pdf(get_object_or_404(SolicitudCotizacion, pk=pk))
     r = HttpResponse(contenido, content_type="application/pdf")
     r["Content-Disposition"] = f'inline; filename="{nombre}"'
     return r

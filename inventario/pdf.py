@@ -1,4 +1,6 @@
-"""PDF del acta de entrega de materiales y equipos (bodega → técnico), con el formato de los PDF de la plataforma."""
+"""PDF de bodega: acta de entrega de materiales y equipos (bodega → técnico), solicitud de cotización (una por
+proveedor) y orden de compra, con el formato de los PDF de la plataforma."""
+import re
 from io import BytesIO
 
 from django.utils import timezone
@@ -124,10 +126,12 @@ def solicitud_cotizacion_pdf(cotizacion):
     return solicitud_pdf(cotizacion.solicitud, cotizacion.proveedor)
 
 
-def solicitud_pdf(pedido, pr=None):
-    """(nombre, bytes) de la solicitud de cotización. Con proveedor, solo sus elementos (los que tienen ese proveedor
-    o ninguno); sin proveedor, la solicitud completa, para enviarla por WhatsApp, Telegram u otro medio."""
-    lineas = pedido.lineas_para(pr) if pr else list(pedido.lineas.all())
+def solicitud_pdf(pedido, pr):
+    """(nombre, bytes) de la solicitud de cotización para un proveedor, solo con sus elementos.
+
+    Cada proveedor tiene la suya (cámara a uno y cable a otro = dos PDF), lista para el correo o para WhatsApp.
+    """
+    lineas = pedido.lineas_para(pr)
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=16 * mm, rightMargin=16 * mm, topMargin=14 * mm,
                             bottomMargin=16 * mm, title=f"Solicitud de cotización {pedido.numero}")
@@ -135,7 +139,7 @@ def solicitud_pdf(pedido, pr=None):
     datos = [
         [_p("Fecha", E_ETIQUETA), _p(timezone.localdate().strftime("%d/%m/%Y")),
          _p("Responder antes del", E_ETIQUETA), _p(pedido.fecha_limite.strftime("%d/%m/%Y") if pedido.fecha_limite else "Lo antes posible")],
-        [_p("Proveedor", E_ETIQUETA), _p(pr.razon_social if pr else "—"), _p("NIT", E_ETIQUETA), _p((pr.nit if pr else "") or "—")],
+        [_p("Proveedor", E_ETIQUETA), _p(pr.razon_social), _p("NIT", E_ETIQUETA), _p(pr.nit or "—")],
         [_p("Contacto", E_ETIQUETA), _p(_contacto_proveedor(pr)),
          _p("Entregar en", E_ETIQUETA), _p("Bodega JANOTEC · Carrera 40A N.º 16-21, Villavicencio")],
     ]
@@ -156,7 +160,8 @@ def solicitud_pdf(pedido, pr=None):
         historia += [Spacer(1, 8), _p("Observaciones: " + pedido.notas)]
     historia += [Spacer(1, 30), Table([["_" * 40], [_p("Bodega, inventario y logística · JANOTEC S.A.S.")]], colWidths=[ancho / 2])]
     doc.build(historia)
-    return f"Solicitud_de_cotizacion_{pedido.numero}.pdf", buf.getvalue()
+    proveedor = re.sub(r"[^A-Za-z0-9]+", "_", pr.razon_social).strip("_")[:40]
+    return f"Solicitud_de_cotizacion_{pedido.numero}_{proveedor}.pdf", buf.getvalue()
 
 
 def orden_compra_pdf(orden):

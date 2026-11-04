@@ -1,3 +1,14 @@
+"""Vistas del área comercial: del requerimiento a la propuesta aprobada y su traspaso a instalación.
+
+Orden de las secciones (sigue el camino de un requerimiento):
+    Bandeja ─ Radicar (asesor o cliente) ─ Detalle y gestión ─ Informe del requerimiento y levantamiento
+    ─ Traspaso a instalación ─ Devolver el levantamiento (desde técnica) ─ Respuesta del cliente
+    ─ Cotizador (dirección aprueba antes de enviar) ─ Catálogo de precios.
+
+El mismo ticket viaja entre áreas: comercial ⇄ técnica (levantamiento) y, aprobada la propuesta, a bodega e
+instalación. Las reglas de esos traspasos están en servicios.py; aquí solo se valida quién y cuándo.
+"""
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
@@ -27,6 +38,7 @@ TEXTOS_FICHA = ("contacto_cargo", "municipio", "direccion", "sistema_actual", "e
 
 
 def _errores(request, form):
+    """Pasa los errores de un formulario a mensajes en pantalla (uno por error)."""
     for errores in form.errors.values():
         for e in errores:
             messages.error(request, e)
@@ -36,6 +48,10 @@ def _errores(request, form):
 @login_required
 @comercial_requerido
 def bandeja(request):
+    """Bandeja comercial: los requerimientos por etapa, los que están en técnica, los míos y la búsqueda.
+
+    Arriba muestra el conteo por etapa y cuántas propuestas ya pasaron la fecha máxima que pidió el cliente.
+    """
     base = tickets_visibles(request.user).filter(ficha__isnull=False)
     vista = request.GET.get("vista", "comercial")
     if vista == "comercial":
@@ -69,6 +85,11 @@ def bandeja(request):
 @login_required
 @comercial_requerido
 def nuevo(request):
+    """El asesor radica un requerimiento (empresa existente o prospecto nuevo).
+
+    Si llega desde una oportunidad detectada por un técnico en un acta, el formulario se llena con sus datos y la
+    oportunidad pasa a «contactado».
+    """
     pk = request.GET.get("oportunidad") or request.POST.get("oportunidad")
     oportunidad = get_object_or_404(OportunidadComercial, pk=pk) if pk else None
     inicial = {}
@@ -116,6 +137,7 @@ def nuevo(request):
 @login_required
 @cliente_requerido
 def nuevo_cliente(request):
+    """El cliente pide una cotización desde su portal; queda radicada con el mismo número que seguirá todo el proceso."""
     if not request.user.empresa_id:
         messages.error(request, "Su usuario no está vinculado a una empresa. Contacte a JANOTEC.")
         return redirect("inicio")
@@ -143,6 +165,10 @@ def nuevo_cliente(request):
 @login_required
 @comercial_requerido
 def detalle(request, radicado):
+    """Ficha del requerimiento: historial, versiones de la propuesta, informe y, si está en comercial, la gestión.
+
+    Con la propuesta aprobada avisa si bodega aún tiene material por revisar antes del traspaso a instalación.
+    """
     ticket = obtener_ticket_comercial(request.user, radicado)
     ficha = ticket.ficha
     contexto = {
@@ -179,6 +205,7 @@ def ficha_descargar(request, radicado):
 
 
 def _en_comercial(request, ticket):
+    """True si el ticket está en el área comercial; si está en técnica, avisa y devuelve False."""
     if ticket.area != T.Area.COMERCIAL:
         messages.error(request, "La solicitud está en el área técnica; se gestiona allá hasta que vuelva a comercial.")
         return False
@@ -189,6 +216,11 @@ def _en_comercial(request, ticket):
 @comercial_requerido
 @require_POST
 def gestionar(request, radicado):
+    """Avanza la etapa de la propuesta, asigna asesor y valor, y registra respuestas o cambios del cliente.
+
+    Enviar a mano un PDF de propuesta también exige dirección: solo ella, o comercial con «Envío urgente» y motivo
+    (dirección recibe el aviso). Cada paso a «Propuesta enviada» crea una versión nueva y le llega al cliente.
+    """
     ticket = obtener_ticket_comercial(request.user, radicado)
     ficha = ticket.ficha
     if not _en_comercial(request, ticket):
@@ -282,6 +314,7 @@ def informe(request, radicado):
 @comercial_requerido
 @require_POST
 def solicitar_levantamiento(request, radicado):
+    """Comercial pide la visita técnica de levantamiento (qué revisar y la jornada): el ticket pasa a técnica."""
     ticket = obtener_ticket_comercial(request.user, radicado)
     if _en_comercial(request, ticket):
         if ticket.ficha.etapa not in (F.Etapa.GESTION, F.Etapa.ELABORANDO):
@@ -301,6 +334,7 @@ def solicitar_levantamiento(request, radicado):
 @comercial_requerido
 @require_POST
 def traspasar(request, radicado):
+    """Propuesta aprobada → área técnica para la instalación, cuando bodega ya revisó el material."""
     ticket = obtener_ticket_comercial(request.user, radicado)
     if _en_comercial(request, ticket):
         from inventario.solicitudes import pendiente_de_revision
@@ -321,6 +355,10 @@ def traspasar(request, radicado):
 @personal_requerido
 @require_POST
 def devolver(request, radicado):
+    """El técnico (o coordinación) devuelve el levantamiento a comercial con el informe del requerimiento.
+
+    Si hay borrador del informe de requerimientos, debe estar aprobado por dirección; su PDF queda como informe.
+    """
     ticket = obtener_ticket(request.user, radicado)
     ficha = getattr(ticket, "ficha", None)
     if not ficha or ficha.etapa != F.Etapa.LEVANTAMIENTO or ticket.area != T.Area.TECNICA:
@@ -354,6 +392,7 @@ def devolver(request, radicado):
 @cliente_requerido
 @require_POST
 def responder(request, radicado):
+    """El cliente responde la propuesta desde su solicitud: la aprueba, no la aprueba o pide cambios."""
     ticket = obtener_ticket(request.user, radicado)
     ficha = getattr(ticket, "ficha", None)
     if not ficha or ficha.etapa != F.Etapa.ENVIADA:
@@ -381,6 +420,12 @@ def responder(request, radicado):
 @login_required
 @comercial_requerido
 def cotizador(request, radicado):
+    """Cotizador: la propuesta se arma con el catálogo (descuento, IVA, margen) y sale en PDF con su código PE.
+
+    Comercial la envía a dirección; mientras está en revisión solo dirección la toca: la aprueba (sale al
+    cliente) o la devuelve con observaciones. Si es urgente, comercial la envía con un motivo y dirección recibe
+    el aviso. Acciones: guardar, informe (traer del informe), ver_pdf, a_direccion, devolver y enviar.
+    """
     from django.core.exceptions import ValidationError
 
     from . import cotizador as coti

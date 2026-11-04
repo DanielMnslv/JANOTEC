@@ -1,3 +1,10 @@
+"""Formularios del área comercial.
+
+Por temas: radicación (FichaForm del asesor, CotizacionClienteForm del portal del cliente), informe del
+requerimiento (InformeForm), gestión de la propuesta (GestionComercialForm) y, al final, cotizador y catálogo
+de precios (líneas, cotización e ítems del catálogo).
+"""
+
 from django import forms
 from django.db.models import Q
 from django.utils import timezone
@@ -17,6 +24,7 @@ FORMATO_FECHA_HORA = ["%Y-%m-%dT%H:%M"]
 
 
 def _opciones(choices, vacio="— Sin definir —"):
+    """Las opciones de un campo con una primera opción vacía («— Sin definir —»)."""
     return [("", vacio)] + list(choices)
 
 
@@ -24,21 +32,26 @@ class DiasNoDisponibleMixin:
     """Los mismos selectores por día de la radicación de tickets: cuándo NO puede atender."""
 
     def _agregar_dias(self):
+        """Agrega al formulario los selectores de los días y horas en que NO puede atender."""
         agregar_dias_no_disponible(self)
 
     def dias_no_disponible(self):
+        """Los selectores por día listos para dibujarlos en la plantilla."""
         return dias_para_plantilla(self)
 
     def no_disponible(self):
+        """Lo que se leyó al validar: los días y horas en que no puede atender."""
         return self._no_disponible
 
     def full_clean(self):
+        """Valida como siempre y, si quedó cleaned_data, lee los días no disponibles."""
         super().full_clean()
         if hasattr(self, "cleaned_data"):
             self._no_disponible = leer_no_disponible(self, self.cleaned_data)
 
 
 def _fecha_futura(valor):
+    """Valida que una fecha (opcional) no esté en el pasado."""
     if valor and valor < timezone.now():
         raise forms.ValidationError("La fecha debe ser futura.")
     return valor
@@ -128,9 +141,11 @@ class FichaForm(DiasNoDisponibleMixin, BootstrapMixin, forms.Form):
         return mapa
 
     def clean_fecha_max_propuesta(self):
+        """La fecha máxima para la propuesta, si se da, debe ser futura."""
         return _fecha_futura(self.cleaned_data.get("fecha_max_propuesta"))
 
     def clean(self):
+        """Resuelve la empresa escrita: si ya es cliente se usa; si no, queda como prospecto nuevo. Igual con la sede."""
         datos = super().clean()
         escrita = " ".join((datos.get("empresa_nombre") or "").split())
         if escrita and not datos.get("empresa") and not (datos.get("nueva_empresa") or "").strip():
@@ -209,9 +224,11 @@ class CotizacionClienteForm(DiasNoDisponibleMixin, BootstrapMixin, forms.Form):
         self._aplicar_estilos()
 
     def clean_fecha_max_propuesta(self):
+        """La fecha para la que necesita la propuesta, si la da, debe ser futura."""
         return _fecha_futura(self.cleaned_data.get("fecha_max_propuesta"))
 
     def clean(self):
+        """Resuelve la sede: por su id o por el nombre escrito (si no existe, se registra en su empresa)."""
         datos = super().clean()
         escrita = " ".join((datos.get("sede_nombre") or "").split())
         sede_id = str(self.data.get("sede", "")).strip()
@@ -250,6 +267,7 @@ class InformeForm(BootstrapMixin, forms.Form):
         self._aplicar_estilos()
 
     def clean(self):
+        """El informe debe traer qué cotizar: servicios, materiales y equipos, o ambos."""
         datos = super().clean()
         if not (datos.get("servicios") or "").strip() and not (datos.get("materiales") or "").strip():
             raise forms.ValidationError("Escriba los servicios a cotizar, los materiales y equipos a suministrar, o ambos.")
@@ -293,12 +311,16 @@ class GestionComercialForm(BootstrapMixin, forms.Form):
         self._aplicar_estilos()
 
     def clean_propuesta(self):
+        """La propuesta adjunta debe ser un PDF."""
         f = self.cleaned_data.get("propuesta")
         if f and not f.name.lower().endswith(".pdf"):
             raise forms.ValidationError("La propuesta debe ser un PDF.")
         return f
 
     def clean(self):
+        """Reglas de las etapas: sin informe no hay propuesta, enviarla exige el PDF, los cambios se
+        registran sobre una propuesta enviada y la no aprobada lleva el motivo.
+        """
         datos = super().clean()
         etapa, ficha = datos.get("etapa"), self.ficha
         cambia = ficha is not None and etapa != ficha.etapa
@@ -318,6 +340,7 @@ class GestionComercialForm(BootstrapMixin, forms.Form):
 
 # --- Cotizador y catálogo de precios ---------------------------------------------------
 class LineaCotizacionForm(BootstrapMixin, forms.ModelForm):
+    """Una línea del cotizador: descripción (con el catálogo sugerido), categoría, cantidad, costo, descuento e IVA."""
     class Meta:
         from .models import LineaCotizacion
         model = LineaCotizacion
@@ -341,6 +364,7 @@ class LineaCotizacionForm(BootstrapMixin, forms.ModelForm):
 
 
 def formset_lineas():
+    """El conjunto de líneas de una cotización (se agregan y se quitan desde el cotizador)."""
     from django.forms import inlineformset_factory
 
     from .models import Cotizacion, LineaCotizacion
@@ -348,6 +372,7 @@ def formset_lineas():
 
 
 class CotizacionForm(BootstrapMixin, forms.ModelForm):
+    """Los datos generales de la propuesta: alcance, condiciones, modalidad, margen y los del alquiler."""
     class Meta:
         from .models import Cotizacion
         model = Cotizacion
@@ -362,6 +387,7 @@ class CotizacionForm(BootstrapMixin, forms.ModelForm):
 
 
 class ItemCatalogoForm(BootstrapMixin, forms.ModelForm):
+    """Un ítem del catálogo de precios, con su imagen de referencia (sale en el informe de requerimientos)."""
     class Meta:
         from .models import ItemCatalogo
         model = ItemCatalogo

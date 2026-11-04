@@ -7,9 +7,14 @@
   <h1 class="h4 page-title mb-1">Solicitud de cotización</h1>
   <span class="badge text-bg-{{ pedido.color_estado }}">{{ pedido.get_estado_display }}</span>
   {% if pedido.solicitud %}<span class="small ms-2">Para <a href="{{ pedido.solicitud.get_absolute_url }}">{{ pedido.solicitud.numero }}</a> · {{ pedido.solicitud.ticket.radicado }} · {{ pedido.solicitud.ticket.empresa }}</span>{% endif %}
-  {% if pedido.propuesta %}<span class="small ms-2">De la propuesta de {{ pedido.propuesta.ticket.radicado }} · {{ pedido.propuesta.ticket.empresa }} <span class="text-muted-jn">(aún sin aprobar por el cliente)</span></span>{% endif %}
-  <a class="btn btn-sm btn-outline-primary ms-2" href="{% url 'inventario:cotizacion_pdf_general' pedido.pk %}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> PDF de la solicitud</a>
 </div>
+{% if pedido.propuesta %}{% with t=pedido.propuesta.ticket %}
+<div class="alert alert-info small d-flex flex-wrap gap-2 align-items-center">
+  <i class="bi bi-ticket-detailed"></i>
+  <span>Para armar la propuesta del ticket <span class="radicado">{% if user.ve_comercial %}<a href="{{ pedido.propuesta.get_absolute_url }}">{{ t.radicado }}</a>{% else %}{{ t.radicado }}{% endif %}</span>
+    · {{ t.empresa }}{% if t.sede %} · {{ t.sede }}{% endif %} · {{ t.asunto }}. Los elementos salen de su informe del requerimiento.</span>
+</div>
+{% endwith %}{% endif %}
 <div class="row g-4">
   <div class="col-lg-4">
     <div class="card mb-4">
@@ -19,6 +24,7 @@
           <li class="list-group-item">
             <div class="d-flex justify-content-between gap-2">
               <div><a class="fw-semibold" href="{% url 'inventario:proveedor' c.proveedor.pk %}">{{ c.proveedor }}</a>
+                <span class="text-muted-jn">· {{ c.n_elementos }} elemento{{ c.n_elementos|pluralize }}</span>
                 {% with a=c.proveedor.asesor %}{% if a %}<div class="text-muted-jn">{{ a.nombre }}{% if a.celular %} · {{ a.celular }}{% endif %}</div>{% endif %}{% endwith %}</div>
               {% if c.recibida_en %}<span class="badge text-bg-success align-self-start">Respondió</span>{% elif pedido.estado == 'enviada' %}<span class="badge text-bg-warning align-self-start">Sin respuesta</span>{% endif %}
             </div>
@@ -26,15 +32,11 @@
               <a class="btn btn-sm btn-outline-primary py-0" href="{% url 'inventario:cotizacion_pdf' pedido.pk c.pk %}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
               {% if c.whatsapp %}<a class="btn btn-sm btn-outline-success py-0" href="{{ c.whatsapp }}" target="_blank" rel="noopener" title="Abre el chat con el mensaje listo; adjunte el PDF"><i class="bi bi-whatsapp"></i> WhatsApp</a>{% endif %}
               {% if pedido.estado != 'borrador' %}<a class="btn btn-sm btn-light border py-0" href="{% url 'inventario:cotizacion_respuesta' pedido.pk c.pk %}">{% if c.recibida_en %}Ver cotización{% else %}Registrar cotización{% endif %}</a>{% endif %}
-              {% if abierta and not c.recibida_en %}<form method="post" action="{% url 'inventario:cotizacion_quitar' pedido.pk c.pk %}">{% csrf_token %}<button class="btn btn-sm btn-light border py-0" aria-label="Quitar a {{ c.proveedor }}"><i class="bi bi-x-lg"></i></button></form>{% endif %}
             </div>
           </li>
-        {% empty %}<li class="list-group-item text-muted-jn">Aún no ha elegido proveedores.</li>{% endfor %}
+        {% empty %}<li class="list-group-item text-muted-jn">Elija en cada fila el proveedor que maneja el elemento.</li>{% endfor %}
       </ul>
-      {% if abierta %}<form method="post" action="{% url 'inventario:cotizacion_proveedor' pedido.pk %}" class="card-footer d-flex gap-2">{% csrf_token %}
-        <select name="proveedor" class="form-select form-select-sm" aria-label="Proveedor" required><option value="">— Elija el proveedor —</option>{% for p in proveedores %}<option value="{{ p.pk }}">{{ p.razon_social }}</option>{% endfor %}</select>
-        <button class="btn btn-sm btn-accent text-nowrap flex-shrink-0"><i class="bi bi-plus-lg"></i> Agregar</button>
-      </form>{% endif %}
+      <div class="card-footer small text-muted-jn">Salen de la columna «Proveedor que lo maneja»: a cada uno se le genera su PDF solo con sus elementos.</div>
     </div>
     {% if ordenes %}<div class="card mb-4"><div class="card-header"><i class="bi bi-receipt"></i> Órdenes de compra</div>
       <ul class="list-group list-group-flush small">{% for o in ordenes %}<li class="list-group-item d-flex justify-content-between gap-2"><span><a href="{{ o.get_absolute_url }}">{{ o.numero }}</a> · {{ o.proveedor }}</span><span class="badge text-bg-{{ o.color_estado }} align-self-start">{{ o.get_estado_display }}</span></li>{% endfor %}</ul>
@@ -50,7 +52,7 @@
             {% if pedido.solicitud or pedido.propuesta %}<th style="width:6.5rem">{% if pedido.propuesta %}Para la propuesta{% else %}Para el ticket{% endif %}</th><th style="width:6.5rem">Adicional para bodega</th>{% else %}<th style="width:6.5rem">Cantidad</th>{% endif %}
             <th style="min-width:11rem">Proveedor que lo maneja</th><th style="min-width:8.5rem">Último precio</th>
             <th style="width:4rem">Quitar</th></tr></thead>
-          <tbody>{% for f in lineas %}<tr>{{ f.id }}
+          <tbody>{% for f in lineas %}<tr class="{% if f.instance.pk and not f.instance.proveedor_id or f.instance.pk and not f.instance.precio_referencia %}table-danger{% endif %}">{{ f.id }}
             <td>{{ f.tipo }}</td>
             <td>{{ f.descripcion }}{% for e in f.descripcion.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</td>
             {% if pedido.solicitud or pedido.propuesta %}<td>{{ f.cantidad }}</td>{% else %}<td class="d-none">{{ f.cantidad }}</td>{% endif %}
@@ -60,7 +62,8 @@
             <td class="text-center">{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td></tr>{% endfor %}</tbody>
         </table></div>
         <datalist id="elementos-conocidos">{% for d in conocidos %}<option value="{{ d }}">{% endfor %}</datalist>
-        <div class="card-body border-top small text-muted-jn py-2"><i class="bi bi-info-circle"></i> El proveedor y el último precio se sugieren solos con lo que ya se le compró o cotizó a cada uno; el precio es solo de referencia para bodega y no sale en el PDF. Si deja «A todos», ese elemento se le pregunta a cada proveedor de la lista.</div>
+        <div class="card-body border-top small py-2">{% if sin_completar %}<div class="text-danger fw-semibold mb-1"><i class="bi bi-exclamation-triangle"></i> {{ sin_completar }} elemento{{ sin_completar|pluralize }} en rojo: falta el precio o el proveedor que lo maneja.</div>{% endif %}
+          <span class="text-muted-jn"><i class="bi bi-info-circle"></i> El proveedor y el precio se llenan solos con lo que ya se le compró o cotizó a cada uno o, si no, con el catálogo de precios. El precio es de referencia para armar la propuesta y no sale en el PDF del proveedor. Cada elemento va a un solo proveedor.</span></div>
         <div class="card-body border-top row g-3">
           <div class="col-md-4">{% include "tickets/_campo.html" with campo=form.fecha_limite %}</div>
           <div class="col-md-8">{% include "tickets/_campo.html" with campo=form.notas %}</div>

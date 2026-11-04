@@ -49,6 +49,7 @@ def borrador(ficha):
 
 
 def _palabras(texto):
+    """Las palabras que cuentan para comparar con el catálogo."""
     # Las medidas cuentan («15 m» no es «10 m»); las palabras cortas («de», «en») no
     return {p for p in re.findall(r"[a-záéíóúñ0-9]+", texto.lower()) if len(p) > 2 or p.isdigit()}
 
@@ -67,6 +68,21 @@ def _buscar_en_catalogo(texto):
     return mejor if puntaje[0] >= 2 else None
 
 
+def leer_linea(texto):
+    """(cantidad, descripción) de una línea del informe: «4 Cámara IP», «120 m Cable UTP»; sin número, cantidad 1."""
+    texto = texto.strip(" -•*\t")
+    m = re.match(r"^(\d+(?:[.,]\d+)?)\s*(?:m\b|und\b|unidades?\b)?\s*(.+)$", texto, re.I)
+    return (Decimal(m.group(1).replace(",", ".")), m.group(2).strip()) if m else (Decimal(1), texto)
+
+
+def materiales_del_informe(ficha):
+    """Los materiales y equipos del informe del requerimiento: [(cantidad, descripción)] (sin los servicios)."""
+    informe = getattr(ficha, "informe", None) if ficha.informe_listo else None
+    if informe is None:
+        return []
+    return [leer_linea(l) for l in informe.materiales.splitlines() if l.strip(" -•*\t")]
+
+
 def traer_del_informe(cotizacion):
     """Agrega como ítems los servicios y los materiales y equipos del informe (con precio si están en el catálogo)."""
     ficha = cotizacion.ficha
@@ -76,11 +92,9 @@ def traer_del_informe(cotizacion):
     orden = cotizacion.lineas.count()
     informe = ficha.informe
     for linea in (informe.servicios + "\n" + informe.materiales).splitlines():
-        linea = linea.strip(" -•*\t")
-        if not linea:
+        if not linea.strip(" -•*\t"):
             continue
-        m = re.match(r"^(\d+(?:[.,]\d+)?)\s*(?:m\b|und\b|unidades?\b)?\s*(.+)$", linea, re.I)
-        cantidad, descripcion = (Decimal(m.group(1).replace(",", ".")), m.group(2).strip()) if m else (Decimal(1), linea)
+        cantidad, descripcion = leer_linea(linea)
         item = _buscar_en_catalogo(descripcion)
         orden += 1
         LineaCotizacion.objects.create(

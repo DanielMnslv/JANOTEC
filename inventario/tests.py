@@ -1223,13 +1223,13 @@ class CotizacionesTests(BaseInventario):
         from .models import OrdenCompra
         s, p = self.preparar()
         self.assertEqual([(l.descripcion, l.cantidad) for l in p.lineas.all()], [("Cable UTP", 95)])
-        self.assertContains(self.client.post(p.get_absolute_url(), self.envio(p), follow=True), "falta al menos un proveedor")
-        for x in (self.a, self.b):
-            self.client.post(reverse("inventario:cotizacion_proveedor", args=[p.pk]), {"proveedor": x.pk})
-        self.client.post(p.get_absolute_url(), self.envio(p))
+        # Cada elemento va a un proveedor: sin elegirlo no se envía
+        self.assertContains(self.client.post(p.get_absolute_url(), self.envio(p), follow=True), "Elija el proveedor de: Cable UTP")
+        self.client.post(p.get_absolute_url(), {**self.envio(p), "lineas-0-proveedor": self.a.pk})
         p.refresh_from_db()
         self.assertEqual(p.estado, "enviada")
-        a, b = p.cotizaciones.all()
+        a = p.cotizaciones.get()  # el proveedor sale de la línea
+        self.assertEqual(a.proveedor, self.a)
         self.assertEqual(self.client.get(reverse("inventario:cotizacion_pdf", args=[p.pk, a.pk]))["Content-Type"], "application/pdf")
         # Sin respuesta del proveedor no hay de dónde sacar la orden
         self.client.post(reverse("inventario:cotizacion_ordenar", args=[p.pk, a.pk]))
@@ -1238,21 +1238,19 @@ class CotizacionesTests(BaseInventario):
         for malo in ("abc", "NaN", "Infinity", "-5", "0"):
             self.assertContains(self.responder(a, **{f"valor_{linea.pk}": malo, f"iva_{linea.pk}": "19"}), "Revise los precios")
         self.assertContains(self.responder(a), "al menos un producto")
-        self.responder(a, **{f"valor_{linea.pk}": "1000", f"iva_{linea.pk}": "19"})
-        self.responder(b, **{f"valor_{linea.pk}": "900", f"iva_{linea.pk}": "19"})
-        self.assertContains(self.client.get(p.get_absolute_url()), "el más barato")
-        self.client.post(reverse("inventario:cotizacion_ordenar", args=[p.pk, b.pk]))
+        self.responder(a, **{f"valor_{linea.pk}": "900", f"iva_{linea.pk}": "19"})
+        self.client.post(reverse("inventario:cotizacion_ordenar", args=[p.pk, a.pk]))
         orden = OrdenCompra.objects.get()
         self.assertEqual((orden.proveedor, orden.estado, orden.cotizacion, orden.solicitud, str(orden.fecha_estimada), orden.notas),
-                         (self.b, "borrador", b, s, "2026-11-05", "Pago a 30 días"))
+                         (self.a, "borrador", a, s, "2026-11-05", "Pago a 30 días"))
         self.assertEqual([(l.cantidad, l.valor_unitario, l.item_id) for l in orden.lineas.all()], [(95, 900, linea.item_id)])
         p.refresh_from_db()
         self.assertEqual(p.estado, "cerrada")
-        # Doble clic u otra cotización: no sale una segunda orden, ni se cambia la cotización ya ordenada
+        # Doble clic: no sale una segunda orden, ni se cambia la cotización ya ordenada
         self.client.post(reverse("inventario:cotizacion_ordenar", args=[p.pk, a.pk]))
         self.assertEqual(OrdenCompra.objects.count(), 1)
-        self.responder(b, **{f"valor_{linea.pk}": "1", f"iva_{linea.pk}": "19"})
-        self.assertEqual(b.precios.get().valor_unitario, 900)
+        self.responder(a, **{f"valor_{linea.pk}": "1", f"iva_{linea.pk}": "19"})
+        self.assertEqual(a.precios.get().valor_unitario, 900)
         # Si se cancela la orden, se puede volver a elegir
         self.client.post(orden.get_absolute_url(), {"accion": "cancelar"})
         p.refresh_from_db()
@@ -1309,42 +1307,42 @@ class CotizacionesTests(BaseInventario):
         self.assertEqual(p.estado, "cerrada")
         self.assertEqual([l.descripcion for l in OrdenCompra.objects.get(proveedor=self.a).lineas.all()], ["Canaleta"])
 
-    def test_lo_ya_respondido_no_se_quita_y_solo_entra_bodega(self):
+    def test_solo_bodega_entra_a_las_cotizaciones(self):
         from .models import CotizacionProveedor
         s, p = self.preparar()
         c = CotizacionProveedor.objects.create(solicitud=p, proveedor=self.a)
-        p.estado = "enviada"
-        p.save()
-        linea = p.lineas.get()
-        self.responder(c, **{f"valor_{linea.pk}": "1000", f"iva_{linea.pk}": "19"})
-        self.client.post(reverse("inventario:cotizacion_quitar", args=[p.pk, c.pk]))
-        self.assertTrue(CotizacionProveedor.objects.filter(pk=c.pk).exists())
         self.client.force_login(self.agente)
         self.assertEqual(self.client.get(reverse("inventario:cotizaciones")).status_code, 403)
         self.assertEqual(self.client.get(reverse("inventario:cotizacion_pdf", args=[p.pk, c.pk])).status_code, 403)
 
-    def test_bodega_cotiza_los_elementos_de_la_propuesta_sin_aprobar(self):
-        from comercial.models import Cotizacion, FichaComercial, LineaCotizacion
+    def test_trae_del_informe_del_ticket_y_marca_en_rojo_lo_que_falta(self):
+        from decimal import Decimal
+
+        from comercial.models import FichaComercial, InformeRequerimiento, ItemCatalogo
         from .models import SolicitudCotizacion
-        ficha = FichaComercial.objects.create(ticket=self.ticket, etapa="enviada")
-        cot = Cotizacion.objects.create(ficha=ficha, margen=30)
-        for desc, cat, cant in (("Cámara IP 4 MP", "equipos", 4), ("Cable UTP cat 6", "accesorios", 120),
-                                ("Instalación y configuración", "mano_obra", 1)):
-            LineaCotizacion.objects.create(cotizacion=cot, descripcion=desc, categoria=cat, cantidad=cant, valor_unitario=1000)
+        ficha = FichaComercial.objects.create(ticket=self.ticket, etapa="elaborando")
+        InformeRequerimiento.objects.create(ficha=ficha, necesidad="Cámaras en el parqueadero", servicios="1 Instalación",
+                                            materiales="4 Cámara IP 4 MP bala\n120 m Cable UTP cat 6\n1 Switch PoE 8 puertos")
+        ItemCatalogo.objects.create(descripcion="Cable UTP cat 6 exterior", valor_unitario=Decimal("1500"))
         self.client.force_login(self.bodega)
         r = self.client.get(reverse("inventario:cotizaciones"))
         self.assertContains(r, self.ticket.radicado)
         self.assertContains(r, "Pedir cotización a proveedores")
         self.client.post(reverse("inventario:cotizacion_nueva"), {"propuesta": ficha.pk})
         p = SolicitudCotizacion.objects.get()
-        # Equipos y materiales con su cantidad; la mano de obra no se le cotiza a un proveedor
+        # Lo que pide el informe (sin los servicios), con su cantidad y si es equipo o material
         self.assertEqual([(l.tipo, l.descripcion, l.cantidad) for l in p.lineas.all()],
-                         [("equipo", "Cámara IP 4 MP", 4), ("material", "Cable UTP cat 6", 120)])
-        self.assertEqual(p.propuesta, ficha)
+                         [("equipo", "Cámara IP 4 MP bala", 4), ("material", "Cable UTP cat 6", 120),
+                          ("equipo", "Switch PoE 8 puertos", 1)])
+        # El cable trae el precio del catálogo; lo que no tiene precio ni proveedor sale en rojo
+        self.assertEqual([l.precio_referencia for l in p.lineas.all()], [None, Decimal("1500"), None])
         self.assertTrue(self.ticket.seguimientos.filter(interno=True, mensaje__contains=p.numero).exists())
-        self.assertContains(self.client.get(p.get_absolute_url()), "Para la propuesta")
+        r = self.client.get(p.get_absolute_url())
+        self.assertContains(r, "Para armar la propuesta del ticket")
+        self.assertContains(r, "table-danger", count=3)
+        self.assertContains(r, "3 elementos en rojo")
 
-    def test_proveedor_sugerido_correo_con_su_pdf_y_whatsapp(self):
+    def test_un_pdf_y_un_correo_por_proveedor_solo_con_lo_suyo(self):
         from django.core import mail
 
         from .models import AsesorProveedor, LineaOrdenCompra, LineaSolicitudCotizacion, OrdenCompra, Proveedor
@@ -1357,21 +1355,22 @@ class CotizacionesTests(BaseInventario):
         self.assertEqual((cable.proveedor, cable.precio_referencia), (habitual, 1000))
         AsesorProveedor.objects.create(proveedor=self.b, nombre="Laura", celular="300 111 2233")
         datos = {**self.envio(p), "lineas-0-tipo": "material", "lineas-0-proveedor": habitual.pk, "lineas-0-precio_referencia": "1000"}
-        canaleta = LineaSolicitudCotizacion.objects.create(solicitud=p, descripcion="Canaleta", adicional=10)  # va a todos
-        self.client.post(reverse("inventario:cotizacion_proveedor", args=[p.pk]), {"proveedor": self.b.pk})
+        # Cámara y canaleta a B, cable al habitual: dos solicitudes, cada una con lo suyo
+        camara = LineaSolicitudCotizacion.objects.create(solicitud=p, tipo="equipo", descripcion="Cámara bala", adicional=2,
+                                                         proveedor=self.b)
+        canaleta = LineaSolicitudCotizacion.objects.create(solicitud=p, descripcion="Canaleta", adicional=10, proveedor=self.b)
         mail.outbox.clear()
         r = self.client.post(p.get_absolute_url(), datos, follow=True)
-        # El habitual entra solo (por su línea) y le llega el correo con su PDF; B no tiene correo: se avisa
         self.assertEqual(set(p.cotizaciones.values_list("proveedor__razon_social", flat=True)), {"PROVEEDOR HABITUAL", "PROVEEDOR B"})
+        self.assertEqual(p.lineas_para(habitual), [cable])
+        self.assertEqual(p.lineas_para(self.b), [camara, canaleta])
+        # Al habitual le llega su PDF por correo; B no tiene correo: se avisa y queda su WhatsApp
         self.assertEqual([m.to for m in mail.outbox], [["ventas@habitual.test"]])
-        self.assertTrue(mail.outbox[0].attachments[0][0].endswith(".pdf"))
+        self.assertEqual(mail.outbox[0].attachments[0][0], f"Solicitud_de_cotizacion_{p.numero}_PROVEEDOR_HABITUAL.pdf")
         self.assertContains(r, "Sin correo")
         self.assertContains(r, "https://wa.me/573001112233")
-        # Cada proveedor ve lo suyo y lo que va a todos; el PDF general trae todo
-        self.assertEqual(p.lineas_para(self.b), [canaleta])
-        self.assertEqual(p.lineas_para(habitual), [cable, canaleta])
-        self.assertEqual(self.client.get(reverse("inventario:cotizacion_pdf_general", args=[p.pk]))["Content-Type"], "application/pdf")
-
+        b = p.cotizaciones.get(proveedor=self.b)
+        self.assertEqual(self.client.get(reverse("inventario:cotizacion_pdf", args=[p.pk, b.pk]))["Content-Type"], "application/pdf")
 
 class OrdenesDeCompraTests(BaseInventario):
     """Bodega compra: la orden lleva proveedor, costo y fecha estimada, y coordinación ve cuándo llega."""

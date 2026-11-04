@@ -515,8 +515,14 @@ class SolicitudCotizacion(models.Model):
         return {"borrador": "secondary", "enviada": "warning", "cerrada": "success", "cancelada": "dark"}[self.estado]
 
     def lineas_para(self, proveedor):
-        """Lo que se le pregunta a un proveedor: las líneas que son suyas y las que no tienen proveedor (van a todos)."""
-        return [l for l in self.lineas.all() if l.proveedor_id in (None, proveedor.pk)]
+        """Lo que se le pregunta a un proveedor: solo las líneas en las que se eligió a ese proveedor.
+
+        Las solicitudes anteriores al proveedor por línea (ninguna línea lo tiene) se le preguntaban completas a todos.
+        """
+        lineas = list(self.lineas.all())
+        if not any(l.proveedor_id for l in lineas):
+            return lineas
+        return [l for l in lineas if l.proveedor_id == proveedor.pk]
 
     def por_ordenar(self):
         """Las líneas que aún no están en una orden de compra vigente."""

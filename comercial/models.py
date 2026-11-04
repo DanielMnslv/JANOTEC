@@ -22,7 +22,13 @@ from tickets.models import OportunidadComercial, Ticket
 
 
 class FichaComercial(models.Model):
+    """La ficha del requerimiento comercial: va pegada al ticket y lo acompaña de principio a fin.
+
+    Guarda lo que necesita el cliente (contacto, sitio, servicios, presupuesto), la etapa de la propuesta y el
+    asesor. El mismo ticket pasa a técnica para el levantamiento y, aprobada la propuesta, a bodega e instalación.
+    """
     class Etapa(models.TextChoices):
+        """Etapas de la propuesta, de la gestión inicial a la instalación (o rechazo / cancelación)."""
         GESTION = "gestion", "En gestión comercial"
         LEVANTAMIENTO = "levantamiento", "Visita técnica de levantamiento"
         ELABORANDO = "elaborando", "Elaborando propuesta"
@@ -34,16 +40,19 @@ class FichaComercial(models.Model):
         CANCELADA = "cancelada", "Cancelada"
 
     class Origen(models.TextChoices):
+        """De dónde salió el requerimiento: el asesor, el portal del cliente o una oportunidad del técnico."""
         COMERCIAL = "comercial", "Asesor comercial"
         CLIENTE = "cliente", "Portal del cliente"
         OPORTUNIDAD = "oportunidad", "Oportunidad detectada por un técnico"
 
     class SiNo(models.TextChoices):
+        """Respuesta de sí / no / no sabe para las preguntas del sitio (energía, internet…)."""
         SI = "si", "Sí"
         NO = "no", "No"
         NO_SABE = "no_sabe", "No sabe"
 
     class NivelDecision(models.TextChoices):
+        """Qué tanto decide el contacto sobre la compra."""
         DECIDE = "decide", "Decide (aprueba la compra)"
         INFLUYE = "influye", "Influye en la decisión"
         USUARIO = "usuario", "Usuario / informa"
@@ -98,24 +107,29 @@ class FichaComercial(models.Model):
         return f"Ficha comercial · {self.ticket.radicado}"
 
     def get_absolute_url(self):
+        """La ficha en el área comercial."""
         return reverse("comercial:detalle", args=[self.ticket.radicado])
 
     @property
     def abierta(self):
+        """True mientras la propuesta sigue en curso (no rechazada, cancelada ni traspasada)."""
         return self.etapa in self.ETAPAS_ABIERTAS
 
     @property
     def servicios_display(self):
+        """Los servicios de interés con su nombre para mostrar."""
         nombres = dict(OportunidadComercial.SERVICIOS)
         return [nombres.get(s, s) for s in self.servicios]
 
     @property
     def color_etapa(self):
+        """Color del distintivo de la etapa (clases de Bootstrap)."""
         return {"gestion": "secondary", "levantamiento": "info", "elaborando": "primary", "enviada": "warning",
                 "ajustes": "primary", "aprobada": "success", "rechazada": "danger", "instalacion": "dark", "cancelada": "dark"}[self.etapa]
 
     @property
     def propuesta_vencida(self):
+        """True si pasó la fecha máxima que pidió el cliente y la propuesta aún no se ha enviado."""
         from django.utils import timezone
 
         return bool(self.fecha_max_propuesta and self.etapa in (self.Etapa.GESTION, self.Etapa.LEVANTAMIENTO,
@@ -133,6 +147,7 @@ class FichaComercial(models.Model):
 
     @property
     def informe_listo(self):
+        """True si ya se registró el informe del requerimiento (la base de la propuesta)."""
         return InformeRequerimiento.objects.filter(ficha=self).exists()
 
     @property
@@ -173,6 +188,7 @@ class PropuestaVersion(models.Model):
     """Cada propuesta enviada al cliente. Si pide cambios (otra marca, otro alcance) se envía una versión nueva."""
 
     class Estado(models.TextChoices):
+        """Qué respondió el cliente a esta versión."""
         ENVIADA = "enviada", "Enviada, esperando respuesta"
         CAMBIOS = "cambios", "El cliente pidió cambios"
         APROBADA = "aprobada", "Aprobada"
@@ -202,6 +218,7 @@ class PropuestaVersion(models.Model):
 
     @property
     def color(self):
+        """Color del distintivo del estado (clases de Bootstrap)."""
         return {"enviada": "warning", "cambios": "primary", "aprobada": "success", "rechazada": "danger"}[self.estado]
 
 
@@ -227,6 +244,7 @@ class ItemCatalogo(models.Model):
     """Precio de referencia de un material, equipo o servicio, para armar propuestas sin volver a digitarlo."""
 
     class Tipo(models.TextChoices):
+        """Material o equipo (va a bodega) o servicio / mano de obra (solo se cotiza)."""
         MATERIAL = "material", "Material o equipo"
         SERVICIO = "servicio", "Servicio / mano de obra"
 
@@ -256,6 +274,7 @@ class Cotizacion(models.Model):
     """Los ítems de una versión de la propuesta. Mientras no se envía es un borrador; al enviarse queda fija."""
 
     class Modalidad(models.TextChoices):
+        """Forma de cobro de la propuesta: venta, alquiler o híbrido."""
         VENTA = "venta", "Venta (pago único)"
         ALQUILER = "alquiler", "Alquiler (mano de obra sumada al canon)"
         HIBRIDO = "hibrido", "Híbrido (alquiler de equipos y venta de mano de obra)"
@@ -303,17 +322,21 @@ class Cotizacion(models.Model):
 
     @property
     def es_alquiler(self):
+        """True si se cobra con canon mensual (alquiler o híbrido)."""
         return self.modalidad in (self.Modalidad.ALQUILER, self.Modalidad.HIBRIDO)
 
     @property
     def mano_obra_en_canon(self):
+        """True si la mano de obra va sumada al canon (solo en alquiler puro)."""
         return self.modalidad == self.Modalidad.ALQUILER
 
     @property
     def enviada(self):
+        """True si ya salió como versión de la propuesta (queda fija)."""
         return self.version_id is not None
 
     def totales(self):
+        """Bruto, descuento, base, IVA, total y ahorro de todas las líneas (ya con el margen)."""
         from decimal import Decimal
         t = {"bruto": Decimal(0), "descuento": Decimal(0), "base": Decimal(0), "iva": Decimal(0), "total": Decimal(0),
              "ahorro": Decimal(0)}
@@ -323,6 +346,7 @@ class Cotizacion(models.Model):
         return t
 
     def lista_plazos(self):
+        """Los plazos del alquiler en meses, ordenados y sin repetir (de 1 a 120)."""
         return sorted({int(p) for p in re.findall(r"\d+", self.plazos) if 0 < int(p) <= 120})
 
     def canones(self):
@@ -356,7 +380,9 @@ class Cotizacion(models.Model):
 
 
 class LineaCotizacion(models.Model):
+    """Un ítem de la cotización. Guarda el costo; el precio al cliente sale del costo con el margen."""
     class Categoria(models.TextChoices):
+        """Grupo con el que la línea sale en el PDF de la propuesta (y que define si es mano de obra)."""
         EQUIPOS = "equipos", "Equipos"
         ENERGIA = "energia", "Energía"
         LICENCIAS = "licencias", "Licencias"
@@ -391,6 +417,7 @@ class LineaCotizacion(models.Model):
 
     @property
     def categoria_final(self):
+        """La categoría elegida o, si quedó en «Automática», la que sugieren las palabras de la descripción."""
         if self.categoria:
             return self.categoria
         texto = self.descripcion.lower()
@@ -400,6 +427,7 @@ class LineaCotizacion(models.Model):
         return self.Categoria.EQUIPOS
 
     def _precio_exacto(self):
+        """Precio sin redondear: costo ÷ (1 − margen). Sin margen válido, el valor tal cual."""
         margen = self.cotizacion.margen
         if not margen or margen >= 100:  # Fuera de rango llega solo mientras el formulario muestra el error
             return self.valor_unitario  # Las propuestas anteriores al margen conservan sus valores
@@ -455,6 +483,7 @@ Lo que el cliente paga cada mes por el monitoreo de una sede (contrato de monito
 
     @property
     def total_mensual(self):
+        """Lo que se factura al mes: valor unitario por cantidad."""
         return self.valor_mensual * self.cantidad
 
 
