@@ -5,6 +5,8 @@
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mt-2 mb-3">
   <div>
     <h1 class="h3 page-title mb-1">Propuesta económica · {{ codigo }}</h1>
+    {% with f=cotizacion.ficha %}{% if f.prioritaria %}<div class="text-danger small fw-semibold"><i class="bi bi-lightning-charge-fill"></i>
+      Prioritaria ({{ f.motivos_prioridad|join:", " }}){% if f.fecha_max_propuesta %} · el cliente la necesita antes del {{ f.fecha_max_propuesta|date:"d/m/Y h:i a" }} ({{ f.tiempo_restante }}){% endif %}</div>{% endif %}{% endwith %}
     <p class="text-muted-jn mb-0">{{ ticket.empresa.razon_social }}{% if ticket.sede %} · {{ ticket.sede }}{% endif %} · versión {{ numero }}</p>
   </div>
   <a class="btn btn-sm btn-outline-secondary" href="{% url 'comercial:catalogo' %}" target="_blank" rel="noopener"><i class="bi bi-tags"></i> Catálogo de precios</a>

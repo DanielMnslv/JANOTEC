@@ -11,6 +11,7 @@ El ticket (app «tickets») guarda lo común: contacto, días en que no puede at
 historial y adjuntos. Aquí va lo propio de la venta.
 """
 import re
+from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
@@ -87,6 +88,11 @@ class FichaComercial(models.Model):
     presupuesto = models.CharField("presupuesto / tiempos mencionados", max_length=200, blank=True)
     observaciones = models.TextField("observaciones (interno comercial)", blank=True)
     fecha_max_propuesta = models.DateTimeField("fecha máxima para la propuesta", null=True, blank=True)
+    # Cuándo quiere el cliente la primera visita técnica (la jornada va en el ticket). Sin fecha y sin «sin_visita»:
+    # requerimiento anterior a este dato.
+    fecha_primera_visita = models.DateField("fecha en que el cliente quiere la primera visita técnica", null=True, blank=True)
+    sin_visita = models.BooleanField("no necesita visita técnica", default=False,
+                                     help_text="Se cotiza con lo que informó el cliente, sin ir al sitio.")
     # Lo que devuelve el área técnica tras el levantamiento
     levantamiento = models.TextField("resultado del levantamiento técnico", blank=True)
     # Propuesta económica
@@ -138,6 +144,61 @@ class FichaComercial(models.Model):
         return bool(self.fecha_max_propuesta and self.etapa in (self.Etapa.GESTION, self.Etapa.LEVANTAMIENTO,
                                                                 self.Etapa.ELABORANDO, self.Etapa.AJUSTES)
                     and self.fecha_max_propuesta < timezone.now())
+
+    # --- Prioridad de la propuesta ---------------------------------------------------------------
+    DIAS_PRIORIDAD = 2  # propuesta pedida para dentro de 2 días o menos: prioritaria
+
+    @property
+    def por_entregar_propuesta(self):
+        """True mientras la propuesta no se ha enviado al cliente (en gestión, levantamiento, armándola o ajustándola)."""
+        return self.etapa in (self.Etapa.GESTION, self.Etapa.LEVANTAMIENTO, self.Etapa.ELABORANDO, self.Etapa.AJUSTES)
+
+    @property
+    def motivos_prioridad(self):
+        """Por qué comercial y administrativa deben agilizar esta propuesta (lista vacía = trámite normal).
+
+        Es prioritaria si la urgencia es alta o si el cliente la pidió para dentro de DIAS_PRIORIDAD días o menos,
+        mientras no se le haya enviado. Las prioritarias van primero en las bandejas y llevan aviso por correo.
+        """
+        from django.utils import timezone
+
+        if not self.por_entregar_propuesta:
+            return []
+        motivos = []
+        if self.ticket.impacto == Ticket.Impacto.ALTA:
+            motivos.append("urgencia alta")
+        if self.fecha_max_propuesta and self.fecha_max_propuesta - timezone.now() <= timedelta(days=self.DIAS_PRIORIDAD):
+            motivos.append("propuesta vencida" if self.fecha_max_propuesta < timezone.now() else
+                           f"el cliente la necesita en {self.DIAS_PRIORIDAD} días o menos")
+        return motivos
+
+    @property
+    def prioritaria(self):
+        """True si la propuesta se debe agilizar (ver motivos_prioridad)."""
+        return bool(self.motivos_prioridad)
+
+    @property
+    def tiempo_restante(self):
+        """Lo que queda para la fecha máxima de la propuesta, en texto: «1 día y 5 h», «3 h», «vencida hace 2 h»."""
+        from django.utils import timezone
+
+        if not self.fecha_max_propuesta:
+            return ""
+        segundos = (self.fecha_max_propuesta - timezone.now()).total_seconds()
+        horas = int(abs(segundos) // 3600)
+        dias, horas = divmod(horas, 24)
+        texto = (f"{dias} día{'s' if dias != 1 else ''}" + (f" y {horas} h" if horas else "")) if dias else f"{max(horas, 1)} h"
+        return f"quedan {texto}" if segundos >= 0 else f"vencida hace {texto}"
+
+    @property
+    def visita_display(self):
+        """Lo que pidió el cliente para la primera visita: «12/11/2026 · mañana», «No necesita visita» o «No indicó»."""
+        if self.sin_visita:
+            return "No necesita visita técnica"
+        if not self.fecha_primera_visita:
+            return "No indicó"
+        jornada = self.ticket.get_jornada_display().lower() if self.ticket.jornada else "cualquier jornada"
+        return f"{self.fecha_primera_visita:%d/%m/%Y} · {jornada}"
 
     @property
     def paso_cliente(self):

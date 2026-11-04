@@ -9,12 +9,14 @@ El mismo ticket viaja entre áreas: comercial ⇄ técnica (levantamiento) y, ap
 instalación. Las reglas de esos traspasos están en servicios.py; aquí solo se valida quién y cuándo.
 """
 
+from datetime import timedelta
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Case, Count, F as Campo, Q, When
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -76,7 +78,17 @@ def bandeja(request):
     conteo = dict(base.values_list("ficha__etapa").annotate(n=Count("id")))
     vencidas = base.filter(ficha__etapa__in=[F.Etapa.GESTION, F.Etapa.LEVANTAMIENTO, F.Etapa.ELABORANDO, F.Etapa.AJUSTES],
                            ficha__fecha_max_propuesta__lt=timezone.now()).count()
-    pagina = Paginator(qs.order_by("-creado", "-id"), 20).get_page(request.GET.get("page"))
+    if vista in ("comercial", "administrativa"):
+        # Lo que hay que mover: primero las prioritarias (urgencia alta o propuesta para dentro de 2 días) y la fecha más cercana
+        limite = timezone.now() + timedelta(days=F.DIAS_PRIORIDAD)
+        qs = qs.annotate(orden_prioridad=Case(
+            When(Q(impacto=T.Impacto.ALTA) | Q(ficha__fecha_max_propuesta__lte=limite,
+                                                ficha__etapa__in=[F.Etapa.GESTION, F.Etapa.LEVANTAMIENTO,
+                                                                  F.Etapa.ELABORANDO, F.Etapa.AJUSTES]), then=0),
+            default=1)).order_by("orden_prioridad", Campo("ficha__fecha_max_propuesta").asc(nulls_last=True), "-creado", "-id")
+    else:
+        qs = qs.order_by("-creado", "-id")
+    pagina = Paginator(qs, 20).get_page(request.GET.get("page"))
     params = request.GET.copy()
     params.pop("page", None)
     return render(request, "comercial/bandeja.html", {
@@ -108,7 +120,9 @@ def propuestas(request):
     observadas = dict(Cotizacion.objects.filter(en_revision=False, version__isnull=True).exclude(observaciones_direccion="")
                       .values_list("ficha_id", "observaciones_direccion"))
     armando = [F.Etapa.GESTION, F.Etapa.ELABORANDO, F.Etapa.AJUSTES]
-    abiertas = list(base.filter(etapa__in=armando, ticket__area=T.Area.COMERCIAL))
+    # Las prioritarias primero (urgencia alta o propuesta para dentro de 2 días), luego por la fecha que pidió el cliente
+    abiertas = sorted(base.filter(etapa__in=armando, ticket__area=T.Area.COMERCIAL),
+                      key=lambda f: (not f.prioritaria, f.fecha_max_propuesta is None, f.fecha_max_propuesta or f.creado))
     por_aprobar = [f for f in abiertas if f.pk in en_revision]
     devueltas, cambios, por_armar = [], [], []
     for f in abiertas:
@@ -165,11 +179,12 @@ def nuevo(request):
                 contacto_telefono=d["contacto_telefono"], contacto_email=d.get("contacto_email"),
                 no_disponible=form.no_disponible(), restricciones=d.get("restricciones"),
                 origen=F.Origen.OPORTUNIDAD if oportunidad else F.Origen.COMERCIAL, oportunidad=oportunidad,
-                fotos=d["fotos"], anexos=d["anexos"],
+                fotos=d["fotos"], anexos=d["anexos"], jornada=d.get("jornada_visita") or "",
                 ficha_datos={
                     **{campo: d.get(campo) or "" for campo in TEXTOS_FICHA},
                     "comercial": comercial, "servicios": d.get("servicios") or [],
                     "otras_sedes": d.get("otras_sedes", False), "fecha_max_propuesta": d.get("fecha_max_propuesta"),
+                    "fecha_primera_visita": d.get("fecha_primera_visita"), "sin_visita": d.get("sin_visita", False),
                 },
             )
             if oportunidad and oportunidad.estado == OportunidadComercial.Estado.NUEVA:

@@ -58,6 +58,7 @@
           <td>{{ t.asunto|truncatechars:70 }}
             <div class="small text-muted-jn">{{ t.empresa.razon_social }}{% if t.empresa.es_prospecto %} <span class="badge text-bg-light border">Prospecto</span>{% endif %}{% if t.ficha.servicios %} · {{ t.ficha.servicios_display|join:", " }}{% endif %}</div></td>
           <td><span class="badge text-bg-{{ t.ficha.color_etapa }}">{{ t.ficha.get_etapa_display }}</span>
+            {% include "comercial/_prioridad.html" with f=t.ficha %}
             {% if t.area == 'tecnica' %}<div class="small mt-1"><i class="bi bi-tools"></i> Área técnica · {{ t.get_estado_display }}</div>
             {% elif t.ficha.etapa == 'elaborando' or t.ficha.etapa == 'ajustes' %}<div class="small mt-1 text-muted-jn"><i class="bi bi-person-gear"></i> La tiene el área administrativa</div>{% endif %}
             {% if t.ficha.propuesta_vencida %}<div class="small text-danger mt-1"><i class="bi bi-alarm"></i> Vencida</div>

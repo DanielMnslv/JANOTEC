@@ -33,8 +33,13 @@
     {% if ficha.propuesta_vencida %}<span class="badge text-bg-danger"><i class="bi bi-alarm"></i> Fecha de propuesta vencida</span>{% endif %}
   </div>
   <div class="text-end small text-muted-jn">Radicado el {{ ticket.creado|date:"d/m/Y h:i a" }}
-    {% if ficha.fecha_max_propuesta %}<br>Propuesta antes del <strong class="text-body">{{ ficha.fecha_max_propuesta|date:"d/m/Y h:i a" }}</strong>{% endif %}</div>
+    {% if ficha.fecha_max_propuesta %}<br>Propuesta antes del <strong class="text-body">{{ ficha.fecha_max_propuesta|date:"d/m/Y h:i a" }}</strong>{% endif %}
+    <br>Primera visita: <strong class="text-body">{{ ficha.visita_display }}</strong></div>
 </div>
+{% if ficha.prioritaria %}<div class="alert alert-danger d-flex gap-2 align-items-start"><i class="bi bi-lightning-charge-fill fs-5"></i>
+  <div><b>Propuesta prioritaria</b> ({{ ficha.motivos_prioridad|join:", " }}){% if ficha.fecha_max_propuesta %}: el cliente la necesita antes del
+    <b>{{ ficha.fecha_max_propuesta|date:"d/m/Y h:i a" }}</b> ({{ ficha.tiempo_restante }}){% endif %}.
+    Comercial y administrativa deben agilizar el informe, la propuesta y la aprobación para cumplirle.</div></div>{% endif %}
 
 <div class="card mb-4"><div class="card-body">
   {% include "comercial/_pasos_cliente.html" %}

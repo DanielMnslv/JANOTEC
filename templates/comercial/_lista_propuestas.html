@@ -5,6 +5,7 @@
     <div class="me-auto">
       <a class="radicado" href="{% url 'comercial:detalle' t.radicado %}">{{ t.radicado }}</a>
       <span class="badge text-bg-{{ f.color_etapa }} ms-1">{{ f.get_etapa_display }}</span>
+      {% include "comercial/_prioridad.html" %}
       {% if f.propuesta_vencida %}<span class="small text-danger ms-1"><i class="bi bi-alarm"></i> Vencida</span>
       {% elif f.fecha_max_propuesta and f.abierta %}<span class="small text-muted-jn ms-1">antes del {{ f.fecha_max_propuesta|date:"j M" }}</span>{% endif %}
       <div class="small">{{ t.asunto|truncatechars:80 }}</div>

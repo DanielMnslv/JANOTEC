@@ -27,6 +27,23 @@
       </div>
       <label class="form-label fw-medium">¿Cuándo NO puede atender llamadas o visitas?</label>
       {% include "comercial/_dias.html" %}
+      <div class="border rounded p-3 mt-3" id="primera-visita">
+        <label class="form-label fw-medium mb-1"><i class="bi bi-calendar-check"></i> Primera visita técnica</label>
+        <p class="small text-muted-jn mb-2">Pregúntele al cliente qué día y en qué jornada quiere que lo visitemos. Con esto el área técnica la programa.</p>
+        <div class="row">
+          {% include "tickets/_campo.html" with campo=form.fecha_primera_visita clase="col-md-5" %}
+          {% include "tickets/_campo.html" with campo=form.jornada_visita clase="col-md-4" %}
+        </div>
+        {% include "tickets/_campo.html" with campo=form.sin_visita %}
+      </div>
+      <script>
+        (function () {  // «No necesita visita» desactiva la fecha y la jornada
+          var sin = document.getElementById("{{ form.sin_visita.id_for_label }}");
+          var campos = [document.getElementById("{{ form.fecha_primera_visita.id_for_label }}"), document.getElementById("{{ form.jornada_visita.id_for_label }}")];
+          function aplicar() { campos.forEach(function (c) { if (c) { c.disabled = sin.checked; if (sin.checked) c.value = ""; } }); }
+          if (sin) { sin.addEventListener("change", aplicar); aplicar(); }
+        })();
+      </script>
     </section>
 
     <section class="paso-form">

@@ -81,15 +81,23 @@ class FichaForm(DiasNoDisponibleMixin, BootstrapMixin, forms.Form):
     direccion = forms.CharField(label="Dirección", max_length=200, required=False)
     restricciones = forms.CharField(label="Otras restricciones de atención", max_length=250, required=False,
                                     widget=forms.TextInput(attrs={"placeholder": "Ej.: festivos no hay personal"}))
+    # Primera visita técnica: qué día y en qué jornada la quiere el cliente (o que no la necesita)
+    fecha_primera_visita = forms.DateField(label="¿Qué día quiere el cliente la primera visita técnica?", required=False,
+                                           widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"))
+    jornada_visita = forms.ChoiceField(label="Jornada de la visita", required=False,
+                                       choices=[("", "Cualquier jornada")] + list(Ticket.Jornada.choices))
+    sin_visita = forms.BooleanField(label="No necesita visita: se cotiza con lo que informó el cliente", required=False)
     # 2. Necesidad
     asunto = forms.CharField(label="¿Qué dijo el cliente? (con sus palabras)", max_length=200,
                              widget=forms.TextInput(attrs={"placeholder": "Ej.: «se me metieron al parqueadero y las cámaras no sirven»"}))
     descripcion = forms.CharField(label="Descripción / detalle", required=False, widget=forms.Textarea(
         attrs={"rows": 3, "placeholder": "Amplíe: qué pasó, dónde, qué espera lograr el cliente…"}))
-    impacto = forms.ChoiceField(label="Urgencia", required=False, choices=_opciones(Ticket.Impacto.choices))
+    impacto = forms.ChoiceField(label="Urgencia", required=False, choices=_opciones(Ticket.Impacto.choices),
+                                help_text="Alta: comercial y administrativa le dan prioridad (exige fecha máxima).")
     fecha_max_propuesta = forms.DateTimeField(label="Fecha máxima para la propuesta", required=False,
                                               input_formats=FORMATO_FECHA_HORA,
-                                              widget=forms.DateTimeInput(attrs=FECHA_HORA, format="%Y-%m-%dT%H:%M"))
+                                              widget=forms.DateTimeInput(attrs=FECHA_HORA, format="%Y-%m-%dT%H:%M"),
+                                              help_text="Si es en 2 días o menos, la propuesta queda como prioritaria.")
     # 3. Calificación técnica preliminar
     sistema_actual = forms.CharField(label="¿Sistema actual? ¿Marca?", max_length=150, required=False,
                                      widget=forms.TextInput(attrs={"placeholder": "Ej.: Hikvision viejas / no tiene"}))
@@ -172,7 +180,38 @@ class FichaForm(DiasNoDisponibleMixin, BootstrapMixin, forms.Form):
             self.add_error("sede_nombre", "La sede no pertenece a esa empresa.")
         if nueva:
             datos["sede"] = None
+        self._validar_visita(datos)
+        if datos.get("impacto") == Ticket.Impacto.ALTA and not datos.get("fecha_max_propuesta"):
+            self.add_error("fecha_max_propuesta", "Con urgencia alta, indique para cuándo necesita el cliente la propuesta.")
         return datos
+
+    def _validar_visita(self, datos):
+        """La fecha de la primera visita es obligatoria (salvo «no necesita visita») y debe caer cuando se puede atender:
+        desde hoy, no domingo, el sábado solo en la mañana y no en un día o jornada en que el cliente dijo que no puede."""
+        from tickets.models import DIAS_SEMANA
+
+        if datos.get("sin_visita"):
+            datos["fecha_primera_visita"], datos["jornada_visita"] = None, ""
+            return
+        fecha, jornada = datos.get("fecha_primera_visita"), datos.get("jornada_visita") or ""
+        if not fecha:
+            if "fecha_primera_visita" not in self.errors:
+                self.add_error("fecha_primera_visita", "Indique qué día quiere el cliente la primera visita técnica, "
+                                                       "o marque que no necesita visita.")
+            return
+        if fecha < timezone.localdate():
+            self.add_error("fecha_primera_visita", "La fecha de la visita no puede ser anterior a hoy.")
+            return
+        clave, dia = DIAS_SEMANA[fecha.weekday()]
+        if clave == "domingo":
+            self.add_error("fecha_primera_visita", "Los domingos no se hacen visitas: elija otro día.")
+        elif clave == "sabado" and jornada == Ticket.Jornada.TARDE:
+            self.add_error("jornada_visita", "El sábado solo se atiende en la mañana.")
+        no_puede = datos.get(f"nd_{clave}") or ""
+        if no_puede == "todo":
+            self.add_error("fecha_primera_visita", f"Arriba dice que el cliente no puede atender el {dia.lower()}.")
+        elif no_puede and no_puede == jornada:
+            self.add_error("jornada_visita", f"Arriba dice que el {dia.lower()} el cliente no puede en esa jornada.")
 
     @staticmethod
     def sede_final(empresa, datos):

@@ -318,7 +318,7 @@ class FlujoComercialTests(BaseFlujos):
         mail.outbox.clear()
         self.client.post(reverse("comercial:nuevo"), {"empresa": self.emp.pk, "contacto_nombre": "Daniel", "contacto_telefono": "3214061219",
                                                       "contacto_email": "cliente@ganacampo.co", "asunto": "Cámaras en el parqueadero",
-                                                      "servicios": ["cctv"], "nd_viernes": "tarde"})
+                                                      "servicios": ["cctv"], "nd_viernes": "tarde", "sin_visita": "on"})
         t = Ticket.objects.get(ficha__isnull=False)
         self.assertTrue(self.para("cliente@ganacampo.co"), "el cliente recibe la ficha del requerimiento")
         # Levantamiento: llega a la recepción técnica

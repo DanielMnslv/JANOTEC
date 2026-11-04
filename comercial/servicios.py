@@ -67,8 +67,11 @@ def categoria_instalacion():
 
 def crear_ticket_comercial(*, empresa, sede, solicitante, autor, asunto, descripcion, impacto, contacto_nombre,
                            contacto_telefono, contacto_email, no_disponible, restricciones, ficha_datos, origen,
-                           fotos=(), anexos=(), oportunidad=None):
-    """Un solo ticket para toda la vida de la solicitud: nace en el área comercial."""
+                           fotos=(), anexos=(), oportunidad=None, jornada=""):
+    """Un solo ticket para toda la vida de la solicitud: nace en el área comercial.
+
+    Con urgencia alta el ticket nace con prioridad alta. La jornada es la que pidió el cliente para la primera visita.
+    """
     categoria = categoria_instalacion()
     falla = TipoFalla.objects.filter(categoria=categoria, nombre__istartswith="Cotiz").first() if categoria else None
     with transaction.atomic():
@@ -76,7 +79,8 @@ def crear_ticket_comercial(*, empresa, sede, solicitante, autor, asunto, descrip
             empresa=empresa, sede=sede, solicitante=solicitante, tipo=T.Tipo.COTIZACION, area=T.Area.COMERCIAL,
             categoria=categoria, falla=falla, asunto=asunto[:200], descripcion=descripcion or asunto, impacto=impacto or "",
             contacto_nombre=contacto_nombre, contacto_telefono=contacto_telefono, contacto_email=contacto_email or "",
-            no_disponible=no_disponible or {}, restricciones=restricciones or "", prioridad=T.Prioridad.MEDIA,
+            no_disponible=no_disponible or {}, restricciones=restricciones or "", jornada=jornada or "",
+            prioridad=T.Prioridad.ALTA if impacto == T.Impacto.ALTA else T.Prioridad.MEDIA,
         )
         ticket.save()
         ficha = F.objects.create(ticket=ticket, origen=origen, oportunidad=oportunidad, **ficha_datos)
@@ -109,7 +113,7 @@ def solicitar_levantamiento(ficha, autor, nota, jornada=""):
     notif._enviar(
         f"[{t.radicado}] Levantamiento técnico solicitado por comercial · {t.empresa}",
         "\n".join([f"El área comercial solicita una visita de levantamiento: «{t.asunto}».", f"Qué revisar: {nota}",
-                   f"Jornada: {t.get_jornada_display()}" if t.jornada else "",
+                   f"Primera visita que pidió el cliente: {ficha.visita_display}",
                    f"Contacto: {t.contacto_nombre} · {t.contacto_telefono}",
                    f"NO puede atender: {t.resumen_no_disponible}" if t.resumen_no_disponible else "",
                    "", f"Asignar técnico: {settings.SITIO_URL.rstrip('/')}{t.get_absolute_url()}"]),
@@ -440,12 +444,25 @@ def requerimiento_creado(ficha):
         boton=("Consultar mi solicitud", notif._consulta(t)), firma="Área Comercial", adjuntos=adjuntos,
     )
     _enviar_con_ficha(
-        f"[{t.radicado}] Nuevo requerimiento comercial · {t.empresa}",
+        f"[{t.radicado}] {'PRIORITARIO · ' if ficha.prioritaria else ''}Nuevo requerimiento comercial · {t.empresa}",
         "\n".join([t.asunto, "", t.descripcion, f"Origen: {ficha.get_origen_display()} · Asesor: {ficha.comercial or '—'}",
                    f"Contacto: {t.contacto_nombre} · {t.contacto_telefono} · {t.contacto_email}",
+                   f"Primera visita que pidió el cliente: {ficha.visita_display}",
+                   *_texto_prioridad(ficha),
                    "", f"{settings.SITIO_URL.rstrip('/')}{ficha.get_absolute_url()}"]),
-        _correos_comerciales(ficha), ficha, interna=True,
+        # Si es prioritario, administrativa también se entera desde ya para alistar la propuesta
+        _correos_propuesta(ficha) if ficha.prioritaria else _correos_comerciales(ficha), ficha, interna=True,
     )
+
+
+def _texto_prioridad(ficha):
+    """Líneas del aviso que explican por qué el requerimiento es prioritario y para cuándo (vacío si es normal)."""
+    if not ficha.prioritaria:
+        return []
+    plazo = (f" Propuesta antes del {timezone.localtime(ficha.fecha_max_propuesta):%d/%m/%Y %I:%M %p} "
+             f"({ficha.tiempo_restante})." if ficha.fecha_max_propuesta else "")
+    return ["", f"PRIORITARIO ({', '.join(ficha.motivos_prioridad)}): comercial y administrativa deben agilizar el "
+                f"informe y la propuesta.{plazo}"]
 
 
 def propuesta_enviada(ficha, pdf_adjunto):

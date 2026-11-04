@@ -1,5 +1,6 @@
 import shutil
 import tempfile
+from datetime import timedelta
 
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -15,6 +16,14 @@ from .models import FichaComercial
 MEDIA_TMP = tempfile.mkdtemp()
 F = FichaComercial
 T = Ticket
+
+
+def proximo_lunes():
+    """Un lunes futuro: día hábil en que el cliente de las pruebas sí puede atender."""
+    hoy = timezone.localdate()
+    return hoy + timedelta(days=7 - hoy.weekday())
+
+
 # Envío urgente: comercial la envía sin esperar a dirección (la aprobación se prueba en CotizadorTests.test_direccion_*)
 URGENTE = {"urgente": "1", "motivo_urgencia": "El cliente la necesita hoy"}
 
@@ -49,7 +58,7 @@ class BaseComercial(TestCase):
         datos = {"empresa": self.emp.pk, "contacto_nombre": "Leidy", "contacto_telefono": "3101234567",
                  "contacto_email": "leidy@a.co", "asunto": "Quieren cámaras en el parqueadero",
                  "presupuesto": "PRESUPUESTO-SECRETO-9", "nivel_decision": "decide", "servicios": ["cctv", "alarma"],
-                 "nd_viernes": "tarde"}
+                 "nd_viernes": "tarde", "fecha_primera_visita": proximo_lunes().isoformat(), "jornada_visita": "manana"}
         datos.update(kw)
         return datos
 
@@ -92,6 +101,70 @@ class RadicacionTests(BaseComercial):
         self.assertEqual(self.client.get(reverse("comercial:nuevo")).status_code, 403)
         self.client.force_login(self.asesor)
         self.assertEqual(self.client.get(reverse("comercial:nuevo_cliente")).status_code, 403)
+
+
+class PrimeraVisitaYPrioridadTests(BaseComercial):
+    """La ficha pide cuándo quiere el cliente la primera visita, y la urgencia y la fecha máxima marcan la prioridad."""
+
+    def radicar(self, **kw):
+        self.client.force_login(self.asesor)
+        return self.client.post(reverse("comercial:nuevo"), self.ficha_post(**kw))
+
+    def test_guarda_la_fecha_y_la_jornada_de_la_primera_visita(self):
+        self.radicar()
+        t = T.objects.get(ficha__isnull=False)
+        self.assertEqual(t.ficha.fecha_primera_visita, proximo_lunes())
+        self.assertEqual(t.jornada, T.Jornada.MANANA)
+        self.assertIn("mañana", t.ficha.visita_display)
+        self.assertContains(self.client.get(t.ficha.get_absolute_url()), "Primera visita:")
+
+    def test_la_fecha_es_obligatoria_salvo_que_no_necesite_visita(self):
+        r = self.radicar(fecha_primera_visita="")
+        self.assertFalse(T.objects.exists())
+        self.assertContains(r, "qué día quiere el cliente la primera visita")
+        self.radicar(fecha_primera_visita="", sin_visita="on")
+        f = F.objects.get()
+        self.assertTrue(f.sin_visita)
+        self.assertEqual(f.visita_display, "No necesita visita técnica")
+
+    def test_no_acepta_domingo_pasado_ni_un_dia_en_que_no_puede(self):
+        domingo = proximo_lunes() - timedelta(days=1)
+        self.radicar(fecha_primera_visita=domingo.isoformat())
+        self.radicar(fecha_primera_visita=(timezone.localdate() - timedelta(days=1)).isoformat())
+        viernes = proximo_lunes() + timedelta(days=4)
+        self.radicar(fecha_primera_visita=viernes.isoformat(), jornada_visita="tarde")  # el viernes no puede en la tarde
+        self.radicar(fecha_primera_visita=viernes.isoformat(), nd_viernes="todo", jornada_visita="")
+        self.assertFalse(T.objects.exists())
+
+    def test_urgencia_alta_exige_fecha_maxima_y_queda_prioritaria(self):
+        self.radicar(impacto="alta")
+        self.assertFalse(T.objects.exists(), "con urgencia alta hay que decir para cuándo es la propuesta")
+        mail.outbox.clear()
+        manana = (timezone.localtime() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+        self.radicar(impacto="alta", fecha_max_propuesta=manana)
+        f = F.objects.get()
+        self.assertTrue(f.prioritaria)
+        self.assertEqual(f.ticket.prioridad, T.Prioridad.ALTA)
+        self.assertIn("urgencia alta", f.motivos_prioridad)
+        aviso = next(m for m in mail.outbox if "PRIORITARIO" in m.subject)
+        self.assertIn("agilizar", aviso.body)
+
+    def test_fecha_maxima_cercana_la_vuelve_prioritaria_y_va_primero(self):
+        lejos = (timezone.localtime() + timedelta(days=10)).strftime("%Y-%m-%dT%H:%M")
+        cerca = (timezone.localtime() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+        self.radicar(asunto="Sin afán", fecha_max_propuesta=lejos)
+        self.radicar(asunto="Para mañana", fecha_max_propuesta=cerca)
+        normal, urgente = F.objects.order_by("pk")
+        self.assertFalse(normal.prioritaria)
+        self.assertTrue(urgente.prioritaria)
+        html = self.client.get(reverse("comercial:bandeja")).content.decode()
+        self.assertLess(html.index("Para mañana"), html.index("Sin afán"), "la prioritaria va primero")
+        self.assertIn("Prioritaria", html)
+        detalle = self.client.get(urgente.get_absolute_url()).content.decode()
+        self.assertIn("Propuesta prioritaria", detalle)
+        # Ya enviada al cliente deja de ser prioritaria
+        urgente.etapa = F.Etapa.ENVIADA
+        self.assertFalse(urgente.prioritaria)
 
 
 class SeparacionDeAreasTests(BaseComercial):

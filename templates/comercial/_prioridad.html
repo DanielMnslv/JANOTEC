@@ -1,0 +1,2 @@
+{# Distintivo de propuesta prioritaria (urgencia alta o pedida para dentro de 2 días). Recibe «f» (la ficha). #}
+{% if f.prioritaria %}<span class="badge text-bg-danger" title="Prioritaria: {{ f.motivos_prioridad|join:', ' }}"><i class="bi bi-lightning-charge-fill"></i> Prioritaria{% if f.fecha_max_propuesta %} · {{ f.tiempo_restante }}{% endif %}</span>{% endif %}
