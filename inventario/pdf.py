@@ -120,8 +120,14 @@ def _contacto_proveedor(pr):
 
 
 def solicitud_cotizacion_pdf(cotizacion):
-    """(nombre, bytes) de la solicitud para un proveedor: pregunta precios, sin valores y sin compromiso de compra."""
-    pedido, pr = cotizacion.solicitud, cotizacion.proveedor
+    """(nombre, bytes) de la solicitud para un proveedor: solo lo que se le pregunta a él, sin valores ni compromiso."""
+    return solicitud_pdf(cotizacion.solicitud, cotizacion.proveedor)
+
+
+def solicitud_pdf(pedido, pr=None):
+    """(nombre, bytes) de la solicitud de cotización. Con proveedor, solo sus elementos (los que tienen ese proveedor
+    o ninguno); sin proveedor, la solicitud completa, para enviarla por WhatsApp, Telegram u otro medio."""
+    lineas = pedido.lineas_para(pr) if pr else list(pedido.lineas.all())
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=16 * mm, rightMargin=16 * mm, topMargin=14 * mm,
                             bottomMargin=16 * mm, title=f"Solicitud de cotización {pedido.numero}")
@@ -129,16 +135,17 @@ def solicitud_cotizacion_pdf(cotizacion):
     datos = [
         [_p("Fecha", E_ETIQUETA), _p(timezone.localdate().strftime("%d/%m/%Y")),
          _p("Responder antes del", E_ETIQUETA), _p(pedido.fecha_limite.strftime("%d/%m/%Y") if pedido.fecha_limite else "Lo antes posible")],
-        [_p("Proveedor", E_ETIQUETA), _p(pr.razon_social), _p("NIT", E_ETIQUETA), _p(pr.nit or "—")],
+        [_p("Proveedor", E_ETIQUETA), _p(pr.razon_social if pr else "—"), _p("NIT", E_ETIQUETA), _p((pr.nit if pr else "") or "—")],
         [_p("Contacto", E_ETIQUETA), _p(_contacto_proveedor(pr)),
          _p("Entregar en", E_ETIQUETA), _p("Bodega JANOTEC · Carrera 40A N.º 16-21, Villavicencio")],
     ]
     tabla_datos = Table(datos, colWidths=[ancho * 0.16, ancho * 0.34, ancho * 0.18, ancho * 0.32])
     tabla_datos.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, BORDE), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    cuerpo = [[_p("Cant.", E_ETIQUETA), _p("Descripción", E_ETIQUETA), _p("Valor unit.", E_ETIQUETA), _p("IVA", E_ETIQUETA)]]
-    for l in pedido.lineas.all():
-        cuerpo.append([_p(format(l.total.normalize(), "f")), _p(l.descripcion), "", ""])
-    tabla = Table(cuerpo, colWidths=[ancho * 0.1, ancho * 0.56, ancho * 0.2, ancho * 0.14], repeatRows=1)
+    cuerpo = [[_p(x, E_ETIQUETA) for x in ("N.º", "Cant.", "Tipo", "Descripción", "Valor unit.", "IVA")]]
+    for i, l in enumerate(lineas, 1):
+        cuerpo.append([_p(i), _p(format(l.total.normalize(), "f")), _p(l.get_tipo_display()), _p(l.descripcion), "", ""])
+    tabla = Table(cuerpo, colWidths=[ancho * 0.06, ancho * 0.09, ancho * 0.11, ancho * 0.46, ancho * 0.16, ancho * 0.12],
+                  repeatRows=1)
     tabla.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, BORDE), ("BACKGROUND", (0, 0), (-1, 0), TINTE_VERDE),
                                ("VALIGN", (0, 0), (-1, -1), "TOP")]))
     historia = _cabecera_compra(ancho, f"SOLICITUD DE COTIZACIÓN · {pedido.numero}") + [

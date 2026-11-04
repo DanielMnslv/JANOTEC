@@ -25,6 +25,7 @@ urlpatterns = [
     path("compras/cotizaciones/", cotizaciones.listado, name="cotizaciones"),
     path("compras/cotizaciones/nueva/", cotizaciones.nueva, name="cotizacion_nueva"),
     path("compras/cotizaciones/<int:pk>/", cotizaciones.detalle, name="cotizacion"),
+    path("compras/cotizaciones/<int:pk>/pdf/", cotizaciones.pdf_general, name="cotizacion_pdf_general"),
     path("compras/cotizaciones/<int:pk>/proveedor/", cotizaciones.agregar_proveedor, name="cotizacion_proveedor"),
     path("compras/cotizaciones/<int:pk>/<int:cot_pk>/quitar/", cotizaciones.quitar_proveedor, name="cotizacion_quitar"),
     path("compras/cotizaciones/<int:pk>/<int:cot_pk>/respuesta/", cotizaciones.respuesta, name="cotizacion_respuesta"),

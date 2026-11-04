@@ -7,6 +7,8 @@
   <h1 class="h4 page-title mb-1">Solicitud de cotización</h1>
   <span class="badge text-bg-{{ pedido.color_estado }}">{{ pedido.get_estado_display }}</span>
   {% if pedido.solicitud %}<span class="small ms-2">Para <a href="{{ pedido.solicitud.get_absolute_url }}">{{ pedido.solicitud.numero }}</a> · {{ pedido.solicitud.ticket.radicado }} · {{ pedido.solicitud.ticket.empresa }}</span>{% endif %}
+  {% if pedido.propuesta %}<span class="small ms-2">De la propuesta de {{ pedido.propuesta.ticket.radicado }} · {{ pedido.propuesta.ticket.empresa }} <span class="text-muted-jn">(aún sin aprobar por el cliente)</span></span>{% endif %}
+  <a class="btn btn-sm btn-outline-primary ms-2" href="{% url 'inventario:cotizacion_pdf_general' pedido.pk %}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> PDF de la solicitud</a>
 </div>
 <div class="row g-4">
   <div class="col-lg-4">
@@ -22,6 +24,7 @@
             </div>
             <div class="d-flex flex-wrap gap-2 mt-2">
               <a class="btn btn-sm btn-outline-primary py-0" href="{% url 'inventario:cotizacion_pdf' pedido.pk c.pk %}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+              {% if c.whatsapp %}<a class="btn btn-sm btn-outline-success py-0" href="{{ c.whatsapp }}" target="_blank" rel="noopener" title="Abre el chat con el mensaje listo; adjunte el PDF"><i class="bi bi-whatsapp"></i> WhatsApp</a>{% endif %}
               {% if pedido.estado != 'borrador' %}<a class="btn btn-sm btn-light border py-0" href="{% url 'inventario:cotizacion_respuesta' pedido.pk c.pk %}">{% if c.recibida_en %}Ver cotización{% else %}Registrar cotización{% endif %}</a>{% endif %}
               {% if abierta and not c.recibida_en %}<form method="post" action="{% url 'inventario:cotizacion_quitar' pedido.pk c.pk %}">{% csrf_token %}<button class="btn btn-sm btn-light border py-0" aria-label="Quitar a {{ c.proveedor }}"><i class="bi bi-x-lg"></i></button></form>{% endif %}
             </div>
@@ -43,15 +46,21 @@
       <div class="card mb-4">
         {{ lineas.management_form }}
         <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
-          <thead><tr><th>Descripción</th>
-            {% if pedido.solicitud %}<th style="width:7rem">Para el ticket</th><th style="width:7rem">Adicional para bodega</th>{% else %}<th style="width:7rem">Cantidad</th>{% endif %}
+          <thead><tr><th style="min-width:7.5rem">Tipo</th><th style="min-width:14rem">Equipo o material</th>
+            {% if pedido.solicitud or pedido.propuesta %}<th style="width:6.5rem">{% if pedido.propuesta %}Para la propuesta{% else %}Para el ticket{% endif %}</th><th style="width:6.5rem">Adicional para bodega</th>{% else %}<th style="width:6.5rem">Cantidad</th>{% endif %}
+            <th style="min-width:11rem">Proveedor que lo maneja</th><th style="min-width:8.5rem">Último precio</th>
             <th style="width:4rem">Quitar</th></tr></thead>
           <tbody>{% for f in lineas %}<tr>{{ f.id }}
+            <td>{{ f.tipo }}</td>
             <td>{{ f.descripcion }}{% for e in f.descripcion.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</td>
-            {% if pedido.solicitud %}<td>{{ f.cantidad }}</td>{% else %}<td class="d-none">{{ f.cantidad }}</td>{% endif %}
+            {% if pedido.solicitud or pedido.propuesta %}<td>{{ f.cantidad }}</td>{% else %}<td class="d-none">{{ f.cantidad }}</td>{% endif %}
             <td>{{ f.adicional }}{% for e in f.adicional.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</td>
+            <td>{{ f.proveedor }}</td>
+            <td>{{ f.precio_referencia }}</td>
             <td class="text-center">{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td></tr>{% endfor %}</tbody>
         </table></div>
+        <datalist id="elementos-conocidos">{% for d in conocidos %}<option value="{{ d }}">{% endfor %}</datalist>
+        <div class="card-body border-top small text-muted-jn py-2"><i class="bi bi-info-circle"></i> El proveedor y el último precio se sugieren solos con lo que ya se le compró o cotizó a cada uno; el precio es solo de referencia para bodega y no sale en el PDF. Si deja «A todos», ese elemento se le pregunta a cada proveedor de la lista.</div>
         <div class="card-body border-top row g-3">
           <div class="col-md-4">{% include "tickets/_campo.html" with campo=form.fecha_limite %}</div>
           <div class="col-md-8">{% include "tickets/_campo.html" with campo=form.notas %}</div>
@@ -59,7 +68,7 @@
         <div class="card-footer d-flex flex-wrap justify-content-end gap-2">
           <button class="btn btn-outline-danger" name="accion" value="cancelar" formnovalidate>Cancelar solicitud</button>
           <button class="btn btn-outline-primary" name="accion" value="guardar"><i class="bi bi-check2"></i> Guardar</button>
-          <button class="btn btn-accent" name="accion" value="enviar"><i class="bi bi-send"></i> Marcar enviada a los proveedores</button>
+          <button class="btn btn-accent" name="accion" value="enviar"><i class="bi bi-send"></i> Enviar a los proveedores</button>
         </div>
       </div>
     </form>
@@ -81,7 +90,7 @@
       </table></div>
       <div class="card-body border-top small text-muted-jn py-2"><i class="bi bi-info-circle"></i> En verde, el más barato con IVA. Si le compra cada cosa a un proveedor distinto, cree la orden del primero: lo que no alcanzó a cubrir queda disponible para la cotización del otro.</div>
       {% else %}
-      <ul class="list-group list-group-flush small">{% for f in filas %}<li class="list-group-item d-flex justify-content-between gap-2"><span>{{ f.linea.descripcion }}</span><span>{{ f.linea.total|floatformat:"-2" }}</span></li>{% endfor %}</ul>
+      <ul class="list-group list-group-flush small">{% for f in filas %}<li class="list-group-item d-flex justify-content-between gap-2"><span><span class="badge text-bg-light border fw-normal">{{ f.linea.get_tipo_display }}</span> {{ f.linea.descripcion }}{% if f.linea.proveedor %} <span class="text-muted-jn">· {{ f.linea.proveedor }}{% if f.linea.precio_referencia %}, último precio {{ f.linea.precio_referencia|pesos }}{% endif %}</span>{% endif %}</span><span>{{ f.linea.total|floatformat:"-2" }}</span></li>{% endfor %}</ul>
       {% if pedido.estado == 'enviada' %}<div class="card-body border-top small text-muted-jn py-2"><i class="bi bi-hourglass-split"></i> Cuando un proveedor responda, registre su cotización y aquí podrá compararla.</div>{% endif %}
       {% endif %}
       {% if pedido.notas %}<div class="card-body border-top small"><strong>Observaciones:</strong> {{ pedido.notas|linebreaksbr }}</div>{% endif %}

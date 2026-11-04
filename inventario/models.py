@@ -484,6 +484,10 @@ class SolicitudCotizacion(models.Model):
 
     solicitud = models.ForeignKey(SolicitudMaterial, on_delete=models.SET_NULL, null=True, blank=True,
                                   related_name="cotizaciones", help_text="Para qué solicitud de material (ticket) es.")
+    # Antes de que el cliente apruebe, bodega ya puede cotizar los equipos y materiales de la propuesta
+    propuesta = models.ForeignKey("comercial.FichaComercial", on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name="solicitudes_cotizacion",
+                                  help_text="La propuesta (aún sin aprobar) de la que salen los elementos.")
     estado = models.CharField(max_length=12, choices=Estado.choices, default=Estado.BORRADOR, db_index=True)
     fecha_limite = models.DateField("responder antes del", null=True, blank=True)
     notas = models.TextField("observaciones para el proveedor", blank=True)
@@ -510,6 +514,10 @@ class SolicitudCotizacion(models.Model):
     def color_estado(self):
         return {"borrador": "secondary", "enviada": "warning", "cerrada": "success", "cancelada": "dark"}[self.estado]
 
+    def lineas_para(self, proveedor):
+        """Lo que se le pregunta a un proveedor: las líneas que son suyas y las que no tienen proveedor (van a todos)."""
+        return [l for l in self.lineas.all() if l.proveedor_id in (None, proveedor.pk)]
+
     def por_ordenar(self):
         """Las líneas que aún no están en una orden de compra vigente."""
         ordenadas = LineaOrdenCompra.objects.filter(linea_cotizacion__solicitud=self).exclude(
@@ -520,7 +528,16 @@ class SolicitudCotizacion(models.Model):
 class LineaSolicitudCotizacion(models.Model):
     """Lo que se pregunta: lo que pide el ticket más lo adicional que bodega quiere tener en inventario."""
 
+    class Tipo(models.TextChoices):
+        EQUIPO = "equipo", "Equipo"
+        MATERIAL = "material", "Material"
+
     solicitud = models.ForeignKey(SolicitudCotizacion, on_delete=models.CASCADE, related_name="lineas")
+    tipo = models.CharField(max_length=10, choices=Tipo.choices, default=Tipo.MATERIAL)
+    # El proveedor que se sabe que maneja el elemento y su último precio (referencia interna, no sale en el PDF)
+    proveedor = models.ForeignKey(Proveedor, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+                                  help_text="A quién se le pregunta por este elemento; vacío = a todos los proveedores.")
+    precio_referencia = models.DecimalField("último precio conocido", max_digits=14, decimal_places=2, null=True, blank=True)
     item = models.ForeignKey("inventario.ItemSolicitud", on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
                              help_text="El ítem de la solicitud de material (ticket) del que sale la línea.")
     descripcion = models.CharField("descripción", max_length=300)

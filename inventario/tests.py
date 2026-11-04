@@ -1323,6 +1323,55 @@ class CotizacionesTests(BaseInventario):
         self.assertEqual(self.client.get(reverse("inventario:cotizaciones")).status_code, 403)
         self.assertEqual(self.client.get(reverse("inventario:cotizacion_pdf", args=[p.pk, c.pk])).status_code, 403)
 
+    def test_bodega_cotiza_los_elementos_de_la_propuesta_sin_aprobar(self):
+        from comercial.models import Cotizacion, FichaComercial, LineaCotizacion
+        from .models import SolicitudCotizacion
+        ficha = FichaComercial.objects.create(ticket=self.ticket, etapa="enviada")
+        cot = Cotizacion.objects.create(ficha=ficha, margen=30)
+        for desc, cat, cant in (("Cámara IP 4 MP", "equipos", 4), ("Cable UTP cat 6", "accesorios", 120),
+                                ("Instalación y configuración", "mano_obra", 1)):
+            LineaCotizacion.objects.create(cotizacion=cot, descripcion=desc, categoria=cat, cantidad=cant, valor_unitario=1000)
+        self.client.force_login(self.bodega)
+        r = self.client.get(reverse("inventario:cotizaciones"))
+        self.assertContains(r, self.ticket.radicado)
+        self.assertContains(r, "Pedir cotización a proveedores")
+        self.client.post(reverse("inventario:cotizacion_nueva"), {"propuesta": ficha.pk})
+        p = SolicitudCotizacion.objects.get()
+        # Equipos y materiales con su cantidad; la mano de obra no se le cotiza a un proveedor
+        self.assertEqual([(l.tipo, l.descripcion, l.cantidad) for l in p.lineas.all()],
+                         [("equipo", "Cámara IP 4 MP", 4), ("material", "Cable UTP cat 6", 120)])
+        self.assertEqual(p.propuesta, ficha)
+        self.assertTrue(self.ticket.seguimientos.filter(interno=True, mensaje__contains=p.numero).exists())
+        self.assertContains(self.client.get(p.get_absolute_url()), "Para la propuesta")
+
+    def test_proveedor_sugerido_correo_con_su_pdf_y_whatsapp(self):
+        from django.core import mail
+
+        from .models import AsesorProveedor, LineaOrdenCompra, LineaSolicitudCotizacion, OrdenCompra, Proveedor
+        # Historial: el cable UTP se le compró a este proveedor a $1.000
+        habitual = Proveedor.objects.create(razon_social="PROVEEDOR HABITUAL", nit="903", correo="ventas@habitual.test")
+        historial = OrdenCompra.objects.create(proveedor=habitual, estado="recibida")
+        LineaOrdenCompra.objects.create(orden=historial, descripcion="Cable UTP", cantidad=10, valor_unitario=1000)
+        s, p = self.preparar()
+        cable = p.lineas.get()
+        self.assertEqual((cable.proveedor, cable.precio_referencia), (habitual, 1000))
+        AsesorProveedor.objects.create(proveedor=self.b, nombre="Laura", celular="300 111 2233")
+        datos = {**self.envio(p), "lineas-0-tipo": "material", "lineas-0-proveedor": habitual.pk, "lineas-0-precio_referencia": "1000"}
+        canaleta = LineaSolicitudCotizacion.objects.create(solicitud=p, descripcion="Canaleta", adicional=10)  # va a todos
+        self.client.post(reverse("inventario:cotizacion_proveedor", args=[p.pk]), {"proveedor": self.b.pk})
+        mail.outbox.clear()
+        r = self.client.post(p.get_absolute_url(), datos, follow=True)
+        # El habitual entra solo (por su línea) y le llega el correo con su PDF; B no tiene correo: se avisa
+        self.assertEqual(set(p.cotizaciones.values_list("proveedor__razon_social", flat=True)), {"PROVEEDOR HABITUAL", "PROVEEDOR B"})
+        self.assertEqual([m.to for m in mail.outbox], [["ventas@habitual.test"]])
+        self.assertTrue(mail.outbox[0].attachments[0][0].endswith(".pdf"))
+        self.assertContains(r, "Sin correo")
+        self.assertContains(r, "https://wa.me/573001112233")
+        # Cada proveedor ve lo suyo y lo que va a todos; el PDF general trae todo
+        self.assertEqual(p.lineas_para(self.b), [canaleta])
+        self.assertEqual(p.lineas_para(habitual), [cable, canaleta])
+        self.assertEqual(self.client.get(reverse("inventario:cotizacion_pdf_general", args=[p.pk]))["Content-Type"], "application/pdf")
+
 
 class OrdenesDeCompraTests(BaseInventario):
     """Bodega compra: la orden lleva proveedor, costo y fecha estimada, y coordinación ve cuándo llega."""
