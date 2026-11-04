@@ -1,5 +1,5 @@
-{# Alistamiento en inventario: la lista de chequeo de cada solicitud de material del ticket (la ven técnica, coordinación y comercial).
-   Coordinación ve el avance, agrega adicionales, autoriza la salida y decide cuándo el ticket pasa a «Recepcionado». #}
+{% comment %} Alistamiento en inventario: la lista de chequeo de cada solicitud de material del ticket (la ven técnica, coordinación y comercial).
+   Coordinación ve el avance, agrega adicionales, autoriza la salida y decide cuándo el ticket pasa a «Recepcionado».{% endcomment %}
 {% load inventario_extras %}{% alistamiento ticket as listas %}
 {% cuadre_ticket ticket as cq0 %}{% if listas or ticket.estado == 'en_inventario' or cq0.filas %}
 <div class="card mb-4 {% if ticket.estado == 'en_inventario' %}border-warning{% endif %}" id="alistamiento">
