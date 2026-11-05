@@ -418,11 +418,14 @@ class OrdenCompraForm(BootstrapMixin, forms.ModelForm):
 
 
 class LineaOrdenForm(BootstrapMixin, forms.ModelForm):
-    """Un renglón de la orden: descripción, cantidad, adicional, valor unitario sin IVA e IVA."""
+    """Un renglón de la orden: descripción (con marca y referencia), si es un servicio, cantidad, adicional, valor
+    unitario sin IVA e IVA."""
     class Meta:
         model = LineaOrdenCompra
-        fields = ["descripcion", "cantidad", "adicional", "valor_unitario", "iva"]
+        fields = ["descripcion", "marca", "referencia", "es_servicio", "cantidad", "adicional", "valor_unitario", "iva"]
         widgets = {"cantidad": forms.NumberInput(attrs={"step": "any", "min": "0"}),
+                   "marca": forms.TextInput(attrs={"placeholder": "Marca"}),
+                   "referencia": forms.TextInput(attrs={"placeholder": "Referencia"}),
                    "adicional": forms.NumberInput(attrs={"step": "any", "min": "0"}),
                    "valor_unitario": forms.NumberInput(attrs={"step": "any", "min": "0"}),
                    "iva": forms.NumberInput(attrs={"step": "any", "min": "0", "max": "100"})}

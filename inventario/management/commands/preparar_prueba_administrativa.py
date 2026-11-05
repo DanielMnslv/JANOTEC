@@ -151,6 +151,17 @@ class Command(BaseCommand):
         from inventario.productos import _registro
         _registro(self.autor, objeto, ADDITION, MOTIVO)
 
+    def _a_direccion(self, orden, persona):
+        """La persona pasa la orden a dirección. Si la coordinación administrativa revisa las órdenes, la prueba la da
+        por revisada (la revisión no es parte de lo que valida la persona)."""
+        from inventario import financiera
+
+        if financiera.requiere_revision(orden, persona):
+            orden.revisada_por = Usuario.objects.filter(is_active=True, revisa_compras=True).first()
+            orden.revisada_en = timezone.now()
+            orden.save(update_fields=["revisada_por", "revisada_en"])
+        financiera.enviar_a_direccion(orden, persona)
+
     def _entorno(self):
         """Completa lo que falte: cliente y sede, catálogo, productos con stock, equipos, proveedores y técnico."""
         from comercial.models import ItemCatalogo
@@ -322,13 +333,13 @@ class Command(BaseCommand):
         devuelta = OrdenCompra.objects.create(proveedor=proveedor, creado_por=persona, fecha_estimada=llega,
                                               notas=f"PRUEBA {nombre} · orden devuelta por dirección")
         LineaOrdenCompra.objects.create(orden=devuelta, descripcion=CAJA, cantidad=2, valor_unitario=Decimal("8291.25"))
-        financiera.enviar_a_direccion(devuelta, persona)  # la persona la pasó a dirección
+        self._a_direccion(devuelta, persona)  # la persona la pasó a dirección
         financiera.devolver(devuelta, self.autor, "PRUEBA pida 4 cajas en lugar de 2 y cámbiela a crédito a 30 días")
         pagada = OrdenCompra.objects.create(proveedor=proveedor, creado_por=persona, fecha_estimada=llega,
                                             notas=f"PRUEBA {nombre} · orden aprobada y pagada")
         LineaOrdenCompra.objects.create(orden=pagada, descripcion=C["PRUEBA Cable con POCO stock"], cantidad=10,
                                         valor_unitario=Decimal("1984.04"))
-        financiera.enviar_a_direccion(pagada, persona)
+        self._a_direccion(pagada, persona)
         financiera.aprobar(pagada, self.autor)
         pagada.refresh_from_db()
         financiera.registrar_pago(pagada, self.autor, timezone.localdate(), pagada.totales()["total"].quantize(Decimal(1)),

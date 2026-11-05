@@ -99,6 +99,7 @@
     {% endif %}
     {% if s.estado == 'compra' and user.gestiona_inventario or s.ordenes_compra.exists %}
     <div class="card mb-4"><div class="card-header d-flex justify-content-between align-items-center"><span><i class="bi bi-receipt"></i> Órdenes de compra</span>
+      {% if s.ticket.ficha %}<a class="btn btn-sm btn-light border" href="{% url 'inventario:orden_proyecto' s.ticket.radicado %}"><i class="bi bi-table"></i> Orden de compra del proyecto</a>{% endif %}
       {% if s.estado == 'compra' and user.gestiona_inventario %}<form method="post" action="{% url 'inventario:orden_nueva' %}">{% csrf_token %}<input type="hidden" name="solicitud" value="{{ s.pk }}"><button class="btn btn-sm btn-accent"><i class="bi bi-plus-lg"></i> Orden con lo que falta</button></form>{% endif %}</div>
       <ul class="list-group list-group-flush small">{% for o in s.ordenes_compra.all %}<li class="list-group-item d-flex justify-content-between"><span><a href="{{ o.get_absolute_url }}">{{ o.numero }}</a> · {{ o.proveedor|default:"sin proveedor" }}{% if o.fecha_estimada %} · llega {{ o.fecha_estimada|date:"d/m/Y" }}{% endif %}</span><span class="badge text-bg-{{ o.color_estado }}">{{ o.get_estado_display }}</span></li>{% empty %}<li class="list-group-item text-muted-jn">Aún no hay orden de compra.</li>{% endfor %}</ul>
     </div>

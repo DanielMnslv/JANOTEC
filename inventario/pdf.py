@@ -4,7 +4,10 @@ import re
 from io import BytesIO
 
 from django.utils import timezone
-from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.lib.pagesizes import landscape, letter
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import Image as ImagenPDF, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from reportlab.platypus.flowables import HRFlowable
@@ -189,7 +192,9 @@ def orden_compra_pdf(orden):
     cuerpo = [[_p("Cant.", E_ETIQUETA), _p("Descripción", E_ETIQUETA), _p("Valor unit.", E_ETIQUETA), _p("IVA", E_ETIQUETA),
                _p("Subtotal", E_ETIQUETA)]]
     for l in orden.lineas.all():
-        cuerpo.append([_p(format(l.total.normalize(), "f")), _p(l.descripcion), _p(pesos(l.valor_unitario)),
+        detalle = " · ".join(x for x in (l.marca, l.referencia) if x)
+        texto = l.descripcion + (f" ({detalle})" if detalle else "") + (" [servicio]" if l.es_servicio else "")
+        cuerpo.append([_p(format(l.total.normalize(), "f")), _p(texto), _p(pesos(l.valor_unitario)),
                        _p(f"{l.iva.normalize():f}%"), _p(pesos(l.subtotal))])
     t = orden.totales()
     cuerpo += [["", "", "", _p("Subtotal", E_ETIQUETA), _p(pesos(t["base"]))],
@@ -204,11 +209,152 @@ def orden_compra_pdf(orden):
     historia += [Spacer(1, 8), _p("Forma de pago: " + pago + " Enviar la factura electrónica con el despacho.")]
     if orden.notas:
         historia += [Spacer(1, 4), _p("Condiciones: " + orden.notas)]
-    if orden.solicitud:
-        historia += [Spacer(1, 4), _p(f"Referencia interna: {orden.solicitud.numero} · {orden.solicitud.ticket.radicado}")]
-    historia += [Spacer(1, 30), Table([["_" * 40], [_p("Bodega, inventario y logística · JANOTEC S.A.S.")]], colWidths=[ancho / 2])]
+    proyecto = orden.ticket or (orden.solicitud.ticket if orden.solicitud else None)
+    if proyecto:
+        version = (proyecto.ficha.versiones.filter(estado="aprobada").exclude(codigo="").order_by("-numero").first()
+                   if hasattr(proyecto, "ficha") else None)
+        partes = [f"Proyecto {version.codigo.rsplit('-V', 1)[0]}" if version else "", orden.solicitud.numero if orden.solicitud else "",
+                  proyecto.radicado]
+        historia += [Spacer(1, 4), _p("Referencia interna: " + " · ".join(x for x in partes if x))]
+    historia += [Spacer(1, 18), _firmas_orden(ancho, [orden])]
     doc.build(historia)
     return f"Orden_de_compra_{orden.numero}.pdf", buf.getvalue()
+
+
+def _firmas_orden(ancho, ordenes):
+    """Realizó (quien la prepara), Revisó (coordinación administrativa) y Aprobó (dirección), como en la hoja de JANOTEC.
+    Sin firma escaneada: la aprobación queda en la plataforma con su fecha."""
+    def personas(campo, fecha):
+        vistos, filas = set(), []
+        for o in ordenes:
+            u = getattr(o, campo)
+            if u and u.pk not in vistos:
+                vistos.add(u.pk)
+                cuando = getattr(o, fecha, None)
+                filas.append(f"<b>{(u.get_full_name() or u.username).upper()}</b><br/>{(u.cargo or '').upper()}"
+                             + (f"<br/>{timezone.localtime(cuando):%d/%m/%Y}" if cuando else ""))
+        return Paragraph("<br/>".join(filas) or "&nbsp;", E)
+
+    urgente = next((o for o in ordenes if o.motivo_urgencia), None)
+    aprobo = personas("aprobada_por", "aprobada_en")
+    if urgente and not any(o.aprobada_por for o in ordenes):
+        aprobo = _p("Pasada por urgencia, sin aprobación de dirección: " + urgente.motivo_urgencia)
+    titulo = ParagraphStyle("firma_t", parent=E_SECCION, alignment=TA_CENTER)
+    tabla = Table([[Paragraph("FIRMAS Y APROBACIONES", titulo), "", ""],
+                   [Paragraph("REALIZÓ", titulo), Paragraph("REVISÓ", titulo), Paragraph("APROBÓ", titulo)],
+                   [personas("creado_por", "creado"), personas("revisada_por", "revisada_en"), aprobo]],
+                  colWidths=[ancho / 3] * 3, rowHeights=[None, None, 46])  # espacio para firmar a mano
+    tabla.setStyle(TableStyle([("SPAN", (0, 0), (-1, 0)), ("BACKGROUND", (0, 0), (-1, 1), AZUL_OC),
+                               ("GRID", (0, 1), (-1, -1), 0.5, BORDE), ("BOX", (0, 0), (-1, -1), 0.5, BORDE),
+                               ("VALIGN", (0, 0), (-1, -1), "TOP"), ("TOPPADDING", (0, 2), (-1, 2), 6),
+                               ("BOTTOMPADDING", (0, 2), (-1, 2), 6)]))
+    return KeepTogether([tabla])
+
+
+# Colores de la hoja «Orden de compra» de JANOTEC
+AZUL_OC = colors.HexColor("#1f3864")
+AZUL_CLARO = colors.HexColor("#2f5597")
+CREMA_OC = colors.HexColor("#fff2cc")
+ROSA_OC = colors.HexColor("#f4cccc")
+
+
+def orden_proyecto_pdf(h):
+    """(nombre, bytes) de la orden de compra del proyecto: la hoja consolidada de JANOTEC (inventario.proyecto.hoja)."""
+    from decimal import Decimal
+
+    def pesos(v):
+        return "-" if v in (None, 0) else "$" + f"{Decimal(v).quantize(Decimal('1')):,}".replace(",", ".")
+
+    def cant(v):
+        return "-" if not v else format(Decimal(v).normalize(), "f")
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(letter), leftMargin=10 * mm, rightMargin=10 * mm, topMargin=10 * mm,
+                            bottomMargin=10 * mm, title=f"Orden de compra {h['id_proyecto']}")
+    ancho = doc.width
+    chico = ParagraphStyle("oc", parent=E, fontSize=7, leading=8.5)
+    chico_b = ParagraphStyle("oc_b", parent=chico, fontName="Helvetica-Bold")
+    centro = ParagraphStyle("oc_c", parent=chico, alignment=TA_CENTER)
+    derecha = ParagraphStyle("oc_d", parent=chico, alignment=TA_RIGHT)
+    derecha_b = ParagraphStyle("oc_db", parent=derecha, fontName="Helvetica-Bold")
+    blanco = ParagraphStyle("oc_w", parent=chico_b, alignment=TA_CENTER, textColor=colors.white)
+    blanco_d = ParagraphStyle("oc_wd", parent=blanco, alignment=TA_RIGHT)
+
+    def barra(texto):
+        t = Table([[Paragraph(texto, blanco)]], colWidths=[ancho])
+        t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), AZUL_OC), ("TOPPADDING", (0, 0), (-1, -1), 2),
+                               ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]))
+        return t
+
+    # Encabezado con los datos de la propuesta
+    numero_estilo = ParagraphStyle("oc_n", parent=chico_b, textColor=colors.HexColor("#c00000") if not h["aprobada"] else colors.black)
+    datos = [("N° ORDEN DE COMPRA:", Paragraph(h["numero"], numero_estilo)), ("N° Propuesta:", h["codigo"]),
+             ("ID PROYECTO:", Paragraph(h["id_proyecto"], ParagraphStyle("oc_id", parent=chico_b, textColor=colors.HexColor("#0000c0")))),
+             ("MODALIDAD:", h["modalidad"]), ("Cliente:", h["cliente"]), ("Sede:", h["sede"]), ("NIT:", h["nit"]),
+             ("Objeto:", h["objeto"]), ("Línea de Servicio:", h["linea_servicio"]), ("Fecha:", f"{h['fecha']:%d/%m/%Y}"),
+             ("Fecha Aprobación:", f"{h['fecha_aprobacion']:%d/%m/%Y}" if h["fecha_aprobacion"] else "")]
+    encabezado = Table([[Paragraph(e, chico_b), v if not isinstance(v, str) else Paragraph(v, chico)] for e, v in datos],
+                       colWidths=[110, ancho * 0.5 - 110])
+    estilo = [("LINEBELOW", (0, 0), (-1, -1), 0.3, BORDE), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+              ("TOPPADDING", (0, 0), (-1, -1), 1.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5), ("BACKGROUND", (1, 2), (1, 2), CREMA_OC)]
+    if not h["aprobada"]:
+        estilo.append(("BACKGROUND", (1, 0), (1, 0), ROSA_OC))
+    encabezado.setStyle(TableStyle(estilo))
+    encabezado.hAlign = "LEFT"
+    historia = [barra("ORDEN DE COMPRA"), encabezado, Spacer(1, 6), barra("DETALLE DE ÍTEMS A COMPRAR (precios proveedor)")]
+
+    # Detalle: un renglón por ítem de la propuesta
+    titulos = ["Categoría", "Descripción", "Cant. a Comprar", "Proveedor", "Marca", "Referencia", "Precio Unit. sin IVA",
+               "Precio Total sin IVA", "Valor IVA", "Valor Total con IVA", "Cant. Requerida", "Decisión de Compra"]
+    anchos = [62, None, 40, 60, 52, 66, 50, 54, 46, 54, 40, 58]
+    anchos[1] = ancho - sum(a for a in anchos if a)
+    filas = [[Paragraph(t, blanco) for t in titulos]]
+    gris_inventario = []
+    for i, f in enumerate(h["filas"], start=1):
+        decision = f["decision"]
+        filas.append([Paragraph(f["categoria"], centro), Paragraph(f["descripcion"], chico), Paragraph(cant(f["comprar"]), centro),
+                      Paragraph(f["proveedor"].razon_social if f["proveedor"] else "", centro), Paragraph(f["marca"], centro),
+                      Paragraph(f["referencia"], centro), Paragraph(pesos(f["unitario"]), derecha), Paragraph(pesos(f["base"]), derecha),
+                      Paragraph(pesos(f["iva"]), derecha), Paragraph(pesos(f["total"]), derecha), Paragraph(cant(f["requerida"]), centro),
+                      Paragraph(decision, ParagraphStyle("oc_dec", parent=centro, fontName="Helvetica-Oblique" if decision == "INVENTARIO" else "Helvetica"))])
+        if decision == "INVENTARIO":
+            gris_inventario.append(i)
+    t = h["totales"]
+    filas.append(["", "", "", "", "", "", Paragraph("TOTALES:", blanco_d), Paragraph(pesos(t["base"]), blanco_d),
+                  Paragraph(pesos(t["iva"]), blanco_d), Paragraph(pesos(t["total"]), blanco_d), "", ""])
+    detalle = Table(filas, colWidths=anchos, repeatRows=1)
+    estilo = [("GRID", (0, 0), (-1, -2), 0.4, BORDE), ("BACKGROUND", (0, 0), (-1, 0), AZUL_CLARO), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+              ("BACKGROUND", (0, -1), (-1, -1), AZUL_OC),
+              ("BACKGROUND", (10, 1), (10, -2), CREMA_OC), ("TOPPADDING", (0, 0), (-1, -1), 1.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
+              ("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 2)]
+    estilo += [("BACKGROUND", (11, i), (11, i), colors.HexColor("#d9d9d9")) for i in gris_inventario]
+    detalle.setStyle(TableStyle(estilo))
+    historia += [detalle, Spacer(1, 8)]
+
+    # Observaciones y resumen por proveedor
+    resumen = [[Paragraph(x, blanco) for x in ("Proveedor", "Ítems", "Total sin IVA", "Valor IVA", "Total con IVA")]]
+    resumen += [[Paragraph(g["proveedor"], chico), Paragraph(str(g["items"]), centro), Paragraph(pesos(g["base"]), derecha),
+                 Paragraph(pesos(g["iva"]), derecha), Paragraph(pesos(g["total"]), derecha)] for g in h["resumen"]]
+    resumen.append([Paragraph("TOTAL", chico_b), Paragraph(str(h["items_comprar"]), ParagraphStyle("oc_cb", parent=centro, fontName="Helvetica-Bold")),
+                    Paragraph(pesos(t["base"]), derecha_b), Paragraph(pesos(t["iva"]), derecha_b), Paragraph(pesos(t["total"]), derecha_b)])
+    ancho_res = ancho * 0.55
+    tabla_res = Table([[Paragraph("RESUMEN POR PROVEEDOR", blanco), "", "", "", ""]] + resumen,
+                      colWidths=[ancho_res * 0.36, ancho_res * 0.1, ancho_res * 0.18, ancho_res * 0.18, ancho_res * 0.18])
+    tabla_res.setStyle(TableStyle([("SPAN", (0, 0), (-1, 0)), ("BACKGROUND", (0, 0), (-1, 0), AZUL_OC),
+                                   ("BACKGROUND", (0, 1), (-1, 1), AZUL_CLARO), ("LINEBELOW", (0, 1), (-1, -1), 0.4, BORDE),
+                                   ("LINEABOVE", (0, -1), (-1, -1), 0.8, colors.black), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+    ordenes = ", ".join(f"{o.numero} ({o.proveedor or 'sin proveedor'}: {o.get_estado_display().lower()})" for o in h["ordenes"])
+    observaciones = Table([[Paragraph("OBSERVACIONES:", blanco)],
+                           [Paragraph(("Órdenes por proveedor: " + ordenes) if ordenes else "&nbsp;", chico)]],
+                          colWidths=[ancho - ancho_res - 8], rowHeights=[None, None])
+    observaciones.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), AZUL_OC), ("BOX", (0, 0), (-1, -1), 0.5, BORDE),
+                                       ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    juntas = Table([[observaciones, tabla_res]], colWidths=[ancho - ancho_res, ancho_res])
+    juntas.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                                ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
+    historia += [KeepTogether([juntas, Spacer(1, 8), _firmas_orden(ancho, h["ordenes"])])]
+    doc.build(historia)
+    return f"Orden_de_compra_{h['id_proyecto']}.pdf", buf.getvalue()
 
 
 # Hoja carta de 30 etiquetas (3 × 10, 66,7 × 25,4 mm: tipo Avery 5160), la más común en papelerías

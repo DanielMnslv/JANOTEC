@@ -38,7 +38,7 @@ class UsuarioAdmin(UserAdmin):
     list_filter = ("rol", "empresa", "is_active")
     search_fields = ("username", "first_name", "last_name", "email", "documento", "empresa__razon_social")
     fieldsets = UserAdmin.fieldsets + (
-        ("JANOTEC", {"fields": ("rol", "tambien_comercial", "tambien_administrativo", "tambien_financiera", "tambien_tecnico", "empresa", "documento", "telefono", "cargo", "area", "sede")}),
+        ("JANOTEC", {"fields": ("rol", "tambien_comercial", "tambien_administrativo", "tambien_financiera", "tambien_tecnico", "revisa_compras", "empresa", "documento", "telefono", "cargo", "area", "sede", "firma")}),
     )
     add_fieldsets = UserAdmin.add_fieldsets + (
         ("Datos JANOTEC", {"fields": ("first_name", "last_name", "email", "rol", "empresa", "documento", "telefono", "cargo")}),

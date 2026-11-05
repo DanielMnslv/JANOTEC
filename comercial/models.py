@@ -332,6 +332,11 @@ class ItemCatalogo(models.Model):
     iva = models.DecimalField("IVA %", max_digits=5, decimal_places=2, default=19)
     fuente = models.CharField("de dónde salió el precio", max_length=120, blank=True,
                               help_text="Por ejemplo, la propuesta en la que se cotizó (PE-2026-07-08-V1).")
+    # Para la orden de compra: a quién se le compra y qué modelo exacto
+    marca = models.CharField(max_length=80, blank=True)
+    referencia = models.CharField(max_length=80, blank=True, help_text="Modelo o SKU del fabricante (DS-7732NI-M4…).")
+    proveedor = models.ForeignKey("inventario.Proveedor", on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+                                  verbose_name="proveedor habitual")
     activo = models.BooleanField(default=True)
     # Foto del producto: sale en la tabla de equipos del informe de requerimientos técnicos
     imagen = models.ImageField("imagen de referencia", upload_to=ruta_imagen_catalogo, blank=True,
@@ -386,6 +391,12 @@ class Cotizacion(models.Model):
     aprobada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                      related_name="+", verbose_name="aprobada por")
     motivo_urgencia = models.CharField("motivo del envío urgente", max_length=500, blank=True)
+    # PE-AAAA-MM-NNN: la plataforma sugiere el siguiente número; administrativa lo ajusta si el consecutivo va en otro
+    consecutivo = models.PositiveSmallIntegerField("consecutivo de la propuesta", null=True, blank=True,
+                                                   help_text="El NNN de PE-AAAA-MM-NNN. Vacío: el siguiente del año.")
+    elaborada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name="+", verbose_name="elaborada por",
+                                      help_text="Quien arma la propuesta en administrativa: firma «Elaboró».")
     creado = models.DateTimeField(auto_now_add=True)
     actualizado = models.DateTimeField(auto_now=True)
 
@@ -484,6 +495,10 @@ class LineaCotizacion(models.Model):
     valor_unitario = models.DecimalField("valor unitario (antes de IVA)", max_digits=14, decimal_places=2)
     descuento = models.DecimalField("descuento %", max_digits=5, decimal_places=2, default=0)
     iva = models.DecimalField("IVA %", max_digits=5, decimal_places=2, default=19)
+    # Para la orden de compra del proyecto (no salen en el PDF del cliente)
+    proveedor = models.ForeignKey("inventario.Proveedor", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    marca = models.CharField(max_length=80, blank=True)
+    referencia = models.CharField(max_length=80, blank=True)
     orden = models.PositiveSmallIntegerField(default=0)
 
     class Meta:
@@ -502,6 +517,11 @@ class LineaCotizacion(models.Model):
             if re.search(r"\b(" + "|".join(palabras) + ")", texto):
                 return categoria
         return self.Categoria.EQUIPOS
+
+    @property
+    def es_servicio(self):
+        """Mano de obra o servicio: no pasa por bodega; se le compra a un contratista (orden de servicio)."""
+        return self.categoria_final == self.Categoria.MANO_OBRA or bool(self.item and self.item.tipo == ItemCatalogo.Tipo.SERVICIO)
 
     def _precio_exacto(self):
         """Precio sin redondear: costo ÷ (1 − margen). Sin margen válido, el valor tal cual."""

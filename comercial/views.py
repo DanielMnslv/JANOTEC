@@ -223,6 +223,13 @@ def nuevo_cliente(request):
 
 
 # --- Detalle y gestión del área comercial ----------------------------------------------
+def puede_ver_compras(usuario):
+    """Si ve la orden de compra del proyecto (bodega, coordinación que revisa, financiera, dirección, administrativa)."""
+    from inventario.proyecto import puede_ver
+
+    return puede_ver(usuario)
+
+
 @login_required
 @comercial_requerido
 def detalle(request, radicado):
@@ -237,6 +244,7 @@ def detalle(request, radicado):
         "seguimientos": ticket.seguimientos.select_related("autor").prefetch_related("adjuntos"),
         "adjuntos_inicio": ticket.adjuntos.filter(seguimiento__tipo=Seguimiento.Tipo.CREACION),
         "versiones": ficha.versiones.select_related("archivo", "enviada_por", "entregada_por").order_by("-numero"),
+        "ve_compras": puede_ver_compras(request.user),
         "informe": InformeRequerimiento.objects.filter(ficha=ficha).select_related("elaborado_por").first(),
         "adjuntos_informe": ticket.adjuntos.filter(es_informe=True),
         "en_comercial": ticket.area == T.Area.COMERCIAL,
@@ -544,7 +552,10 @@ def cotizador(request, radicado):
         form = CotizacionForm(request.POST, instance=cotizacion)
         lineas = Lineas(request.POST, instance=cotizacion, prefix="lineas")
         if form.is_valid() and lineas.is_valid():
-            form.save()
+            cotizacion = form.save(commit=False)
+            if not es_direccion:  # quien la arma en administrativa firma «Elaboró»
+                cotizacion.elaborada_por = request.user
+            cotizacion.save()
             for i, f in enumerate(lineas.forms):
                 if f.cleaned_data and not f.cleaned_data.get("DELETE") and f.cleaned_data.get("descripcion"):
                     f.instance.orden = i
@@ -590,14 +601,15 @@ def cotizador(request, radicado):
     else:
         form = CotizacionForm(instance=cotizacion)
         lineas = Lineas(instance=cotizacion, prefix="lineas")
-    catalogo = list(ItemCatalogo.objects.filter(activo=True).values("descripcion", "valor_unitario", "iva", "unidad", "tipo"))
+    catalogo = list(ItemCatalogo.objects.filter(activo=True).values("descripcion", "valor_unitario", "iva", "unidad", "tipo",
+                                                                    "marca", "referencia", "proveedor_id"))
     for c in catalogo:
         c["valor_unitario"], c["iva"] = float(c["valor_unitario"]), float(c["iva"])
     return render(request, "comercial/cotizador.html", {
         "ticket": ticket, "ficha": ficha, "cotizacion": cotizacion, "form": form, "lineas": lineas, "catalogo": catalogo,
         "palabras_categoria": LineaCotizacion.PALABRAS_CATEGORIA,
         "totales": cotizacion.totales(), "numero": (ficha.versiones.count() + 1),
-        "codigo": coti.codigo(ficha, ficha.versiones.count() + 1),
+        "codigo": coti.codigo(ficha, ficha.versiones.count() + 1, cotizacion), "siguiente": f"{coti.siguiente_consecutivo():03d}",
         "es_direccion": es_direccion, "bloqueada": cotizacion.en_revision and not es_direccion,
     })
 
@@ -615,7 +627,7 @@ def cotizacion_pdf(request, radicado):
         messages.error(request, coti.MARGEN_OBLIGATORIO)
         return redirect("comercial:cotizador", radicado)
     numero = ticket.ficha.versiones.count() + 1
-    nombre, contenido = propuesta_pdf(cotizacion, coti.codigo(ticket.ficha, numero), numero, borrador=True)
+    nombre, contenido = propuesta_pdf(cotizacion, coti.codigo(ticket.ficha, numero, cotizacion), numero, borrador=True)
     respuesta = HttpResponse(contenido, content_type="application/pdf")
     respuesta["Content-Disposition"] = f'inline; filename="BORRADOR-{nombre}"'
     return respuesta

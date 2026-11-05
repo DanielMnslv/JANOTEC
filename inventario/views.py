@@ -84,7 +84,7 @@ def ordenes(request):
     estado = request.GET.get("estado", "abiertas")
     qs = OrdenCompra.objects.select_related("proveedor", "solicitud", "solicitud__ticket").prefetch_related("lineas")
     if estado == "abiertas":
-        qs = qs.filter(estado__in=["borrador", "revision", "por_pagar", "lista", "enviada"])
+        qs = qs.filter(estado__in=["borrador", "por_revisar", "revision", "por_pagar", "lista", "enviada"])
     elif estado in OrdenCompra.Estado.values:
         qs = qs.filter(estado=estado)
     return render(request, "inventario/ordenes.html", {"ordenes": qs[:200], "estado": estado,
@@ -128,7 +128,8 @@ def orden_detalle(request, pk):
     E = OrdenCompra.Estado
     orden = get_object_or_404(OrdenCompra.objects.select_related("proveedor", "solicitud", "solicitud__ticket"), pk=pk)
     u = request.user
-    editable = (orden.estado == E.BORRADOR and u.gestiona_inventario) or (orden.estado == E.REVISION and u.es_direccion)
+    editable = ((orden.estado == E.BORRADOR and u.gestiona_inventario) or (orden.estado == E.REVISION and u.es_direccion)
+                or (orden.estado == E.POR_REVISAR and (u.revisa_compras or u.es_direccion)))
     cancelable = u.gestiona_inventario and orden.estado not in (E.RECIBIDA, E.CANCELADA) and not orden.pagada
     form = OrdenCompraForm(request.POST or None, request.FILES or None, instance=orden)
     lineas = formset_orden()(request.POST or None, instance=orden, prefix="lineas")
@@ -158,12 +159,15 @@ def orden_detalle(request, pk):
                 try:
                     if accion == "aprobar" and u.es_direccion:
                         financiera.aprobar(orden, u)
+                    elif orden.estado == E.POR_REVISAR:
+                        financiera.revisar(orden, u)
                     else:
                         financiera.enviar_a_direccion(orden, u, motivo)
                 except ValidationError as e:
                     messages.error(request, " ".join(e.messages))
                     return redirect(orden)
                 messages.success(request, {
+                    E.POR_REVISAR: f"{orden.numero} enviada a la coordinación administrativa para su revisión.",
                     E.REVISION: f"{orden.numero} enviada a dirección para su aprobación.",
                     E.POR_PAGAR: f"{orden.numero} aprobada: pasó a financiera para el pago.",
                     E.LISTA: f"{orden.numero} aprobada (a crédito): ya puede enviarla al proveedor.",
@@ -213,6 +217,8 @@ def orden_recibir(request, pk):
                                  + (". Imprima sus etiquetas desde la orden y márquelos." if placas else "."))
                 if orden.por_recibir:
                     messages.info(request, f"{orden.numero} sigue abierta: aún falta que llegue parte de lo pedido.")
+                elif orden.servicios_pendientes:
+                    messages.info(request, f"{orden.numero} sigue abierta: falta confirmar que el contratista prestó el servicio.")
                 return redirect(orden)
         else:
             messages.error(request, "Revise las filas marcadas.")

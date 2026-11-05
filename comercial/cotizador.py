@@ -38,7 +38,7 @@ def borrador(ficha):
                 margen=anterior.margen,
                 tasa_mensual=anterior.tasa_mensual, plazos=anterior.plazos,
                 recargo_alquiler=anterior.recargo_alquiler,
-                opcion_compra=anterior.opcion_compra)
+                opcion_compra=anterior.opcion_compra, elaborada_por=anterior.elaborada_por)
             for linea in anterior.lineas.all():
                 linea.pk, linea.cotizacion = None, nueva
                 linea.save()
@@ -104,17 +104,36 @@ def traer_del_informe(cotizacion):
     return agregadas
 
 
-def codigo(ficha, numero):
-    """PE-AAAA-MM-DD-Vn: la fecha es la de la primera versión, como en las propuestas en papel.
-    Si otra propuesta ya usa ese día, se le agrega una letra (PE-2026-07-11-B-V1) para que no se repita."""
+RE_CONSECUTIVO = r"^PE-{anio}-[0-9]{{2}}-([0-9]{{3}})(-V[0-9]+)?$"
+
+
+def consecutivos_usados(anio, excepto=None):
+    """Los NNN ya usados en el año (PE-AAAA-MM-NNN), sin los de la ficha ``excepto``."""
+    import re
+
+    qs = PropuestaVersion.objects.filter(codigo__regex=RE_CONSECUTIVO.format(anio=anio))
+    if excepto is not None:
+        qs = qs.exclude(ficha=excepto)
+    patron = re.compile(RE_CONSECUTIVO.format(anio=anio))
+    return {int(patron.match(c).group(1)) for c in qs.values_list("codigo", flat=True)}
+
+
+def siguiente_consecutivo(anio=None):
+    """El siguiente NNN del año: el mayor ya usado más uno."""
+    return max(consecutivos_usados(anio or timezone.localdate().year), default=0) + 1
+
+
+def codigo(ficha, numero, cotizacion=None):
+    """PE-AAAA-MM-NNN-Vn, como las propuestas de JANOTEC (PE-2026-10-047-V2): año y mes de la primera versión y el
+    consecutivo del año. Las versiones siguientes conservan el código y solo cambian la V. El consecutivo lo sugiere la
+    plataforma y administrativa lo puede ajustar en la cotización mientras no se haya enviado la primera versión."""
     primera = ficha.versiones.exclude(codigo="").order_by("numero").first()
     if primera:
         return f"{primera.codigo.rsplit('-V', 1)[0]}-V{numero}"
-    base = f"PE-{timezone.localdate():%Y-%m-%d}"
-    usadas = PropuestaVersion.objects.filter(codigo__startswith=base).exclude(ficha=ficha).values("ficha").distinct().count()
-    if usadas:
-        base = f"{base}-{chr(ord('A') + usadas)}"
-    return f"{base}-V{numero}"
+    if cotizacion is None:
+        cotizacion = ficha.cotizaciones.filter(version__isnull=True).order_by("-creado").first()
+    n = (cotizacion.consecutivo if cotizacion and cotizacion.consecutivo else None) or siguiente_consecutivo()
+    return f"PE-{timezone.localdate():%Y-%m}-{n:03d}-V{numero}"
 
 
 def validar(cotizacion):
@@ -173,7 +192,7 @@ def enviar(cotizacion, autor, motivo_urgencia="", por_comercial=False):
                               "y escriba el motivo.")
     totales = cotizacion.totales()
     numero = (ficha.versiones.order_by("-numero").values_list("numero", flat=True).first() or 0) + 1
-    cod = codigo(ficha, numero)
+    cod = codigo(ficha, numero, cotizacion)
     nombre, contenido = propuesta_pdf(cotizacion, cod, numero)
     with transaction.atomic():
         if not ficha.comercial_id and getattr(autor, "es_comercial", False):

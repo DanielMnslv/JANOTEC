@@ -215,7 +215,8 @@
     </div>
     {% if versiones %}
     <div class="card">
-      <div class="card-header">Versiones de la propuesta</div>
+      <div class="card-header d-flex justify-content-between align-items-center">Versiones de la propuesta
+        {% if ve_compras %}<a class="small fw-normal" href="{% url 'inventario:orden_proyecto' ticket.radicado %}"><i class="bi bi-table"></i> Orden de compra del proyecto</a>{% endif %}</div>
       <ul class="list-group list-group-flush">
         {% for v in versiones %}
         <li class="list-group-item small">

@@ -655,10 +655,12 @@ class OrdenCompra(models.Model):
     class Estado(models.TextChoices):
         """Camino de la orden de compra:
 
-            borrador → revisión de dirección → por pagar (financiera, si es anticipado) → lista →
+            borrador → revisión administrativa (si quien la arma no revisa compras) → revisión de dirección →
+            por pagar (financiera, si es anticipado) → lista →
             enviada al proveedor → recibida en bodega. Con crédito se salta «por pagar».
         """
         BORRADOR = "borrador", "En preparación"
+        POR_REVISAR = "por_revisar", "En revisión administrativa"
         REVISION = "revision", "En revisión de dirección"
         POR_PAGAR = "por_pagar", "Por pagar (financiera)"
         LISTA = "lista", "Lista para enviar al proveedor"
@@ -674,6 +676,9 @@ class OrdenCompra(models.Model):
     proveedor = models.ForeignKey(Proveedor, on_delete=models.SET_NULL, null=True, blank=True, related_name="ordenes")
     solicitud = models.ForeignKey(SolicitudMaterial, on_delete=models.SET_NULL, null=True, blank=True,
                                   related_name="ordenes_compra", help_text="Para qué solicitud de material (ticket) es.")
+    ticket = models.ForeignKey("tickets.Ticket", on_delete=models.SET_NULL, null=True, blank=True, related_name="ordenes_compra",
+                               help_text="El proyecto (ticket) para el que se compra, aunque no tenga solicitud de material "
+                                         "(p. ej. la mano de obra subcontratada).")
     cotizacion = models.ForeignKey(CotizacionProveedor, on_delete=models.SET_NULL, null=True, blank=True, related_name="ordenes",
                                    help_text="La cotización del proveedor de la que salió esta orden.")
     estado = models.CharField(max_length=12, choices=Estado.choices, default=Estado.BORRADOR, db_index=True)
@@ -688,6 +693,11 @@ class OrdenCompra(models.Model):
     forma_pago = models.CharField("forma de pago", max_length=12, choices=FormaPago.choices, default=FormaPago.ANTICIPADO)
     dias_credito = models.PositiveSmallIntegerField("días de crédito", null=True, blank=True,
                                                     help_text="Solo a crédito: cuántos días después de la factura se paga.")
+    # Revisión de la coordinación administrativa (firma «Revisó»), antes de dirección
+    revisada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="+", verbose_name="revisada por")
+    revisada_en = models.DateTimeField(null=True, blank=True)
+    observaciones_revision = models.TextField("observaciones de la revisión", blank=True)
     # Aprobación de dirección (o paso urgente con motivo)
     aprobada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                      related_name="+", verbose_name="aprobada por")
@@ -720,6 +730,14 @@ class OrdenCompra(models.Model):
     def __str__(self):
         return self.numero
 
+    def save(self, *args, **kwargs):
+        """La orden de una solicitud de material queda también en el proyecto (ticket) de esa solicitud."""
+        if self.solicitud_id and not self.ticket_id:
+            self.ticket_id = SolicitudMaterial.objects.filter(pk=self.solicitud_id).values_list("ticket_id", flat=True).first()
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = list(kwargs["update_fields"]) + ["ticket"]
+        super().save(*args, **kwargs)
+
     def get_absolute_url(self):
         """Ficha de la orden de compra."""
         return reverse("inventario:orden", args=[self.pk])
@@ -732,7 +750,7 @@ class OrdenCompra(models.Model):
     @property
     def color_estado(self):
         """Color de la etiqueta del estado (clases de Bootstrap)."""
-        return {"borrador": "secondary", "revision": "info", "por_pagar": "danger", "lista": "primary", "enviada": "warning",
+        return {"borrador": "secondary", "por_revisar": "info", "revision": "info", "por_pagar": "danger", "lista": "primary", "enviada": "warning",
                 "recibida": "success", "cancelada": "dark"}[self.estado]
 
     # --- Pago y factura ---------------------------------------------------------------------
@@ -793,8 +811,18 @@ class OrdenCompra(models.Model):
 
     @property
     def por_recibir(self):
-        """Las líneas a las que aún les falta llegar algo."""
-        return [l for l in self.lineas.all() if l.pendiente > 0]
+        """Las líneas de material o equipo a las que aún les falta llegar algo (los servicios no entran a bodega)."""
+        return [l for l in self.lineas.all() if l.pendiente > 0 and not l.es_servicio]
+
+    @property
+    def servicios_pendientes(self):
+        """Las líneas de servicio (mano de obra subcontratada) que el contratista aún no ha prestado."""
+        return [l for l in self.lineas.all() if l.pendiente > 0 and l.es_servicio]
+
+    @property
+    def completa(self):
+        """Llegó todo el material y se prestaron todos los servicios."""
+        return all(l.pendiente <= 0 for l in self.lineas.all())
 
 
 class LineaOrdenCompra(models.Model):
@@ -811,6 +839,10 @@ class LineaOrdenCompra(models.Model):
                                     help_text="Lo que se compra de más para tener en bodega.")
     valor_unitario = models.DecimalField("valor unitario (antes de IVA)", max_digits=14, decimal_places=2, default=0)
     iva = models.DecimalField("IVA %", max_digits=5, decimal_places=2, default=19)
+    es_servicio = models.BooleanField("servicio", default=False,
+                                      help_text="Mano de obra o servicio de un contratista: no entra a bodega; se confirma prestado.")
+    marca = models.CharField(max_length=80, blank=True)
+    referencia = models.CharField(max_length=80, blank=True)
     recibido = models.DecimalField("ya recibido", max_digits=12, decimal_places=2, default=0)
 
     class Meta:

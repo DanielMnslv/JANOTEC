@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% load inventario_extras %}
+{% block titulo %}Orden de compra {{ h.id_proyecto }}{% endblock %}
+{% block contenido %}
+{# La orden de compra del proyecto: la hoja consolidada de JANOTEC (inventario/proyecto.py). #}
+<a href="{% url 'comercial:detalle' h.ticket.radicado %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ h.ticket.radicado }} · {{ h.cliente }}</a>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mt-2 mb-3">
+  <div>
+    <h1 class="h4 page-title mb-1">Orden de compra del proyecto · {{ h.id_proyecto }}</h1>
+    {% if h.aprobada %}<span class="badge text-bg-success">{{ h.numero }}</span>
+    {% else %}<span class="badge text-bg-danger">{{ h.numero }}</span>{% endif %}
+    <span class="small ms-2">Propuesta {{ h.codigo }} · {{ h.modalidad }}{% if h.fecha_aprobacion %} · aprobada el {{ h.fecha_aprobacion|date:"d/m/Y" }}{% endif %}</span>
+  </div>
+  <a class="btn btn-light border btn-sm" href="{% url 'inventario:orden_proyecto_pdf' h.ticket.radicado %}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+</div>
+
+<div class="card mb-3"><div class="card-body small row g-2">
+  <div class="col-md-6"><b>Cliente:</b> {{ h.cliente }} · <b>Sede:</b> {{ h.sede }} · <b>NIT:</b> {{ h.nit }}</div>
+  <div class="col-md-6"><b>Línea de servicio:</b> {{ h.linea_servicio }} · <b>Fecha:</b> {{ h.fecha|date:"d/m/Y" }}</div>
+  <div class="col-12"><b>Objeto:</b> {{ h.objeto }}</div>
+</div></div>
+
+{% if not h.cotizacion %}<div class="alert alert-warning">Este requerimiento no tiene propuesta armada en el cotizador.</div>{% else %}
+<div class="card mb-3">
+  <div class="card-header"><i class="bi bi-list-check"></i> Ítems a comprar <span class="small text-muted-jn fw-normal">· precios del proveedor (costo), sin el margen de la propuesta</span></div>
+  <div class="table-responsive"><table class="table table-sm small align-middle mb-0">
+    <thead class="table-light"><tr><th>Categoría</th><th>Descripción</th><th class="text-center">Cant. a comprar</th><th>Proveedor</th><th>Marca</th><th>Referencia</th>
+      <th class="text-end">Precio unit. sin IVA</th><th class="text-end">Total sin IVA</th><th class="text-end">IVA</th><th class="text-end">Total con IVA</th>
+      <th class="text-center">Cant. requerida</th><th>Decisión</th><th class="text-center">Ordenado</th></tr></thead>
+    <tbody>{% for f in h.filas %}<tr>
+      <td>{{ f.categoria }}</td><td>{{ f.descripcion }}{% if f.servicio %} <span class="badge text-bg-light border">servicio</span>{% endif %}</td>
+      <td class="text-center">{{ f.comprar|floatformat:"-2" }}</td>
+      <td>{{ f.proveedor|default:'<span class="text-danger">Sin proveedor</span>' }}</td><td>{{ f.marca }}</td><td>{{ f.referencia }}</td>
+      <td class="text-end">{% if f.unitario %}{{ f.unitario|pesos }}{% else %}-{% endif %}</td><td class="text-end">{% if f.base %}{{ f.base|pesos }}{% else %}-{% endif %}</td>
+      <td class="text-end">{% if f.iva %}{{ f.iva|pesos }}{% else %}-{% endif %}</td><td class="text-end">{% if f.total %}{{ f.total|pesos }}{% else %}-{% endif %}</td>
+      <td class="text-center" style="background:#fff2cc">{{ f.requerida|floatformat:"-2" }}</td>
+      <td>{% if f.decision == 'INVENTARIO' %}<span class="badge text-bg-secondary">INVENTARIO</span>{% else %}<span class="badge text-bg-primary">{{ f.decision }}</span>{% endif %}</td>
+      <td class="text-center">{% if f.ordenado %}{{ f.ordenado|floatformat:"-2" }}{% else %}—{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+    <tfoot><tr class="fw-semibold"><td colspan="7" class="text-end">Totales</td><td class="text-end">{{ h.totales.base|pesos }}</td><td class="text-end">{{ h.totales.iva|pesos }}</td>
+      <td class="text-end">{{ h.totales.total|pesos }}</td><td colspan="3"></td></tr></tfoot>
+  </table></div>
+  <div class="card-body border-top small text-muted-jn py-2"><i class="bi bi-info-circle"></i> Proveedor, marca y referencia salen del cotizador (o del catálogo). Lo que hay libre en bodega sale de inventario; cuando bodega revisa el material, manda su revisión, y cuando ya hay órdenes, lo ordenado.</div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7"><div class="card">
+    <div class="card-header"><i class="bi bi-truck"></i> Resumen por proveedor</div>
+    <div class="table-responsive"><table class="table table-sm small align-middle mb-0">
+      <thead class="table-light"><tr><th>Proveedor</th><th class="text-center">Ítems</th><th class="text-end">Total sin IVA</th><th class="text-end">IVA</th><th class="text-end">Total con IVA</th><th></th></tr></thead>
+      <tbody>{% for g in h.resumen %}<tr><td>{{ g.proveedor }}</td><td class="text-center">{{ g.items }}</td><td class="text-end">{{ g.base|pesos }}</td>
+        <td class="text-end">{{ g.iva|pesos }}</td><td class="text-end">{{ g.total|pesos }}</td>
+        <td class="text-end">{% if puede_ordenar and h.aprobada and g.pendientes %}<form method="post" action="{% url 'inventario:orden_proyecto_ordenar' h.ticket.radicado %}">{% csrf_token %}
+          <input type="hidden" name="proveedor" value="{{ g.pk|default_if_none:'' }}"><button class="btn btn-sm btn-accent text-nowrap"><i class="bi bi-plus-lg"></i> Preparar orden</button></form>
+          {% elif not g.pendientes %}<span class="small text-success">Ordenado</span>{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="6" class="text-muted-jn">Todo sale de inventario: no hay nada que comprar.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% if not h.aprobada %}<div class="card-body border-top small text-danger py-2"><i class="bi bi-lock"></i> {{ h.numero }}.</div>{% endif %}
+  </div></div>
+  <div class="col-lg-5"><div class="card">
+    <div class="card-header"><i class="bi bi-receipt"></i> Órdenes por proveedor</div>
+    <ul class="list-group list-group-flush small">{% for o in h.ordenes %}
+      <li class="list-group-item d-flex justify-content-between"><a href="{{ o.get_absolute_url }}">{{ o.numero }} · {{ o.proveedor|default:"sin proveedor" }}</a>
+        <span class="badge text-bg-{{ o.color_estado }}">{{ o.get_estado_display }}</span></li>
+    {% empty %}<li class="list-group-item text-muted-jn">Aún no hay órdenes de compra para este proyecto.</li>{% endfor %}</ul>
+    <div class="card-body border-top small">
+      <div><b>Realizó:</b> {% for n, c in h.realizo %}{{ n }}{% if c %} ({{ c }}){% endif %}{% if not forloop.last %}; {% endif %}{% empty %}—{% endfor %}</div>
+      <div><b>Revisó:</b> {% for n, c in h.reviso %}{{ n }}{% if c %} ({{ c }}){% endif %}{% if not forloop.last %}; {% endif %}{% empty %}—{% endfor %}</div>
+      <div><b>Aprobó:</b> {% for n, c in h.aprobo %}{{ n }}{% if c %} ({{ c }}){% endif %}{% if not forloop.last %}; {% endif %}{% empty %}—{% endfor %}</div>
+    </div>
+  </div></div>
+</div>
+{% endif %}
+{% endblock %}

@@ -595,7 +595,7 @@ class CotizadorTests(BaseComercial):
         self.client.post(url, {**self.lineas([]), "margen": "1", **URGENTE, "accion": "enviar"})
         t.refresh_from_db()
         v1 = PropuestaVersion.objects.get(ficha=t.ficha)
-        self.assertRegex(v1.codigo, r"^PE-\d{4}-\d{2}-\d{2}-V1$")
+        self.assertRegex(v1.codigo, r"^PE-\d{4}-\d{2}-\d{3}-V1$")
         self.assertEqual((t.ficha.etapa, t.ficha.valor_propuesta, v1.archivo.nombre_original), ("enviada", 123586, f"{v1.codigo}.pdf"))
         correo = next(m for m in mail.outbox if "leidy@a.co" in m.to)
         self.assertEqual(correo.attachments[0][0], f"{v1.codigo}.pdf")

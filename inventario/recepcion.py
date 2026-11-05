@@ -163,7 +163,7 @@ def recibir(orden, cabecera, filas, usuario, soporte=None):
     orden.proveedor = orden.proveedor or proveedor
     if soporte:
         orden.soporte = soporte
-    if not orden.por_recibir:
+    if orden.completa:
         orden.estado = OrdenCompra.Estado.RECIBIDA
     orden.save()
     if orden.solicitud:

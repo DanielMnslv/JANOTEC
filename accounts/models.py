@@ -151,6 +151,12 @@ class Usuario(AbstractUser):
                                  help_text="Para asociarle lo que el inventario registraba a su nombre.")
     area = models.CharField("área", max_length=60, blank=True, help_text="Técnica, administrativa, sistemas, comercial…")
     sede = models.CharField("sede de trabajo", max_length=100, blank=True, default="Principal")
+    revisa_compras = models.BooleanField(
+        "revisa las órdenes de compra", default=False,
+        help_text="Coordinación administrativa: revisa las órdenes de compra antes de que pasen a dirección (firma «Revisó»).",
+    )
+    firma = models.ImageField("firma escaneada", upload_to="firmas/usuarios/", blank=True,
+                              help_text="PNG con fondo blanco o transparente. Sale en «Elaboró» de las propuestas que arma.")
 
     class Meta:
         verbose_name = "usuario"

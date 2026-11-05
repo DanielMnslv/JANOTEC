@@ -38,6 +38,13 @@ class PrepararPruebaAdministrativaTests(TestCase):
             self.assertEqual([o.estado for o in ordenes], [OrdenCompra.Estado.BORRADOR, OrdenCompra.Estado.LISTA])
             self.assertTrue(all(not o.proveedor.correo for o in ordenes), "el proveedor de prueba no tiene correo")
 
+    def test_funciona_aunque_yuri_revise_las_ordenes(self):
+        """Con la revisión administrativa activa, las órdenes quedan igual: devuelta (en preparación) y pagada (lista)."""
+        Usuario.objects.filter(username="ychingate").update(revisa_compras=True)
+        self.preparar()
+        estados = [o.estado for o in OrdenCompra.objects.filter(proveedor__razon_social="PRUEBA PROVEEDOR TATIANA").order_by("pk")]
+        self.assertEqual(estados, [OrdenCompra.Estado.BORRADOR, OrdenCompra.Estado.LISTA])
+
     def test_no_duplica_y_rehacer_los_vuelve_a_crear(self):
         self.preparar()
         with self.assertRaises(CommandError):

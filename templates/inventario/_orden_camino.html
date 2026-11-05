@@ -6,16 +6,19 @@
   <div class="card-body">
     <ol class="list-unstyled d-flex flex-wrap gap-2 small mb-3 camino-orden">
       <li class="badge {% if orden.estado != 'borrador' %}text-bg-success{% else %}text-bg-secondary{% endif %}">1. Preparación (bodega)</li>
-      <li class="badge {% if orden.aprobada_en %}text-bg-success{% elif orden.estado == 'revision' %}text-bg-info{% else %}text-bg-light border{% endif %}">2. Aprobación (dirección){% if orden.motivo_urgencia %} · urgente{% endif %}</li>
-      <li class="badge {% if orden.pagada %}text-bg-success{% elif orden.estado == 'por_pagar' %}text-bg-danger{% else %}text-bg-light border{% endif %}">3. Pago (financiera){% if orden.a_credito and not orden.pagada %} · a crédito{% endif %}</li>
-      <li class="badge {% if orden.estado == 'enviada' or orden.estado == 'recibida' %}text-bg-success{% elif orden.estado == 'lista' %}text-bg-primary{% else %}text-bg-light border{% endif %}">4. Envío al proveedor (bodega)</li>
-      <li class="badge {% if orden.estado == 'recibida' %}text-bg-success{% else %}text-bg-light border{% endif %}">5. Recepción (bodega)</li>
-      <li class="badge {% if orden.factura_validada_en %}text-bg-success{% elif orden.factura_registrada %}text-bg-warning{% else %}text-bg-light border{% endif %}">6. Factura (financiera)</li>
+      <li class="badge {% if orden.revisada_en %}text-bg-success{% elif orden.estado == 'por_revisar' %}text-bg-info{% else %}text-bg-light border{% endif %}">2. Revisión (coordinación administrativa)</li>
+      <li class="badge {% if orden.aprobada_en %}text-bg-success{% elif orden.estado == 'revision' %}text-bg-info{% else %}text-bg-light border{% endif %}">3. Aprobación (dirección){% if orden.motivo_urgencia %} · urgente{% endif %}</li>
+      <li class="badge {% if orden.pagada %}text-bg-success{% elif orden.estado == 'por_pagar' %}text-bg-danger{% else %}text-bg-light border{% endif %}">4. Pago (financiera){% if orden.a_credito and not orden.pagada %} · a crédito{% endif %}</li>
+      <li class="badge {% if orden.estado == 'enviada' or orden.estado == 'recibida' %}text-bg-success{% elif orden.estado == 'lista' %}text-bg-primary{% else %}text-bg-light border{% endif %}">5. Envío al proveedor (bodega)</li>
+      <li class="badge {% if orden.estado == 'recibida' %}text-bg-success{% else %}text-bg-light border{% endif %}">6. Recepción (bodega)</li>
+      <li class="badge {% if orden.factura_validada_en %}text-bg-success{% elif orden.factura_registrada %}text-bg-warning{% else %}text-bg-light border{% endif %}">7. Factura (financiera)</li>
     </ol>
     {% if orden.cerrada %}<div class="alert alert-success small py-2 mb-2"><i class="bi bi-check2-all"></i> Compra cerrada: recibida, pagada y con la factura validada.</div>{% endif %}
 
     {# Lo que ya pasó #}
     <ul class="small mb-2 ps-3">
+      {% if orden.creado_por %}<li>Preparada por {{ orden.creado_por.get_full_name|default:orden.creado_por.username }} el {{ orden.creado|date:"d/m/Y" }}.</li>{% endif %}
+      {% if orden.revisada_en %}<li>Revisada por {{ orden.revisada_por.get_full_name|default:orden.revisada_por.username }} el {{ orden.revisada_en|date:"d/m/Y h:i a" }}.</li>{% endif %}
       {% if orden.aprobada_en %}<li>{% if orden.aprobada_por %}Aprobada por {{ orden.aprobada_por.get_full_name|default:orden.aprobada_por.username }}{% else %}Pasada sin aprobación de dirección por urgencia: <em>{{ orden.motivo_urgencia }}</em>{% endif %} el {{ orden.aprobada_en|date:"d/m/Y h:i a" }}.</li>{% endif %}
       {% if orden.pagada %}<li>Pagada el {{ orden.pagada_en|date:"d/m/Y" }}: {{ orden.valor_pagado|pesos }}{% if orden.medio_pago %} por {{ orden.medio_pago }}{% endif %}{% if orden.pago_por %} · {{ orden.pago_por.get_full_name|default:orden.pago_por.username }}{% endif %}
         {% if orden.soporte_pago %}· <a href="{% url 'inventario:orden_archivo_financiera' orden.pk 'soporte_pago' %}" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i> Soporte de pago</a>{% endif %}</li>
@@ -29,6 +32,20 @@
     {# Lo que le toca hacer ahora a quien la está viendo #}
     {% if orden.estado == 'borrador' and orden.observaciones_direccion %}
       <div class="alert alert-warning small py-2 mb-0"><b>Dirección la devolvió para corregir:</b> {{ orden.observaciones_direccion }}</div>
+    {% elif orden.estado == 'borrador' and orden.observaciones_revision %}
+      <div class="alert alert-warning small py-2 mb-0"><b>La coordinación administrativa la devolvió para corregir:</b> {{ orden.observaciones_revision }}</div>
+    {% endif %}
+
+    {% if orden.estado == 'por_revisar' %}
+      {% if user.revisa_compras or user.es_direccion %}
+      <div class="border border-info rounded p-2">
+        <div class="small mb-2"><b>Revísela:</b> puede corregir los ítems y pasarla a dirección abajo («Revisada: pasar a dirección»), o devolverla a quien la preparó.</div>
+        <form method="post" action="{% url 'inventario:orden_paso' orden.pk 'devolver_revision' %}" class="d-flex flex-wrap gap-2">{% csrf_token %}
+          <input name="observaciones" class="form-control form-control-sm" style="max-width:520px" required minlength="5" placeholder="Qué hay que corregir">
+          <button class="btn btn-sm btn-outline-danger"><i class="bi bi-arrow-return-left"></i> Devolver para corregir</button>
+        </form>
+      </div>
+      {% else %}<div class="small text-muted-jn"><i class="bi bi-hourglass-split"></i> En revisión de la coordinación administrativa: cuando la revise pasa a dirección.</div>{% endif %}
     {% endif %}
 
     {% if orden.estado == 'revision' %}

@@ -240,6 +240,27 @@ def _texto_codigo(descripcion):
     return re.sub(r"\s*\[[^\]]+\]\s*$", "", descripcion)
 
 
+def _firma_usuario(usuario, ancho, alto):
+    """La firma escaneada del usuario (si la subió), ajustada al espacio; None si no hay o no se puede leer."""
+    archivo = getattr(usuario, "firma", None) if usuario else None
+    if not archivo:
+        return None
+    try:
+        with archivo.open("rb") as f:
+            img = Image.open(BytesIO(f.read())).convert("RGBA")
+    except (OSError, ValueError):
+        return None
+    fondo = Image.new("RGB", img.size, "white")
+    fondo.paste(img, mask=img.split()[3])
+    png = BytesIO()
+    fondo.save(png, "PNG")
+    png.seek(0)
+    escala = min(ancho / img.width, alto / img.height)
+    firma = ImagenPDF(png, width=img.width * escala, height=img.height * escala)
+    firma.hAlign = "LEFT"
+    return firma
+
+
 def _carta_propuesta(cotizacion, codigo, linea_servicio):
     """Página 1: la carta de presentación firmada por dirección."""
     t = cotizacion.ficha.ticket
@@ -389,13 +410,14 @@ def _resumen_propuesta(cotizacion, codigo, linea_servicio):
     totales.setStyle(TableStyle(malla + [("BACKGROUND", (0, 0), (-1, -2), gris), ("BACKGROUND", (0, -1), (-1, -1), OLIVA)]))
     historia += [_barra("DESGLOSE DE EQUIPOS COTIZADOS", ANCHO), desglose, totales, Spacer(1, 3 * mm)]
 
-    comercial = ficha.comercial
-    elaboro = (comercial.get_full_name() or comercial.username) if comercial else ""
-    firmas = Table([[_p("Elaboró (firma):", chico_b), _p("Aprobó:", chico_b)], ["", ""],
+    persona = cotizacion.elaborada_por or ficha.comercial  # quien la armó en administrativa (antes, el asesor)
+    elaboro = (persona.get_full_name() or persona.username) if persona else ""
+    firma = _firma_usuario(persona, ANCHO / 2 * 0.6, 26)
+    firmas = Table([[_p("Elaboró (firma):", chico_b), _p("Aprobó:", chico_b)], [firma or "", ""],
                     [HRFlowable(width="85%", color=GRIS, thickness=0.5, hAlign="LEFT"), HRFlowable(width="85%", color=GRIS, thickness=0.5, hAlign="LEFT")],
                     [_p(elaboro or " ", chico), _p("Nombre y cargo:", chico)],
-                    [_p(f"Cargo: {comercial.cargo}" if comercial and comercial.cargo else "Cargo:", chico), ""]],
-                   colWidths=[ANCHO / 2, ANCHO / 2], rowHeights=[None, 14, 3, None, None])
+                    [_p(f"Cargo: {persona.cargo}" if persona and persona.cargo else "Cargo:", chico), ""]],
+                   colWidths=[ANCHO / 2, ANCHO / 2], rowHeights=[None, 28 if firma else 14, 3, None, None])
     firmas.setStyle(TableStyle([("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
     historia.append(KeepTogether([firmas]))
     return historia

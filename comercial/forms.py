@@ -395,10 +395,12 @@ class LineaCotizacionForm(BootstrapMixin, forms.ModelForm):
     class Meta:
         from .models import LineaCotizacion
         model = LineaCotizacion
-        fields = ["descripcion", "categoria", "cantidad", "valor_unitario", "descuento", "iva"]
+        fields = ["descripcion", "categoria", "cantidad", "valor_unitario", "descuento", "iva", "proveedor", "marca", "referencia"]
         widgets = {
             "descripcion": forms.TextInput(attrs={"list": "catalogo-precios", "placeholder": "Busque en el catálogo o escriba…",
                                                   "class": "descripcion"}),
+            "marca": forms.TextInput(attrs={"placeholder": "Marca", "class": "marca"}),
+            "referencia": forms.TextInput(attrs={"placeholder": "Referencia", "class": "referencia"}),
             "cantidad": forms.NumberInput(attrs={"step": "any", "min": "0", "class": "cantidad"}),
             "valor_unitario": forms.NumberInput(attrs={"step": "any", "min": "0", "class": "valor"}),
             "descuento": forms.NumberInput(attrs={"step": "any", "min": "0", "max": "100", "class": "descuento"}),
@@ -410,6 +412,9 @@ class LineaCotizacionForm(BootstrapMixin, forms.ModelForm):
         self._aplicar_estilos()
         self.fields["categoria"].choices = [("", "Automática")] + list(self.fields["categoria"].choices)[1:]
         self.fields["categoria"].widget.attrs["class"] = "categoria"
+        self.fields["proveedor"].empty_label = "Proveedor…"
+        self.fields["proveedor"].widget.attrs["class"] = "proveedor"
+        self.fields["proveedor"].queryset = self.fields["proveedor"].queryset.order_by("razon_social")
         for campo in self.fields.values():
             campo.widget.attrs["class"] = (campo.widget.attrs.get("class", "") + " form-control-sm").strip()
 
@@ -428,13 +433,33 @@ class CotizacionForm(BootstrapMixin, forms.ModelForm):
         from .models import Cotizacion
         model = Cotizacion
         fields = ["alcance", "condiciones", "modalidad", "margen", "tasa_mensual", "recargo_alquiler", "plazos",
-                  "opcion_compra"]
+                  "opcion_compra", "consecutivo"]
         widgets = {"alcance": forms.Textarea(attrs={"rows": 2}), "condiciones": forms.Textarea(attrs={"rows": 3}),
                    "margen": forms.NumberInput(attrs={"min": "1", "max": "99", "step": "any"})}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._aplicar_estilos()
+        self.fields["consecutivo"].label = "Consecutivo (NNN)"
+        self.fields["consecutivo"].widget.attrs.update({"min": "1", "max": "999"})
+        if self.instance.pk and self.instance.ficha.versiones.exclude(codigo="").exists():
+            # Ya salió la primera versión: el código queda fijo
+            self.fields["consecutivo"].disabled = True
+
+    def clean_consecutivo(self):
+        """Del 1 al 999 y sin repetir el de otra propuesta del año."""
+        from django.utils import timezone
+
+        from .cotizador import consecutivos_usados
+
+        n = self.cleaned_data.get("consecutivo")
+        if n is None or self.fields["consecutivo"].disabled:
+            return n
+        if not 1 <= n <= 999:
+            raise forms.ValidationError("Escriba un número del 1 al 999.")
+        if n in consecutivos_usados(timezone.localdate().year, excepto=self.instance.ficha):
+            raise forms.ValidationError(f"El {n:03d} ya lo usa otra propuesta de este año.")
+        return n
 
 
 class ItemCatalogoForm(BootstrapMixin, forms.ModelForm):
@@ -442,7 +467,7 @@ class ItemCatalogoForm(BootstrapMixin, forms.ModelForm):
     class Meta:
         from .models import ItemCatalogo
         model = ItemCatalogo
-        fields = ["descripcion", "tipo", "unidad", "valor_unitario", "iva", "imagen", "activo"]
+        fields = ["descripcion", "tipo", "unidad", "valor_unitario", "iva", "marca", "referencia", "proveedor", "imagen", "activo"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

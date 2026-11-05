@@ -40,11 +40,12 @@ E = OrdenCompra.Estado
 
 # --- Permisos ------------------------------------------------------------------------------
 def compras_requerido(vista):
-    """Las órdenes de compra las ven bodega, dirección y financiera (cada uno actúa solo en su paso)."""
+    """Las órdenes de compra las ven bodega, la coordinación administrativa que las revisa, dirección y financiera
+    (cada uno actúa solo en su paso)."""
     @wraps(vista)
     def envoltura(request, *args, **kwargs):
         """Deja pasar a bodega (gestiona el inventario) y a financiera o dirección; los demás reciben 403."""
-        if not (request.user.gestiona_inventario or request.user.ve_financiera):
+        if not (request.user.gestiona_inventario or request.user.ve_financiera or request.user.revisa_compras):
             raise PermissionDenied
         return vista(request, *args, **kwargs)
     return envoltura
@@ -75,6 +76,18 @@ def correos_direccion():
 def correos_financiera():
     """Área financiera; mientras no tenga a nadie, dirección."""
     return _activos(Q(rol=Usuario.Rol.FINANCIERA) | Q(tambien_financiera=True)) or correos_direccion()
+
+
+def correos_revision():
+    """Correos de quienes revisan las órdenes de compra (coordinación administrativa)."""
+    return _activos(Q(revisa_compras=True))
+
+
+def requiere_revision(orden, autor):
+    """La orden pasa por la coordinación administrativa si hay quien revise, quien la envía no es de los que revisan
+    y aún no la han revisado."""
+    return (not orden.revisada_en and not getattr(autor, "revisa_compras", False)
+            and Usuario.objects.filter(is_active=True, revisa_compras=True).exists())
 
 
 def correos_bodega():
@@ -160,12 +173,64 @@ def validar(orden):
 
 def enviar_a_direccion(orden, autor, motivo_urgencia=""):
     """Bodega pasa la orden a dirección. Si quien la envía es dirección, queda aprobada de una vez; si es urgente
-    (con motivo), sigue sin esperar y dirección recibe el aviso."""
+    (con motivo), sigue sin esperar y dirección recibe el aviso.
+
+    Antes de dirección la revisa la coordinación administrativa (firma «Revisó»): si quien la envía es de los que
+    revisan, queda revisada por él; si no, pasa primero a revisión administrativa.
+    """
     validar(orden)
     if autor.es_direccion or motivo_urgencia:
         return aprobar(orden, autor, motivo_urgencia)
+    if requiere_revision(orden, autor):
+        orden.estado, orden.observaciones_revision = E.POR_REVISAR, ""
+        orden.save(update_fields=["estado", "observaciones_revision", "actualizado"])
+        _nota(orden, autor, f"orden de compra {orden.numero} enviada a revisión administrativa.")
+        notif._enviar(f"[{orden.numero}] Orden de compra para revisar · {orden.proveedor}",
+                      "\n".join([f"{autor.get_full_name() or autor.username} preparó la orden de compra.", "",
+                                 *_resumen(orden), "", "Revísela: puede corregirla y pasarla a dirección, o devolverla.",
+                                 "", f"Revisar: {_enlace(orden)}"]),
+                      correos_revision())
+        return orden
+    if getattr(autor, "revisa_compras", False) and not orden.revisada_en:
+        orden.revisada_por, orden.revisada_en = autor, timezone.now()
+    return _a_direccion(orden, autor)
+
+
+def revisar(orden, autor):
+    """La coordinación administrativa revisó la orden: queda su firma «Revisó» y pasa a dirección."""
+    if orden.estado != E.POR_REVISAR:
+        raise ValidationError("Solo se revisa una orden que está en revisión administrativa.")
+    if not getattr(autor, "revisa_compras", False) and not autor.es_direccion:
+        raise ValidationError("La revisa la coordinación administrativa.")
+    validar(orden)
+    if autor.es_direccion:
+        return aprobar(orden, autor)
+    orden.revisada_por, orden.revisada_en = autor, timezone.now()
+    _nota(orden, autor, f"orden de compra {orden.numero} revisada por la coordinación administrativa.")
+    return _a_direccion(orden, autor)
+
+
+def devolver_revision(orden, autor, observaciones):
+    """La coordinación administrativa devuelve la orden a quien la preparó con lo que hay que corregir."""
+    observaciones = observaciones.strip()
+    if orden.estado != E.POR_REVISAR:
+        raise ValidationError("Solo se devuelve una orden que está en revisión administrativa.")
+    if len(observaciones) < 5:
+        raise ValidationError("Escriba qué hay que corregir.")
+    orden.estado, orden.observaciones_revision = E.BORRADOR, observaciones[:2000]
+    orden.save(update_fields=["estado", "observaciones_revision", "actualizado"])
+    _nota(orden, autor, f"la coordinación administrativa devolvió la orden de compra {orden.numero}: {observaciones}")
+    destinos = [orden.creado_por.email] if orden.creado_por and orden.creado_por.email else correos_bodega()
+    notif._enviar(f"[{orden.numero}] Orden de compra devuelta para corregir",
+                  "\n".join([f"{autor.get_full_name() or autor.username} devolvió la orden:", "", observaciones, "",
+                             f"Corregir: {_enlace(orden)}"]),
+                  destinos)
+
+
+def _a_direccion(orden, autor):
+    """La deja en revisión de dirección y le avisa."""
     orden.estado, orden.observaciones_direccion = E.REVISION, ""
-    orden.save(update_fields=["estado", "observaciones_direccion", "actualizado"])
+    orden.save(update_fields=["estado", "observaciones_direccion", "revisada_por", "revisada_en", "actualizado"])
     _nota(orden, autor, f"orden de compra {orden.numero} enviada a dirección para su aprobación.")
     notif._enviar(f"[{orden.numero}] Orden de compra para aprobar · {orden.proveedor}",
                   "\n".join([f"{autor.get_full_name() or autor.username} envió la orden de compra para su aprobación.", "",
@@ -220,7 +285,8 @@ def devolver(orden, autor, observaciones):
     if len(observaciones) < 5:
         raise ValidationError("Escriba qué hay que corregir.")
     orden.estado, orden.observaciones_direccion = E.BORRADOR, observaciones[:2000]
-    orden.save(update_fields=["estado", "observaciones_direccion", "actualizado"])
+    orden.revisada_por = orden.revisada_en = None  # corregida, se revisa de nuevo
+    orden.save(update_fields=["estado", "observaciones_direccion", "revisada_por", "revisada_en", "actualizado"])
     _nota(orden, autor, f"dirección devolvió la orden de compra {orden.numero}: {observaciones}")
     notif._enviar(f"[{orden.numero}] Orden de compra devuelta para corregir",
                   "\n".join([f"{autor.get_full_name() or autor.username} devolvió la orden:", "", observaciones, "",
@@ -233,7 +299,7 @@ def registrar_pago(orden, autor, fecha, valor, medio, soporte):
     """Financiera registra el pago con su soporte. La anticipada queda lista para enviarla al proveedor."""
     if orden.pagada:
         raise ValidationError("Esta orden ya tiene el pago registrado.")
-    if orden.estado in (E.BORRADOR, E.REVISION, E.CANCELADA):
+    if orden.estado in (E.BORRADOR, E.POR_REVISAR, E.REVISION, E.CANCELADA):
         raise ValidationError("La orden aún no está aprobada para pago.")
     if not soporte:
         raise ValidationError("Adjunte el soporte de pago.")
@@ -302,6 +368,29 @@ def enviar_al_proveedor(orden, autor):
     return enviado
 
 
+def servicio_prestado(orden, autor, nota=""):
+    """El contratista prestó el servicio (mano de obra subcontratada): sus líneas quedan recibidas. Si ya llegó todo
+    el material, la orden queda recibida y financiera recibe el aviso para validar la factura."""
+    if orden.estado not in (E.LISTA, E.ENVIADA):
+        raise ValidationError("El servicio se confirma cuando la orden ya está aprobada (y pagada, si es anticipada).")
+    lineas = orden.servicios_pendientes
+    if not lineas:
+        raise ValidationError("Esta orden no tiene servicios por confirmar.")
+    with transaction.atomic():
+        for l in lineas:
+            l.recibido = l.total
+            l.save(update_fields=["recibido"])
+        if orden.completa:
+            orden.estado, orden.recibida_por, orden.recibida_en = E.RECIBIDA, autor, timezone.now()
+            orden.save(update_fields=["estado", "recibida_por", "recibida_en", "actualizado"])
+        nota = " ".join(nota.split())[:300]
+        _nota(orden, autor, f"orden de compra {orden.numero}: {orden.proveedor} prestó el servicio"
+                            + (f" ({nota})" if nota else "") + ".")
+    if orden.estado == E.RECIBIDA:
+        recibida(orden)
+    return orden
+
+
 def recibida(orden):
     """Llegó la mercancía: si financiera aún no tiene la factura validada, le avisa para que la registre."""
     if orden.factura_validada_en:
@@ -318,7 +407,7 @@ def recibida(orden):
 def registrar_factura(orden, autor, numero, fecha, valor, archivo=None, acepta_diferencia=False, nota=""):
     """Financiera registra la factura y la compara con la orden. Si cuadra (o acepta la diferencia con una nota),
     queda validada; si no, queda marcada como «factura con diferencia»."""
-    if orden.estado in (E.BORRADOR, E.REVISION, E.CANCELADA):
+    if orden.estado in (E.BORRADOR, E.POR_REVISAR, E.REVISION, E.CANCELADA):
         raise ValidationError("La factura se registra cuando la orden ya está aprobada.")
     if not numero.strip() or valor <= 0:
         raise ValidationError("Escriba el número y el valor total de la factura.")
@@ -376,6 +465,16 @@ def accion(request, pk, cual):
             registrar_pago(orden, u, _fecha(request.POST.get("fecha")), _decimal(request.POST.get("valor")),
                            request.POST.get("medio", ""), request.FILES.get("soporte_pago"))
             messages.success(request, f"Pago de {orden.numero} registrado: bodega recibe el aviso para reenviar el soporte.")
+        elif cual == "revisar" and (u.revisa_compras or u.es_direccion):
+            revisar(orden, u)
+            messages.success(request, f"{orden.numero} revisada: pasó a dirección para su aprobación." if orden.estado == E.REVISION
+                             else f"{orden.numero} aprobada.")
+        elif cual == "devolver_revision" and (u.revisa_compras or u.es_direccion):
+            devolver_revision(orden, u, request.POST.get("observaciones", ""))
+            messages.info(request, f"{orden.numero} devuelta a quien la preparó con sus observaciones.")
+        elif cual == "servicio" and u.gestiona_inventario:
+            servicio_prestado(orden, u, request.POST.get("nota", ""))
+            messages.success(request, f"Servicio de {orden.proveedor} confirmado en {orden.numero}.")
         elif cual == "proveedor" and u.gestiona_inventario:
             if enviar_al_proveedor(orden, u):
                 messages.success(request, f"{orden.numero} enviada por correo a {orden.proveedor}.")

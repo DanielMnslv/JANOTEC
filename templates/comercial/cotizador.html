@@ -49,6 +49,8 @@
         <div class="row g-3 align-items-end">
           <div class="col-md-5">{% include "tickets/_campo.html" with campo=form.modalidad %}</div>
           <div class="col-md-4">{% include "tickets/_campo.html" with campo=form.margen %}</div>
+          <div class="col-md-3">{% include "tickets/_campo.html" with campo=form.consecutivo %}
+            {% if not form.consecutivo.field.disabled %}<div class="form-text">Vacío: el siguiente del año ({{ siguiente }}).</div>{% endif %}</div>
           <div class="col-md-3 solo-alquiler">{% include "tickets/_campo.html" with campo=form.tasa_mensual %}</div>
           <div class="col-md-3 solo-alquiler">{% include "tickets/_campo.html" with campo=form.recargo_alquiler %}</div>
           <div class="col-md-3 solo-alquiler">{% include "tickets/_campo.html" with campo=form.plazos %}</div>
@@ -233,6 +235,11 @@
       if (!num(valor)) valor.value = c.valor_unitario.toFixed(2);
       tr.querySelector('.iva').value = c.iva;
       if (c.tipo === 'servicio') tr.querySelector('.categoria').value = 'mano_obra';
+      // Marca, referencia y proveedor habitual del catálogo (sin borrar lo que ya se escribió)
+      [['marca', c.marca], ['referencia', c.referencia], ['proveedor', c.proveedor_id]].forEach(function (par) {
+        const campo = tr.querySelector('.' + par[0]);
+        if (campo && !campo.value && par[1]) campo.value = par[1];
+      });
       recalcular();
     });
     tr.querySelectorAll('input').forEach(function (el) { el.addEventListener('input', recalcular); el.addEventListener('change', recalcular); });

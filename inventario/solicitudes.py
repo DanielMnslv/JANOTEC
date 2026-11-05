@@ -220,7 +220,13 @@ def material_de_la_propuesta(ficha):
     version = ficha.versiones.filter(estado="aprobada").order_by("-numero").first()
     cotizacion = getattr(version, "cotizacion", None) if version else None
     if cotizacion is not None:
-        return "\n".join(f"{l.cantidad.normalize():f} {l.descripcion}" for l in cotizacion.lineas.select_related("item")
+        # La referencia del cotizador va como [CÓDIGO]: así bodega reconoce el equipo que ya tiene en inventario
+        def con_referencia(l):
+            if re.search(r"\[[^\]]+\]\s*$", l.descripcion) or not l.referencia.strip():
+                return l.descripcion
+            return f"{l.descripcion} [{l.referencia.strip()}]"
+
+        return "\n".join(f"{l.cantidad.normalize():f} {con_referencia(l)}" for l in cotizacion.lineas.select_related("item")
                          if not (l.item and l.item.tipo == "servicio") and not es_servicio(l.descripcion)
                          and sin_cantidad(l.descripcion) not in servicios_informe)
     if ficha.informe_listo:
