@@ -93,6 +93,7 @@
         </a>
         <ul class="dropdown-menu dropdown-menu-end">
           {% if user.empresa %}<li><span class="dropdown-item-text small text-muted">{{ user.empresa }}</span></li><li><hr class="dropdown-divider"></li>{% endif %}
+          {% if user.is_superuser or request.session.actuar_como_original %}<li><a class="dropdown-item" href="{% url 'probar_como' %}"><i class="bi bi-person-badge"></i> Actuar como otra área (prueba)</a></li>{% endif %}
           <li><a class="dropdown-item" href="{% url 'password_change' %}"><i class="bi bi-key"></i> Cambiar contraseña</a></li>
           <li><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="dropdown-item"><i class="bi bi-box-arrow-right"></i> Salir</button></form></li>
         </ul>
@@ -101,6 +102,14 @@
   </div>
 </nav>
 
+{% if request.session.actuar_como_original %}
+<div class="alert alert-warning rounded-0 border-0 border-bottom border-warning mb-0 py-2 d-flex flex-wrap align-items-center gap-2 small" role="status">
+  <i class="bi bi-person-badge"></i>
+  <span>Está actuando como <strong>{{ user.get_full_name }}</strong> ({{ user.get_rol_display }}). Solo se guarda lo de PRUEBA.</span>
+  <a class="btn btn-sm btn-outline-dark ms-auto" href="{% url 'probar_como' %}">Cambiar de área</a>
+  <form method="post" action="{% url 'volver_a_mi_usuario' %}" class="m-0">{% csrf_token %}<input type="hidden" name="siguiente" value="{{ request.get_full_path }}"><button class="btn btn-sm btn-dark">Volver a mi usuario</button></form>
+</div>
+{% endif %}
 <main class="container-xl py-4">
   {% for m in messages %}
     <div class="alert alert-{% if m.tags == 'error' %}danger{% else %}{{ m.tags }}{% endif %} alert-dismissible fade show" role="alert">

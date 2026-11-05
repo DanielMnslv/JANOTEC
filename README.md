@@ -116,6 +116,15 @@ usuarios (se desactivan), ni crear coordinadores o Dirección, ni tocar cuentas 
 
 Los adjuntos **no son públicos**: se descargan por una vista que verifica permisos en cada solicitud.
 
+### Validar el proceso completo con «Actuar como»
+El superusuario recorre todo el proceso él solo: en el menú de su nombre, **Actuar como otra área (prueba)** →
+**Preparar el entorno de prueba** (o `python manage.py preparar_prueba_completa`). Eso crea un usuario de prueba por área
+(`prueba.cliente`, `prueba.comercial`, `prueba.coordinador`, `prueba.tecnico`, `prueba.administrativa`,
+`prueba.coordinadora`, `prueba.bodega`, `prueba.direccion`, `prueba.financiera`, `prueba.central`) y completa el
+entorno PRUEBA (catálogo, stock, proveedores sin correo). Con **Actuar como** pasa a cualquiera de ellos y vuelve con
+**Volver a mi usuario**. Los usuarios de prueba no tienen contraseña ni correo. Mientras se actúa como uno, solo se
+guarda sobre lo de PRUEBA, y cada cambio queda en Configuración → Historial (ver `accounts/prueba.py`).
+
 ---
 
 ## Instalación local (Windows / Linux / macOS)

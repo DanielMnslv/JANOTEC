@@ -4,6 +4,8 @@ from django.contrib.auth import views as auth_views
 from django.contrib.staticfiles.views import serve as servir_estatico
 from django.urls import include, path, re_path
 
+from accounts import actuar
+
 admin.site.site_header = "JANOTEC · Administración de la plataforma de tickets"
 admin.site.site_title = "JANOTEC Tickets"
 admin.site.index_title = "Configuración"
@@ -11,6 +13,9 @@ admin.site.index_title = "Configuración"
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("cuenta/ingresar/", auth_views.LoginView.as_view(redirect_authenticated_user=True), name="login"),
+    path("cuenta/probar-como/", actuar.probar_como, name="probar_como"),
+    path("cuenta/probar-como/<int:pk>/", actuar.actuar, name="actuar_como"),
+    path("cuenta/volver/", actuar.volver, name="volver_a_mi_usuario"),
     path("cuenta/", include("django.contrib.auth.urls")),
     path("comercial/", include("comercial.urls")),
     path("cronograma/", include("cronograma.urls")),

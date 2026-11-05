@@ -85,9 +85,17 @@ def correos_revision():
 
 def requiere_revision(orden, autor):
     """La orden pasa por la coordinación administrativa si hay quien revise, quien la envía no es de los que revisan
-    y aún no la han revisado."""
-    return (not orden.revisada_en and not getattr(autor, "revisa_compras", False)
-            and Usuario.objects.filter(is_active=True, revisa_compras=True).exists())
+    y aún no la han revisado. La coordinadora de prueba (prueba.coordinadora) solo cuenta para las órdenes de PRUEBA."""
+    from accounts import prueba
+
+    if orden.revisada_en or getattr(autor, "revisa_compras", False):
+        return False
+    revisores = Usuario.objects.filter(is_active=True, revisa_compras=True)
+    de_prueba = prueba.es_nombre_prueba(orden.proveedor.razon_social) or (
+        orden.ticket_id is not None and prueba.es_nombre_prueba(orden.ticket.empresa.razon_social))
+    if not de_prueba:
+        revisores = revisores.exclude(prueba.q_de_prueba())
+    return revisores.exists()
 
 
 def correos_bodega():

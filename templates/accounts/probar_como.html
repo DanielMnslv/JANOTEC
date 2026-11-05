@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block titulo %}Actuar como otra área{% endblock %}
+{% block contenido %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+  <h1 class="h4 mb-0"><i class="bi bi-person-badge"></i> Actuar como otra área (validación del proceso)</h1>
+  <form method="post" class="ms-auto">{% csrf_token %}
+    <button class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat"></i> Preparar el entorno de prueba</button>
+  </form>
+</div>
+<p class="text-muted small mb-3">
+  Entre como el usuario de prueba de cada área para recorrer el proceso completo. Ningún usuario de prueba tiene
+  contraseña ni correo. Mientras actúa como uno, solo se puede guardar sobre tickets, órdenes y clientes de PRUEBA.
+  Cada cambio de usuario queda en el registro. {% if actuando %}Ahora mismo está actuando como <strong>{{ user.get_full_name }}</strong>.{% endif %}
+</p>
+<div class="table-responsive">
+<table class="table table-sm align-middle">
+  <thead><tr><th>Área</th><th>Usuario</th><th>Qué hace en el proceso</th><th></th></tr></thead>
+  <tbody>
+  {% for u, nombre, que in usuarios %}
+    <tr{% if u and u.pk == user.pk %} class="table-warning"{% endif %}>
+      <td class="fw-semibold text-nowrap">{{ nombre }}</td>
+      <td class="small text-nowrap">{% if u %}{{ u.username }}<br><span class="text-muted">{{ u.get_rol_display }}{% if u.revisa_compras %} · revisa órdenes{% endif %}</span>{% else %}<span class="text-danger">No existe: use «Preparar el entorno de prueba»</span>{% endif %}</td>
+      <td class="small">{{ que }}</td>
+      <td class="text-end">
+        {% if u and u.pk != user.pk %}
+        <form method="post" action="{% url 'actuar_como' u.pk %}">{% csrf_token %}<button class="btn btn-sm btn-primary text-nowrap">Actuar como</button></form>
+        {% elif u %}<span class="badge text-bg-warning">Actuando</span>{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if actuando %}
+<form method="post" action="{% url 'volver_a_mi_usuario' %}">{% csrf_token %}<button class="btn btn-dark"><i class="bi bi-arrow-return-left"></i> Volver a mi usuario ({{ real.username }})</button></form>
+{% endif %}
+{% endblock %}

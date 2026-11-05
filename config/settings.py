@@ -48,6 +48,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "accounts.actuar.SoloPruebaMiddleware",  # «Actuar como»: solo se guarda sobre lo de PRUEBA
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
