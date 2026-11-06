@@ -8,6 +8,7 @@ from . import calificacion, clientes, consulta, views
 
 urlpatterns = [
     path("", views.inicio, name="inicio"),
+    path("mi-dia/", views.mi_dia, name="mi_dia"),
     path("consulta/", consulta.consulta, name="consulta"),
     path("consulta/<str:firma>/", consulta.consulta_token, name="consulta_token"),
     path("calificar/<str:firma>/", calificacion.calificar_correo, name="calificar_correo"),

@@ -128,7 +128,7 @@ class PermisosYPantallasTests(BaseInventario):
         self.assertContains(self.client.get(reverse("inventario:mi_material")), "Mi material")
         self.assertEqual(self.client.get(reverse("inventario:tecnico", args=[self.agente2.pk])).status_code, 403)
         self.client.force_login(self.bodega)
-        self.assertRedirects(self.client.get(reverse("inicio")), reverse("inventario:panel"))
+        self.assertRedirects(self.client.get(reverse("inicio")), reverse("mi_dia"))
         r = self.client.get(reverse("inventario:panel"))
         self.assertContains(r, "CAM-BAL-2MP002")
         self.assertContains(self.client.get(reverse("inventario:panel") + "?ver=insumos"), "305")

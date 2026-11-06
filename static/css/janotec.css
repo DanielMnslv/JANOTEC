@@ -427,3 +427,16 @@ a.kpi:hover { transform: translateY(-1px); }
   .barra-lateral, .barra-superior { display: none !important; }
   .app-jn { display: block; }
 }
+
+/* --- Fase 2 del rediseño: «Mi día» y tarjetas en cero apagadas --------------------------- */
+.kpi.cero { border-left-color: var(--jn-border); background: #fafafa; }
+.kpi.cero .valor { color: #b5b8bf; }
+.kpi.cero .etiqueta { color: #9a9ea6; }
+.mi-dia-grupo { scroll-margin-top: 80px; }
+.mi-dia-grupo .list-group-item.urgente { border-left: 3px solid #c0392b; }
+.mi-dia-grupo .card-header .bi { color: var(--jn-verde); }
+.mi-dia-vacio .bi-check2-circle { font-size: 2.6rem; color: var(--jn-verde); }
+.chip-al-dia { display: inline-flex; align-items: center; gap: .25rem; margin: 0 .35rem .35rem 0; padding: .15rem .6rem;
+  border-radius: 999px; background: #eef6ef; color: #3c6e47; font-size: .8rem; scroll-margin-top: 80px; }
+.nav-link.mi-dia { font-weight: 600; }
+@media (max-width: 575.98px) { .barra-superior .badge-rol { display: none; } }

@@ -37,7 +37,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.models import Empresa
 
-from . import cierre, diagnostico, etapas, notificaciones, pasos, reincidencia
+from . import cierre, diagnostico, etapas, mi_dia as agenda, notificaciones, pasos, reincidencia
 from .forms import (
     ActaForm,
     AplazarForm,
@@ -123,9 +123,11 @@ def _filtrar(qs, form, usuario):
 
 @login_required
 def inicio(request):
-    """Lleva a cada rol a su bandeja: personal técnico al panel, bodega al inventario, comercial a su bandeja y
-    el cliente o la central de atención a sus solicitudes.
+    """Lleva a cada área a «Mi día» (sus pendientes); quien no tiene «Mi día» va a su bandeja: el cliente y la central
+    de atención a sus solicitudes.
     """
+    if agenda.tiene_mi_dia(request.user):
+        return redirect("mi_dia")
     if request.user.es_personal:
         return redirect("panel")
     if request.user.es_bodega:  # también la de bodega que atiende lo comercial (tiene el enlace en la barra)
@@ -137,6 +139,27 @@ def inicio(request):
     if request.user.es_financiera:
         return redirect("inventario:financiera")
     return redirect("mis_tickets")  # cliente y central de atención
+
+
+@login_required
+def mi_dia(request):
+    """«Mi día»: lo que le toca resolver hoy al área de quien entra, cada pendiente con el botón del siguiente paso.
+
+    Dirección ve un solo grupo, «Por aprobar». Al entrar se revisan, si toca, el cierre automático y las alertas de
+    inventario (lo mismo que hace el panel técnico).
+    """
+    if not agenda.tiene_mi_dia(request.user):
+        return redirect("inicio")
+    cierre.revisar_si_toca()
+    from inventario import alertas
+    alertas.revisar_si_toca()
+    areas = agenda.pendientes(request.user)
+    grupos = [g for a in areas for g in a["grupos"]]
+    # Pocas tarjetas: con más de 4 grupos (quien cubre varias áreas) solo salen las que tienen algo pendiente
+    tarjetas = grupos if len(grupos) <= 4 else [g for g in grupos if g["items"]]
+    return render(request, "tickets/mi_dia.html", {
+        "areas": areas, "tarjetas": tarjetas, "total": sum(len(g["items"]) for g in grupos), "hoy": timezone.localdate(),
+    })
 
 
 @login_required

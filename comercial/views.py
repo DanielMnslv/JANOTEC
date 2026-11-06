@@ -113,9 +113,19 @@ def propuestas(request):
     cambios que pidió el cliente, por armar (con el informe listo) y las enviadas, a las que comercial hace seguimiento.
     Cada requerimiento aparece en un solo grupo.
     """
-    from .models import Cotizacion
     base = (FichaComercial.objects.filter(ticket__in=tickets_visibles(request.user))
             .select_related("ticket", "ticket__empresa", "ticket__sede", "comercial").order_by("fecha_max_propuesta", "creado"))
+    grupos = clasificar_propuestas(base)
+    return render(request, "comercial/propuestas.html", {
+        **grupos, "enviadas": list(base.filter(etapa=F.Etapa.ENVIADA)), "es_direccion": request.user.es_direccion,
+    })
+
+
+def clasificar_propuestas(base):
+    """Reparte las fichas abiertas en los grupos del área administrativa: por aprobar (en revisión de dirección),
+    devueltas por dirección, cambios del cliente y por armar (con el informe listo). Cada una cae en un solo grupo.
+    La usan la bandeja administrativa y «Mi día»."""
+    from .models import Cotizacion
     en_revision = set(Cotizacion.objects.filter(en_revision=True).values_list("ficha_id", flat=True))
     observadas = dict(Cotizacion.objects.filter(en_revision=False, version__isnull=True).exclude(observaciones_direccion="")
                       .values_list("ficha_id", "observaciones_direccion"))
@@ -135,10 +145,7 @@ def propuestas(request):
             cambios.append(f)
         elif InformeRequerimiento.objects.filter(ficha=f).exists():
             por_armar.append(f)
-    return render(request, "comercial/propuestas.html", {
-        "por_aprobar": por_aprobar, "devueltas": devueltas, "cambios": cambios, "por_armar": por_armar,
-        "enviadas": list(base.filter(etapa=F.Etapa.ENVIADA)), "es_direccion": request.user.es_direccion,
-    })
+    return {"por_aprobar": por_aprobar, "devueltas": devueltas, "cambios": cambios, "por_armar": por_armar}
 
 
 # --- Radicar -------------------------------------------------------------------------

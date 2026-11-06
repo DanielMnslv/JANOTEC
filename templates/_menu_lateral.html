@@ -1,5 +1,6 @@
 {% load inventario_extras %}{% with u=request.resolver_match.url_name ns=request.resolver_match.namespace %}
 {# Menú lateral agrupado por área. Cada rol ve solo sus grupos; los permisos son los mismos del menú anterior. #}
+{% if tiene_mi_dia %}<li class="nav-item"><a class="nav-link mi-dia {% if u == 'mi_dia' %}active{% endif %}" href="{% url 'mi_dia' %}"><i class="bi {% if user.es_direccion and not user.is_superuser %}bi-patch-check{% else %}bi-sun{% endif %}"></i> {% if user.es_direccion and not user.is_superuser %}Por aprobar{% else %}Mi día{% endif %}{% if por_aprobar_total %} <span class="badge text-bg-warning ms-auto" title="Esperan la firma de dirección">{{ por_aprobar_total }}</span>{% endif %}</a></li>{% endif %}
 {% if user.es_personal %}
   <li class="menu-grupo">Área técnica</li>
   <li class="nav-item"><a class="nav-link {% if u == 'panel' %}active{% endif %}" href="{% url 'panel' %}"><i class="bi bi-kanban"></i> {% if user.es_supervisor %}Recepción{% else %}Mis tickets{% endif %}</a></li>

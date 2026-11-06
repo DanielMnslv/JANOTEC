@@ -21,15 +21,18 @@
 
 {% if user.es_supervisor %}{% include "tickets/_casos_area.html" with area_1="Coordinación" area_2="Técnicos" %}{% endif %}
 
+{# Solo las tarjetas que llevan a una acción; en cero se ven apagadas #}
 <div class="row g-3 mb-4">
-  {% if not user.es_supervisor %}<div class="col-6 col-md-4 col-xl"><a class="kpi {% if ind.por_atender %}alerta{% endif %}" href="?estado=por_atender"><div class="valor">{{ ind.por_atender }}</div><div class="etiqueta">Programados por atender</div></a></div>{% endif %}
-  <div class="col-6 col-md-4 col-xl"><a class="kpi" href="?estado=abiertos"><div class="valor">{{ ind.abiertos }}</div><div class="etiqueta">Abiertos</div></a></div>
-  {% if user.es_supervisor %}<div class="col-6 col-md-4 col-xl"><a class="kpi {% if ind.generados %}alerta{% endif %}" href="?estado=generado"><div class="valor">{{ ind.generados }}</div><div class="etiqueta">Generados por recepcionar</div></a></div>{% endif %}
-  <div class="col-6 col-md-4 col-xl"><a class="kpi aviso" href="?estado=recepcionado"><div class="valor">{{ ind.por_programar }}</div><div class="etiqueta">Por programar en cronograma</div></a></div>
-  <div class="col-6 col-md-4 col-xl"><a class="kpi" href="?estado=en_cronograma"><div class="valor">{{ ind.programados }}</div><div class="etiqueta">En cronograma / autorizados</div></a></div>
-  <div class="col-6 col-md-4 col-xl"><a class="kpi {% if ind.criticos %}alerta{% endif %}" href="?estado=abiertos&orden=prioridad"><div class="valor">{{ ind.criticos }}</div><div class="etiqueta">Alta / crítica</div></a></div>
-  <div class="col-6 col-md-4 col-xl"><a class="kpi {% if ind.aplazados %}aviso{% endif %}" href="?aplazados=1"><div class="valor">{{ ind.aplazados }}</div><div class="etiqueta">Aplazados por recepcionar / reprogramar</div></a></div>
-  <div class="col-6 col-md-4 col-xl"><div class="kpi"><div class="valor">{{ ind.hoy }}</div><div class="etiqueta">Radicados hoy</div></div></div>
+  {% if user.es_supervisor %}
+  <div class="col-6 col-md-3"><a class="kpi {% if ind.generados %}alerta{% else %}cero{% endif %}" href="?estado=generado"><div class="valor">{{ ind.generados }}</div><div class="etiqueta">Por recepcionar</div></a></div>
+  <div class="col-6 col-md-3"><a class="kpi {% if ind.por_programar %}aviso{% else %}cero{% endif %}" href="?estado=recepcionado"><div class="valor">{{ ind.por_programar }}</div><div class="etiqueta">Por programar en cronograma</div></a></div>
+  <div class="col-6 col-md-3"><a class="kpi {% if ind.criticos %}alerta{% else %}cero{% endif %}" href="?estado=abiertos&orden=prioridad"><div class="valor">{{ ind.criticos }}</div><div class="etiqueta">Prioridad alta o crítica</div></a></div>
+  <div class="col-6 col-md-3"><a class="kpi {% if ind.aplazados %}aviso{% else %}cero{% endif %}" href="?aplazados=1"><div class="valor">{{ ind.aplazados }}</div><div class="etiqueta">Aplazados por reprogramar</div></a></div>
+  {% else %}
+  <div class="col-6 col-md-4"><a class="kpi {% if ind.por_atender %}alerta{% else %}cero{% endif %}" href="?estado=por_atender"><div class="valor">{{ ind.por_atender }}</div><div class="etiqueta">Programados por atender</div></a></div>
+  <div class="col-6 col-md-4"><a class="kpi {% if ind.criticos %}alerta{% else %}cero{% endif %}" href="?estado=abiertos&orden=prioridad"><div class="valor">{{ ind.criticos }}</div><div class="etiqueta">Prioridad alta o crítica</div></a></div>
+  <div class="col-12 col-md-4"><a class="kpi {% if not ind.abiertos %}cero{% endif %}" href="?estado=abiertos"><div class="valor">{{ ind.abiertos }}</div><div class="etiqueta">Abiertos en total</div></a></div>
+  {% endif %}
 </div>
 
 <div class="card">
