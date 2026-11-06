@@ -158,3 +158,21 @@ class FiltrosYSiguientePasoTests(Base):
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Solo míos")
         self.assertContains(r, 'A cargo de comercial <span class="n">0</span>')
+
+
+class CelularTests(Base):
+    """Fase 4: la barra inferior del celular solo para técnicos, coordinación y bodega."""
+
+    def test_barra_inferior_por_area(self):
+        self.client.force_login(self.tecnico)
+        html = self.client.get(reverse("mi_dia")).content.decode()
+        self.assertIn('class="barra-inferior', html)
+        self.assertIn(reverse("inventario:mi_material"), html.split('class="barra-inferior')[1])
+        self.client.force_login(self.bodega)
+        barra = self.client.get(reverse("mi_dia")).content.decode().split('class="barra-inferior')[1]
+        self.assertIn(reverse("inventario:ordenes"), barra)
+        self.assertNotIn(reverse("cronograma:semana"), barra)
+        for usuario in (self.cliente, self.finan):
+            self.client.force_login(usuario)
+            r = self.client.get(reverse("inicio"), follow=True)
+            self.assertNotIn('class="barra-inferior', r.content.decode(), usuario.username)

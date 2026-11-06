@@ -454,3 +454,43 @@ a.kpi:hover { transform: translateY(-1px); }
   border-radius: 999px; background: #eef6ef; color: #2f5d3a; font-size: .8rem; text-decoration: none; }
 .etiqueta-activa:hover { background: #fde8e6; color: #a93226; }
 .celda-paso { min-width: 150px; }
+
+/* --- Fase 4 del rediseño: celular para técnicos y bodega ---------------------------------- */
+/* Barra inferior con lo que más se usa, al alcance del pulgar */
+.barra-inferior { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1030; display: flex; background: #fff;
+  border-top: 1px solid var(--jn-border); box-shadow: 0 -2px 10px rgba(0,0,0,.06); padding-bottom: env(safe-area-inset-bottom); }
+.barra-inferior a { flex: 1; display: flex; flex-direction: column; align-items: center; gap: .1rem; padding: .45rem .2rem .4rem;
+  color: #6b6f78; text-decoration: none; font-size: .7rem; position: relative; min-height: 56px; justify-content: center; }
+.barra-inferior a .bi { font-size: 1.3rem; line-height: 1; }
+.barra-inferior a.activa { color: #2f5d3a; font-weight: 700; }
+.barra-inferior a.activa::before { content: ""; position: absolute; top: 0; left: 25%; right: 25%; height: 3px; border-radius: 0 0 3px 3px; background: var(--jn-verde); }
+.barra-inferior .punto { position: absolute; top: .3rem; left: calc(50% + .45rem); min-width: 1.1rem; padding: 0 .25rem; border-radius: 999px;
+  background: #c0392b; color: #fff; font-size: .65rem; line-height: 1.1rem; text-align: center; }
+@media (max-width: 991.98px) { body:has(.barra-inferior) .pie { padding-bottom: 5rem !important; } }
+
+@media (max-width: 767.98px) {
+  /* Las tablas de las bandejas se leen como tarjetas: una por fila, sin moverse de lado */
+  .table-tickets thead { display: none; }
+  .table-tickets, .table-tickets tbody, .table-tickets tr { display: block; width: 100%; }
+  .table-tickets tr { padding: .75rem 1rem; border-bottom: 1px solid var(--jn-border); }
+  .table-tickets td { display: block; border: 0 !important; padding: .12rem 0 !important; text-align: left !important;
+    min-width: 0 !important; white-space: normal; background: transparent !important; box-shadow: none !important; }
+  .table-tickets td.en-linea, .table-tickets td.en-linea + td { display: inline-block; vertical-align: top; margin-right: .35rem; }
+  .table-tickets td.fecha-correo { color: var(--jn-muted); }
+  .table-tickets td[colspan] { text-align: center !important; }
+  .table-tickets .celda-paso .btn { width: 100%; margin-top: .25rem; }
+  .table-responsive:has(> .table-tickets) { overflow-x: visible; }
+}
+
+@media (max-width: 575.98px) {
+  /* Tarjetas de números más compactas */
+  .kpi { padding: .6rem .75rem; }
+  .kpi .valor { font-size: 1.4rem; }
+  .kpi .etiqueta { font-size: .75rem; margin-top: .2rem; }
+  /* Botones y casillas cómodos para el dedo; 16 px en los campos evita que el iPhone acerque la pantalla */
+  .btn-sm { padding: .4rem .75rem; }
+  .form-control, .form-select { font-size: 16px; }
+  .form-check-input { width: 1.25em; height: 1.25em; }
+  .mi-dia-grupo .list-group-item .btn { width: 100%; }
+  main.container-xl { padding-left: .75rem; padding-right: .75rem; }
+}

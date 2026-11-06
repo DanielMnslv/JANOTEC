@@ -12,7 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Carlito:wght@400;700&display=swap" rel="stylesheet">
   <link href="{% static 'vendor/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
   <link href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}" rel="stylesheet">
-  <link href="{% static 'css/janotec.css' %}?v=20261106c" rel="stylesheet">
+  <link href="{% static 'css/janotec.css' %}?v=20261106d" rel="stylesheet">
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -72,6 +72,7 @@
 </main>
 <footer class="pie container-xl pb-4">Jano Tec S.A.S. · {{ MARCA.lema }}</footer>
 </div>
+{% include "_barra_inferior.html" %}
 </div>
 {% endblock %}
 <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>

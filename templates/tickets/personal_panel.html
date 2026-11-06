@@ -79,7 +79,7 @@
             {% if t.sede or t.municipio %}<div class="small text-muted-jn"><i class="bi bi-geo-alt"></i> {% if t.sede %}{{ t.sede.nombre }}{% endif %}{% if t.municipio and t.municipio|lower != t.sede.nombre|lower %}{% if t.sede %} · {% endif %}{{ t.municipio }}{% endif %}</div>{% endif %}</td>
           <td class="celda-solicitud"><div title="{{ t.descripcion }}">{{ t.asunto|truncatechars:90 }}{% if t.tiene_restricciones %} <i class="bi bi-calendar-x text-danger" title="No puede atender: {{ t.resumen_no_disponible }} {{ t.restricciones }}"></i>{% endif %}</div>
             <div class="small text-muted-jn"><i class="bi {{ t.icono_tipo }}"></i> {{ t.get_tipo_display }}{% if t.sistema_display %} · {{ t.sistema_display }}{% endif %}</div></td>
-          <td>{% include "tickets/_prioridad.html" %}</td>
+          <td class="en-linea">{% include "tickets/_prioridad.html" %}</td>
           <td>{% include "tickets/_estado.html" %}{% if t.visita_programada and t.abierto %}<div class="small text-nowrap mt-1" title="Visita programada"><i class="bi bi-calendar-event"></i> {{ t.visita_programada|date:"j M · g:i a" }}</div>{% endif %}
             {% if t.por_confirmar %}<div class="small text-warning-emphasis mt-1"><i class="bi bi-question-circle"></i> Por confirmar: {{ t.por_confirmar_display|join:", " }}</div>{% endif %}</td>
           <td class="celda-paso">{% siguiente_paso t user as sp %}{% if sp %}

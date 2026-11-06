@@ -1,0 +1,18 @@
+{% with u=request.resolver_match.url_name ns=request.resolver_match.namespace %}
+{# Barra inferior en el celular para técnicos, coordinación y bodega: lo que más usan, al alcance del pulgar. #}
+{% if user.is_authenticated and tiene_mi_dia %}{% if user.es_personal or user.es_bodega %}
+<nav class="barra-inferior d-lg-none" aria-label="Accesos rápidos">
+  <a href="{% url 'mi_dia' %}" class="{% if u == 'mi_dia' %}activa{% endif %}"><i class="bi bi-sun"></i><span>Mi día</span>{% if por_aprobar_total %}<b class="punto">{{ por_aprobar_total }}</b>{% endif %}</a>
+  {% if user.es_personal %}
+  <a href="{% url 'panel' %}" class="{% if u == 'panel' or u == 'ticket_detalle' %}activa{% endif %}"><i class="bi bi-kanban"></i><span>{% if user.es_supervisor %}Tickets{% else %}Mis tickets{% endif %}</span></a>
+  <a href="{% url 'cronograma:semana' %}" class="{% if ns == 'cronograma' %}activa{% endif %}"><i class="bi bi-calendar-week"></i><span>Cronograma</span></a>
+  <a href="{% url 'actas_lista' %}" class="{% if u == 'actas_lista' or u == 'acta_detalle' or u == 'acta_nueva' %}activa{% endif %}"><i class="bi bi-clipboard-check"></i><span>Actas</span></a>
+  {% if user.ve_inventario and not user.gestiona_inventario %}<a href="{% url 'inventario:mi_material' %}" class="{% if ns == 'inventario' %}activa{% endif %}"><i class="bi bi-boxes"></i><span>Material</span></a>{% endif %}
+  {% else %}
+  <a href="{% url 'inventario:bandeja' %}" class="{% if u == 'bandeja' or u == 'solicitud' %}activa{% endif %}"><i class="bi bi-box-seam"></i><span>Bodega</span></a>
+  <a href="{% url 'inventario:ordenes' %}" class="{% if u == 'ordenes' or u == 'orden' %}activa{% endif %}"><i class="bi bi-cart"></i><span>Compras</span></a>
+  <a href="{% url 'inventario:productos' %}" class="{% if u == 'productos' %}activa{% endif %}"><i class="bi bi-boxes"></i><span>Inventario</span></a>
+  {% endif %}
+</nav>
+{% endif %}{% endif %}
+{% endwith %}
