@@ -91,11 +91,30 @@ def bandeja(request):
     pagina = Paginator(qs, 20).get_page(request.GET.get("page"))
     params = request.GET.copy()
     params.pop("page", None)
+    en_tecnica = base.filter(area=T.Area.TECNICA).exclude(estado__in=T.ESTADOS_FINALES).count()
+    en_administrativa = base.filter(area=T.Area.COMERCIAL, ficha__etapa__in=F.ETAPAS_DE_ADMINISTRATIVA).count()
+    # Las vistas como etiquetas con su número (conservan la búsqueda y «míos»)
+    opciones = [("comercial", "A cargo de comercial", base.filter(area=T.Area.COMERCIAL, ficha__etapa__in=F.ETAPAS_DE_COMERCIAL).count()),
+                (F.Etapa.GESTION, "En gestión", conteo.get(F.Etapa.GESTION, 0)),
+                (F.Etapa.LEVANTAMIENTO, "Levantamiento", conteo.get(F.Etapa.LEVANTAMIENTO, 0)),
+                (F.Etapa.ENVIADA, "Esperan respuesta", conteo.get(F.Etapa.ENVIADA, 0)),
+                (F.Etapa.APROBADA, "Aprobadas", conteo.get(F.Etapa.APROBADA, 0)),
+                ("administrativa", "En administrativa", en_administrativa), ("tecnica", "En técnica", en_tecnica),
+                (F.Etapa.RECHAZADA, "No aprobadas", conteo.get(F.Etapa.RECHAZADA, 0)), ("todas", "Todas", None)]
+    etiquetas = []
+    for valor, nombre, n in opciones:
+        p = params.copy()
+        p["vista"] = valor
+        etiquetas.append({"nombre": nombre, "n": n, "activa": vista == valor, "url": "?" + p.urlencode()})
+    mios = params.copy()
+    if mios.get("mios"):
+        mios.pop("mios")
+    else:
+        mios["mios"] = "1"
     return render(request, "comercial/bandeja.html", {
         "pagina": pagina, "vista": vista, "q": q, "conteo": conteo, "vencidas": vencidas, "params": params.urlencode(),
-        "etapas": F.Etapa.choices,
-        "en_tecnica": base.filter(area=T.Area.TECNICA).exclude(estado__in=T.ESTADOS_FINALES).count(),
-        "en_administrativa": base.filter(area=T.Area.COMERCIAL, ficha__etapa__in=F.ETAPAS_DE_ADMINISTRATIVA).count(),
+        "etapas": F.Etapa.choices, "etiquetas_vista": etiquetas, "url_mios": "?" + mios.urlencode(),
+        "en_tecnica": en_tecnica, "en_administrativa": en_administrativa,
         # Aprobadas por dirección para que comercial las lleve en persona
         "por_entregar": PropuestaVersion.objects.filter(ficha__ticket__in=base, por_comercial=True, entregada_cliente__isnull=True,
                                                         estado=PropuestaVersion.Estado.ENVIADA)

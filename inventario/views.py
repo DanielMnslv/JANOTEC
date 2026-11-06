@@ -81,14 +81,20 @@ def ordenes(request):
     """Órdenes de compra de bodega: las abiertas (de la preparación a la recepción), con su fecha estimada de llegada."""
     from .models import OrdenCompra
 
+    from django.db.models import Count
+
+    abiertas = ["borrador", "por_revisar", "revision", "por_pagar", "lista", "enviada"]
     estado = request.GET.get("estado", "abiertas")
     qs = OrdenCompra.objects.select_related("proveedor", "solicitud", "solicitud__ticket").prefetch_related("lineas")
     if estado == "abiertas":
-        qs = qs.filter(estado__in=["borrador", "por_revisar", "revision", "por_pagar", "lista", "enviada"])
+        qs = qs.filter(estado__in=abiertas)
     elif estado in OrdenCompra.Estado.values:
         qs = qs.filter(estado=estado)
-    return render(request, "inventario/ordenes.html", {"ordenes": qs[:200], "estado": estado,
-                                                        "estados": OrdenCompra.Estado.choices})
+    # Los estados como etiquetas con su número
+    conteo = dict(OrdenCompra.objects.values_list("estado").annotate(n=Count("id")))
+    etiquetas = [{"valor": "abiertas", "nombre": "Abiertas", "n": sum(conteo.get(e, 0) for e in abiertas)}]
+    etiquetas += [{"valor": v, "nombre": nombre, "n": conteo.get(v, 0)} for v, nombre in OrdenCompra.Estado.choices]
+    return render(request, "inventario/ordenes.html", {"ordenes": qs[:200], "estado": estado, "etiquetas": etiquetas})
 
 
 @login_required

@@ -103,6 +103,8 @@ def _filtrar(qs, form, usuario):
         qs = qs.filter(estado__in=Ticket.ESTADOS_ABIERTOS + [E.VISITA_EJECUTADA])
     elif d.get("estado") == "por_atender":  # en el cronograma y aún sin acta: lo que el técnico tiene por hacer
         qs = qs.filter(estado__in=ESTADOS_POR_ATENDER)
+    elif d.get("estado") == "por_programar":  # recepcionados o pendientes de nueva visita
+        qs = qs.filter(estado__in=Ticket.ESTADOS_PROGRAMABLES)
     elif d.get("estado"):
         qs = qs.filter(estado=d["estado"])
     if d.get("tipo"):
@@ -582,8 +584,56 @@ def panel(request):
     return render(
         request,
         "tickets/personal_panel.html",
-        {"pagina": pagina, "form": form, "ind": indicadores, "orden": orden, "params": params.urlencode()},
+        {"pagina": pagina, "form": form, "ind": indicadores, "orden": orden, "params": params.urlencode(),
+         "etiquetas_estado": _etiquetas_estado(request.user, conteo, datos.get("estado", ""), request.GET),
+         "filtros_activos": _filtros_activos(form, request.GET),
+         "mas_filtros": any(request.GET.get(c) for c in ("tipo", "prioridad", "empresa", "asignado"))},
     )
+
+
+def _etiquetas_estado(usuario, conteo, actual, get):
+    """Las vistas rápidas del panel como etiquetas con su número: un clic filtra (reemplaza la lista de estados)."""
+    n = lambda *estados: sum(conteo.get(e, 0) for e in estados)  # noqa: E731
+    abiertos = n(*Ticket.ESTADOS_ABIERTOS, E.VISITA_EJECUTADA)
+    if usuario.es_supervisor:
+        opciones = [("abiertos", "Pendientes", abiertos), ("generado", "Por recepcionar", n(E.GENERADO)),
+                    ("por_programar", "Por programar", n(*Ticket.ESTADOS_PROGRAMABLES)),
+                    ("por_atender", "En cronograma", n(*ESTADOS_POR_ATENDER)),
+                    ("visita_ejecutada", "Visita ejecutada", n(E.VISITA_EJECUTADA)), ("informe", "Informe", n(E.INFORME)),
+                    ("cerrado", "Cerrados", n(E.CERRADO)), ("", "Todos", None)]
+    else:
+        opciones = [("por_atender", "Por atender", n(*ESTADOS_POR_ATENDER)), ("abiertos", "Pendientes", abiertos),
+                    ("informe", "Informe", n(E.INFORME)), ("cerrado", "Cerrados", n(E.CERRADO)), ("", "Todos", None)]
+    etiquetas = []
+    for v, nombre, cantidad in opciones:
+        params = get.copy()  # conserva la búsqueda y los demás filtros
+        params.pop("page", None)
+        params.pop("aplazados", None)
+        params["estado"] = v
+        etiquetas.append({"valor": v, "nombre": nombre, "n": cantidad, "activa": v == actual, "url": "?" + params.urlencode()})
+    return etiquetas
+
+
+def _filtros_activos(form, get):
+    """Los filtros elegidos (fuera del estado) como etiquetas con su «×» para quitarlos."""
+    activos = []
+    if not form.is_valid():
+        return activos
+    for campo in ("q", "tipo", "prioridad", "empresa", "asignado"):
+        valor = form.cleaned_data.get(campo)
+        if not valor:
+            continue
+        if campo == "q":
+            texto = f"«{valor}»"
+        elif campo == "empresa":
+            texto = str(valor)
+        else:
+            texto = dict(form.fields[campo].choices).get(get.get(campo), get.get(campo))
+        quitar = get.copy()
+        quitar.pop(campo, None)
+        quitar.pop("page", None)
+        activos.append({"texto": texto, "quitar": quitar.urlencode()})
+    return activos
 
 
 @login_required

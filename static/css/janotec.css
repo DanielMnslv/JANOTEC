@@ -440,3 +440,17 @@ a.kpi:hover { transform: translateY(-1px); }
   border-radius: 999px; background: #eef6ef; color: #3c6e47; font-size: .8rem; scroll-margin-top: 80px; }
 .nav-link.mi-dia { font-weight: 600; }
 @media (max-width: 575.98px) { .barra-superior .badge-rol { display: none; } }
+
+/* --- Fase 3 del rediseño: filtros como etiquetas y columna «Siguiente paso» -------------- */
+.etiquetas-filtro { display: flex; flex-wrap: wrap; gap: .4rem; }
+.etiqueta-filtro { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .75rem; border-radius: 999px;
+  border: 1px solid var(--jn-border); background: #fff; color: #3f4049; font-size: .85rem; text-decoration: none; white-space: nowrap; }
+.etiqueta-filtro:hover { border-color: var(--jn-verde); color: #2f5d3a; }
+.etiqueta-filtro .n { font-weight: 700; font-size: .75rem; padding: 0 .4rem; border-radius: 999px; background: #eef0f3; }
+.etiqueta-filtro.activa { background: var(--jn-verde); border-color: var(--jn-verde); color: #fff; font-weight: 600; }
+.etiqueta-filtro.activa .n { background: rgba(255,255,255,.25); color: #fff; }
+.etiqueta-filtro.vacia { color: #a3a7ae; }
+.etiqueta-activa { display: inline-flex; align-items: center; gap: .15rem; margin: 0 .35rem .25rem 0; padding: .1rem .55rem;
+  border-radius: 999px; background: #eef6ef; color: #2f5d3a; font-size: .8rem; text-decoration: none; }
+.etiqueta-activa:hover { background: #fde8e6; color: #a93226; }
+.celda-paso { min-width: 150px; }

@@ -775,7 +775,8 @@ class FiltroTicketsForm(BootstrapMixin, forms.Form):
     estado = forms.ChoiceField(
         required=False,
         choices=[("", "Todos los estados"), ("abiertos", "Pendientes (abiertos + visitas ejecutadas)"),
-                 ("por_atender", "Programados por atender (sin gestionar)")] + list(Ticket.Estado.choices),
+                 ("por_atender", "Programados por atender (sin gestionar)"),
+                 ("por_programar", "Por programar (recepcionados y nueva visita)")] + list(Ticket.Estado.choices),
     )
     tipo = forms.ChoiceField(required=False, choices=[("", "Todo tipo")] + list(Ticket.Tipo.choices))
     prioridad = forms.ChoiceField(required=False, choices=[("", "Toda prioridad")] + list(Ticket.Prioridad.choices))

@@ -12,13 +12,12 @@
 </div>
 {% include "tickets/_casos_area.html" with area_1="Comercial" %}
 
+{# Solo las tarjetas que llevan a una acción; en cero se ven apagadas #}
 <div class="row g-3 mb-4">
-  <div class="col-6 col-md"><a class="kpi {% if conteo.gestion %}alerta{% endif %}" href="?vista=gestion"><div class="valor">{{ conteo.gestion|default:0 }}</div><div class="etiqueta">En gestión</div></a></div>
-  <div class="col-6 col-md"><a class="kpi" href="?vista=administrativa"><div class="valor">{{ en_administrativa }}</div><div class="etiqueta">En el área administrativa</div></a></div>
+  <div class="col-6 col-md"><a class="kpi {% if conteo.gestion %}alerta{% else %}cero{% endif %}" href="?vista=gestion"><div class="valor">{{ conteo.gestion|default:0 }}</div><div class="etiqueta">En gestión</div></a></div>
   {% if por_entregar %}<div class="col-6 col-md"><a class="kpi alerta" href="#por-entregar"><div class="valor">{{ por_entregar|length }}</div><div class="etiqueta">Por entregar al cliente</div></a></div>{% endif %}
-  <div class="col-6 col-md"><a class="kpi aviso" href="?vista=enviada"><div class="valor">{{ conteo.enviada|default:0 }}</div><div class="etiqueta">Esperan respuesta</div></a></div>
-  <div class="col-6 col-md"><a class="kpi" href="?vista=aprobada"><div class="valor">{{ conteo.aprobada|default:0 }}</div><div class="etiqueta">Aprobadas por traspasar</div></a></div>
-  <div class="col-6 col-md"><a class="kpi" href="?vista=tecnica"><div class="valor">{{ en_tecnica }}</div><div class="etiqueta">En el área técnica</div></a></div>
+  <div class="col-6 col-md"><a class="kpi {% if conteo.enviada %}aviso{% else %}cero{% endif %}" href="?vista=enviada"><div class="valor">{{ conteo.enviada|default:0 }}</div><div class="etiqueta">Esperan respuesta del cliente</div></a></div>
+  <div class="col-6 col-md"><a class="kpi {% if not conteo.aprobada %}cero{% endif %}" href="?vista=aprobada"><div class="valor">{{ conteo.aprobada|default:0 }}</div><div class="etiqueta">Aprobadas por traspasar</div></a></div>
 </div>
 {% if por_entregar %}
 <div class="card mb-4 border-warning" id="por-entregar">
@@ -35,22 +34,20 @@
 
 <div class="card">
   <div class="card-body border-bottom">
-    <form class="row g-2" method="get">
-      <div class="col-md-5"><input name="q" value="{{ q }}" class="form-control" placeholder="Radicado, empresa, contacto, necesidad o radicado anterior…"></div>
-      <div class="col-md-4"><select name="vista" class="form-select">
-        <option value="comercial" {% if vista == 'comercial' %}selected{% endif %}>A cargo del área comercial</option>
-        <option value="administrativa" {% if vista == 'administrativa' %}selected{% endif %}>En el área administrativa (seguimiento)</option>
-        <option value="tecnica" {% if vista == 'tecnica' %}selected{% endif %}>En el área técnica (seguimiento)</option>
-        <option value="todas" {% if vista == 'todas' %}selected{% endif %}>Todas</option>
-        {% for v, n in etapas %}<option value="{{ v }}" {% if vista == v %}selected{% endif %}>{{ n }}</option>{% endfor %}
-      </select></div>
-      {% if user.es_comercial %}<div class="col-md-1 d-flex align-items-center"><div class="form-check"><input class="form-check-input" type="checkbox" name="mios" value="1" id="mios" {% if request.GET.mios %}checked{% endif %}><label class="form-check-label small" for="mios">Míos</label></div></div>{% endif %}
-      <div class="col-md-2 d-grid"><button class="btn btn-outline-primary"><i class="bi bi-funnel"></i> Filtrar</button></div>
+    <div class="etiquetas-filtro mb-2">
+      {% for e in etiquetas_vista %}<a class="etiqueta-filtro {% if e.activa %}activa{% elif e.n == 0 %}vacia{% endif %}" href="{{ e.url }}">{{ e.nombre }}{% if e.n is not None %} <span class="n">{{ e.n }}</span>{% endif %}</a>{% endfor %}
+      {% if user.es_comercial %}<a class="etiqueta-filtro {% if request.GET.mios %}activa{% endif %}" href="{{ url_mios }}"><i class="bi bi-person"></i> Solo míos</a>{% endif %}
+    </div>
+    <form method="get" class="d-flex flex-wrap gap-2">
+      <input type="hidden" name="vista" value="{{ vista }}">{% if request.GET.mios %}<input type="hidden" name="mios" value="1">{% endif %}
+      <input name="q" value="{{ q }}" class="form-control flex-grow-1" style="min-width:220px;width:auto" placeholder="Radicado, empresa, contacto, necesidad o radicado anterior…">
+      <button class="btn btn-outline-primary"><i class="bi bi-search"></i> Buscar</button>
+      {% if q %}<a class="btn btn-link" href="?vista={{ vista }}{% if request.GET.mios %}&mios=1{% endif %}">Quitar búsqueda</a>{% endif %}
     </form>
   </div>
   <div class="table-responsive">
     <table class="table table-hover table-tickets mb-0">
-      <thead><tr><th>Radicado</th><th>Empresa / necesidad</th><th>Etapa</th><th class="d-none d-md-table-cell">Asesor</th><th class="text-end">Recibido</th></tr></thead>
+      <thead><tr><th>Radicado</th><th>Empresa / necesidad</th><th>Etapa</th><th>Siguiente paso</th><th class="d-none d-md-table-cell">Asesor</th><th class="text-end">Recibido</th></tr></thead>
       <tbody>
       {% for t in pagina %}
         <tr class="fila-click{% if t.ficha.etapa == 'gestion' or t.ficha.etapa == 'aprobada' %} fila-nueva{% endif %}" data-href="{% url 'comercial:detalle' t.radicado %}">
@@ -63,11 +60,16 @@
             {% elif t.ficha.etapa == 'elaborando' or t.ficha.etapa == 'ajustes' %}<div class="small mt-1 text-muted-jn"><i class="bi bi-person-gear"></i> La tiene el área administrativa</div>{% endif %}
             {% if t.ficha.propuesta_vencida %}<div class="small text-danger mt-1"><i class="bi bi-alarm"></i> Vencida</div>
             {% elif t.ficha.fecha_max_propuesta and t.ficha.abierta %}<div class="small text-muted-jn mt-1">Propuesta antes del {{ t.ficha.fecha_max_propuesta|date:"j M" }}</div>{% endif %}</td>
+          <td class="celda-paso">{% siguiente_paso_comercial t.ficha user as sp %}{% if sp %}
+            <div class="small text-muted-jn">Paso {{ sp.numero }} de {{ sp.total }}</div>
+            {% if sp.url %}<a class="btn btn-sm btn-outline-primary text-nowrap" href="{{ sp.url }}">{{ sp.boton }} <i class="bi bi-chevron-right"></i></a>
+            {% else %}<div class="small">{{ sp.nombre }} <span class="text-muted-jn">· {{ sp.quien }}</span></div>{% endif %}
+          {% else %}<span class="small text-muted-jn">—</span>{% endif %}</td>
           <td class="d-none d-md-table-cell small">{{ t.ficha.comercial|default:"—" }}</td>
           <td class="small text-end text-nowrap fecha-correo" title="{{ t.creado|date:'d/m/Y H:i' }}">{{ t.creado|fecha_correo }}</td>
         </tr>
       {% empty %}
-        <tr><td colspan="5" class="text-center py-5 text-muted-jn"><i class="bi bi-briefcase fs-2 d-block mb-2"></i>No hay solicitudes con estos filtros.</td></tr>
+        <tr><td colspan="6" class="text-center py-5 text-muted-jn"><i class="bi bi-briefcase fs-2 d-block mb-2"></i>No hay solicitudes con estos filtros.</td></tr>
       {% endfor %}
       </tbody>
     </table>

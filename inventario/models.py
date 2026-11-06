@@ -748,6 +748,24 @@ class OrdenCompra(models.Model):
         return f"OC-{self.pk:05d}" if self.pk else "OC-nueva"
 
     @property
+    def siguiente_paso(self):
+        """Lo que sigue con la orden y quién lo hace, para la columna «Siguiente paso»: (texto, quién) o None."""
+        E = self.Estado
+        pasos = {E.BORRADOR: ("Completar y enviar a revisión", "Bodega"),
+                 E.POR_REVISAR: ("Revisión administrativa", "Coordinación administrativa"),
+                 E.REVISION: ("Aprobación", "Dirección"),
+                 E.POR_PAGAR: ("Pago anticipado", "Financiera"),
+                 E.LISTA: ("Enviar al proveedor", "Bodega"),
+                 E.ENVIADA: ("Recibir lo que llegue", "Bodega")}
+        if self.estado in pasos:
+            return pasos[self.estado]
+        if self.estado == E.RECIBIDA and self.factura_validada_en is None:
+            return ("Registrar y validar la factura", "Financiera")
+        if self.estado == E.RECIBIDA and self.a_credito and self.pagada_en is None:
+            return ("Pago a crédito", "Financiera")
+        return None
+
+    @property
     def color_estado(self):
         """Color de la etiqueta del estado (clases de Bootstrap)."""
         return {"borrador": "secondary", "por_revisar": "info", "revision": "info", "por_pagar": "danger", "lista": "primary", "enviada": "warning",

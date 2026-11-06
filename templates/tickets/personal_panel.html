@@ -37,16 +37,28 @@
 
 <div class="card">
   <div class="card-body border-bottom">
-    <form class="row g-2" method="get">
-      <div class="col-lg-3">{{ form.q }}</div>
-      <div class="col-6 col-lg-2">{{ form.tipo }}</div>
-      <div class="col-6 col-lg-2">{{ form.estado }}</div>
-      <div class="col-6 col-lg-2">{{ form.prioridad }}</div>
-      <div class="col-6 col-lg-3">{{ form.empresa }}</div>
-      {% if form.asignado %}<div class="col-6 col-lg-3">{{ form.asignado }}</div>{% endif %}
+    {# Vistas rápidas como etiquetas con su número; la búsqueda siempre a mano y los demás filtros plegados #}
+    <div class="etiquetas-filtro mb-2">
+      {% for e in etiquetas_estado %}<a class="etiqueta-filtro {% if e.activa %}activa{% elif e.n == 0 %}vacia{% endif %}" href="{{ e.url }}">{{ e.nombre }}{% if e.n is not None %} <span class="n">{{ e.n }}</span>{% endif %}</a>{% endfor %}
+    </div>
+    <form method="get">
+      <input type="hidden" name="estado" value="{{ form.estado.value|default_if_none:'' }}">
       <input type="hidden" name="orden" value="{{ orden }}">
-      <div class="col-lg-2 d-grid"><button class="btn btn-outline-primary"><i class="bi bi-funnel"></i> Filtrar</button></div>
+      <div class="d-flex flex-wrap gap-2">
+        <div class="flex-grow-1" style="min-width:220px">{{ form.q }}</div>
+        <button class="btn btn-outline-primary"><i class="bi bi-search"></i> Buscar</button>
+        <button class="btn btn-link text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#masFiltros" aria-expanded="{{ mas_filtros|yesno:'true,false' }}"><i class="bi bi-sliders"></i> Más filtros</button>
+      </div>
+      <div class="collapse {% if mas_filtros %}show{% endif %}" id="masFiltros">
+        <div class="row g-2 mt-1">
+          <div class="col-6 col-lg-3">{{ form.tipo }}</div>
+          <div class="col-6 col-lg-3">{{ form.prioridad }}</div>
+          <div class="col-6 col-lg-3">{{ form.empresa }}</div>
+          {% if form.asignado %}<div class="col-6 col-lg-3">{{ form.asignado }}</div>{% endif %}
+        </div>
+      </div>
     </form>
+    {% if filtros_activos %}<div class="mt-2">{% for f in filtros_activos %}<a class="etiqueta-activa" href="?{{ f.quitar }}" title="Quitar este filtro">{{ f.texto }} <i class="bi bi-x"></i></a>{% endfor %}</div>{% endif %}
     <div class="small mt-2 text-muted-jn">Ordenar:
       <a href="?{{ params }}&orden=-creado" class="{% if orden == '-creado' %}fw-bold{% endif %}">más recientes</a> ·
       <a href="?{{ params }}&orden=creado" class="{% if orden == 'creado' %}fw-bold{% endif %}">más antiguos</a> ·
@@ -58,7 +70,7 @@
   </div>
   <div class="table-responsive">
     <table class="table table-hover table-tickets mb-0">
-      <thead><tr><th>Radicado</th><th>Cliente</th><th>Solicitud</th><th>Prioridad</th><th>Estado</th><th class="d-none d-md-table-cell">Responsable</th><th class="text-end">Recibido</th></tr></thead>
+      <thead><tr><th>Radicado</th><th>Cliente</th><th>Solicitud</th><th>Prioridad</th><th>Estado</th><th>Siguiente paso</th><th class="text-end">Recibido</th></tr></thead>
       <tbody>
       {% for t in pagina %}
         <tr class="fila-click{% if user.es_supervisor and t.estado == 'generado' or not user.es_supervisor and t.estado == 'autorizado' %} fila-nueva{% endif %}" data-href="{{ t.get_absolute_url }}">
@@ -69,9 +81,15 @@
             <div class="small text-muted-jn"><i class="bi {{ t.icono_tipo }}"></i> {{ t.get_tipo_display }}{% if t.sistema_display %} · {{ t.sistema_display }}{% endif %}</div></td>
           <td>{% include "tickets/_prioridad.html" %}</td>
           <td>{% include "tickets/_estado.html" %}{% if t.visita_programada and t.abierto %}<div class="small text-nowrap mt-1" title="Visita programada"><i class="bi bi-calendar-event"></i> {{ t.visita_programada|date:"j M · g:i a" }}</div>{% endif %}
-            {% if t.por_confirmar %}<div class="small text-warning-emphasis mt-1"><i class="bi bi-question-circle"></i> Por confirmar: {{ t.por_confirmar_display|join:", " }}</div>{% endif %}
-            {% if user.es_supervisor and t.estado == 'generado' %}<form method="post" action="{% url 'recepcionar' t.radicado %}" class="mt-1">{% csrf_token %}<input type="hidden" name="volver" value="{{ request.get_full_path }}"><button class="btn btn-sm btn-outline-primary py-0" data-confirmar-recepcion="{{ t.radicado }}" data-correos="{{ t.correos_respuesta|join:', ' }}"><i class="bi bi-inbox"></i> Recepcionar</button></form>{% endif %}</td>
-          <td class="d-none d-md-table-cell small">{% if t.asignado_a %}<div><i class="bi bi-person-gear"></i> {{ t.asignado_a.get_full_name|default:t.asignado_a.username }}</div>{% elif t.abierto %}<div class="text-muted-jn">Sin asignar</div>{% endif %}</td>
+            {% if t.por_confirmar %}<div class="small text-warning-emphasis mt-1"><i class="bi bi-question-circle"></i> Por confirmar: {{ t.por_confirmar_display|join:", " }}</div>{% endif %}</td>
+          <td class="celda-paso">{% siguiente_paso t user as sp %}{% if sp %}
+            {% if sp.total %}<div class="small text-muted-jn">Paso {{ sp.numero }} de {{ sp.total }}</div>{% endif %}
+            {% if sp.post %}<form method="post" action="{% url 'recepcionar' t.radicado %}">{% csrf_token %}<input type="hidden" name="volver" value="{{ request.get_full_path }}"><button class="btn btn-sm btn-accent text-nowrap" data-confirmar-recepcion="{{ t.radicado }}" data-correos="{{ t.correos_respuesta|join:', ' }}"><i class="bi bi-inbox"></i> Recepcionar</button></form>
+            {% elif sp.url %}<a class="btn btn-sm btn-outline-primary text-nowrap" href="{{ sp.url }}">{{ sp.boton }} <i class="bi bi-chevron-right"></i></a>
+            {% else %}<div class="small">{{ sp.nombre }}{% if sp.quien %} <span class="text-muted-jn">· {{ sp.quien }}</span>{% endif %}</div>{% endif %}
+          {% else %}<span class="small text-muted-jn">—</span>{% endif %}
+            {# el responsable va aquí, debajo de lo que sigue, para no sumar otra columna #}
+            {% if t.asignado_a %}<div class="small text-muted-jn mt-1"><i class="bi bi-person-gear"></i> {{ t.asignado_a.get_full_name|default:t.asignado_a.username }}</div>{% elif t.abierto %}<div class="small text-muted-jn mt-1">Sin técnico</div>{% endif %}</td>
           <td class="small text-end text-nowrap fecha-correo" title="{{ t.creado|date:'l j \d\e F \d\e Y, h:i a' }}">{{ t.creado|fecha_correo }}</td>
         </tr>
       {% empty %}

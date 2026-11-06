@@ -113,3 +113,45 @@ def omitir(ticket, clave, motivo, autor):
     Seguimiento.objects.create(ticket=ticket, autor=autor, tipo=Seguimiento.Tipo.NOTA_INTERNA, interno=True,
                                mensaje=f"Omitió el paso «{nombre}». Motivo: {motivo}")
     ticket.save(update_fields=["actualizado"])
+
+
+# Botón de cada paso en las tablas («Siguiente paso»): ruta y texto
+_BOTON = {
+    "recepcion": ("recepcionar", "Recepcionar"),
+    "asignacion": ("ticket_detalle", "Asignar técnico"),
+    "programacion": ("cronograma:semana", "Programar"),
+    "visita": ("acta_nueva", "Hacer el acta"),
+    "informe": ("informe_borrador", "Hacer el informe"),
+    "cierre": ("ticket_detalle", "Ver cierre"),
+}
+
+
+def siguiente(ticket, usuario):
+    """Lo que sigue en el ticket, para la columna «Siguiente paso» de las tablas.
+
+    Devuelve el nombre del paso, quién lo hace, «n de N» y, si le toca a quien mira, el enlace y el texto del botón.
+    Si el ticket está en otra área (comercial o bodega) dice dónde está; si ya se cerró, devuelve None.
+    """
+    from django.urls import reverse
+
+    if ticket.estado in Ticket.ESTADOS_FINALES:
+        return None
+    info = calcular(ticket)
+    if info is None:
+        return None
+    if info["otra_area"]:
+        return {"nombre": f"En {info['otra_area']}", "quien": "", "numero": 0, "total": 0, "url": "", "boton": "", "post": False}
+    p = info["paso"]
+    if p is None:
+        return None
+    quien = p["quien"]
+    le_toca = (("Coordinación" in quien and usuario.es_supervisor)
+               or ("Técnico" in quien and (usuario.es_supervisor or ticket.asignado_a_id == usuario.pk)))
+    url, boton = "", ""
+    if le_toca:
+        ruta, boton = _BOTON[p["clave"]]
+        if p["clave"] == "cierre" and info["levantamiento"]:
+            boton = "Devolver a comercial"
+        url = reverse(ruta) if ruta == "cronograma:semana" else reverse(ruta, args=[ticket.radicado])
+    return {"nombre": p["nombre"], "quien": quien, "numero": p["numero"], "total": info["total"], "url": url, "boton": boton,
+            "post": p["clave"] == "recepcion" and le_toca}

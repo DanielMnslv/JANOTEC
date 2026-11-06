@@ -11,8 +11,8 @@ from inventario.models import OrdenCompra, Proveedor
 from tickets.models import Categoria, InformeBorrador, Ticket
 
 
-class MiDiaTests(TestCase):
-    """Qué ve cada área al entrar y que nadie vea lo que no le toca."""
+class Base(TestCase):
+    """Usuarios de cada área, un cliente y la forma de crear tickets."""
 
     def setUp(self):
         self.cat = Categoria.objects.get_or_create(nombre="Mantenimiento CCTV IP")[0]
@@ -41,6 +41,10 @@ class MiDiaTests(TestCase):
         r = self.client.get(reverse("mi_dia"))
         self.assertEqual(r.status_code, 200)
         return r.content.decode()
+
+
+class MiDiaTests(Base):
+    """Qué ve cada área al entrar y que nadie vea lo que no le toca."""
 
     def test_cada_area_abre_en_mi_dia_y_el_cliente_en_sus_solicitudes(self):
         for usuario in (self.coord, self.miguel, self.tecnico, self.bodega, self.comercial, self.admva, self.finan):
@@ -112,3 +116,45 @@ class MiDiaTests(TestCase):
         html = self.ver(Usuario.objects.get(username="prueba.coordinador"))
         self.assertIn(prueba.radicado, html)
         self.assertNotIn(real.radicado, html)
+
+
+class FiltrosYSiguientePasoTests(Base):
+    """Fase 3: filtros como etiquetas con su número y la columna «Siguiente paso» en las tablas."""
+
+    def test_panel_tecnico_con_etiquetas_y_siguiente_paso(self):
+        nuevo = self.ticket()
+        self.ticket(estado=Ticket.Estado.RECEPCIONADO, asignado_a=self.tecnico)
+        self.client.force_login(self.coord)
+        html = self.client.get(reverse("panel")).content.decode()
+        self.assertIn('Por recepcionar <span class="n">1</span>', html)
+        self.assertIn('Por programar <span class="n">1</span>', html)
+        self.assertIn("Siguiente paso", html)
+        self.assertIn(f'data-confirmar-recepcion="{nuevo.radicado}"', html)
+        self.assertIn(">Programar <i", html)
+        # La etiqueta filtra y conserva la búsqueda
+        r = self.client.get(reverse("panel") + "?estado=por_programar&q=Cámara")
+        self.assertNotIn(nuevo.radicado, r.content.decode())
+        self.assertIn("«Cámara»", r.content.decode())  # filtro activo con su «×»
+
+    def test_el_tecnico_no_ve_botones_de_coordinacion(self):
+        t = self.ticket(estado=Ticket.Estado.RECEPCIONADO, asignado_a=self.tecnico)
+        self.client.force_login(self.tecnico)
+        html = self.client.get(reverse("panel") + "?estado=abiertos").content.decode()
+        self.assertIn(t.radicado, html)
+        self.assertNotIn(">Programar <i", html)
+        self.assertIn("Programar la visita", html)
+
+    def test_ordenes_de_compra_con_siguiente_paso(self):
+        OrdenCompra.objects.create(proveedor=Proveedor.objects.create(razon_social="SYSCOM", nit="900"),
+                                   estado=OrdenCompra.Estado.POR_PAGAR)
+        self.client.force_login(self.miguel)
+        html = self.client.get(reverse("inventario:ordenes")).content.decode()
+        self.assertIn('Abiertas <span class="n">1</span>', html)
+        self.assertIn("Pago anticipado", html)
+
+    def test_bandeja_comercial_con_etiquetas(self):
+        self.client.force_login(self.comercial)
+        r = self.client.get(reverse("comercial:bandeja"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Solo míos")
+        self.assertContains(r, 'A cargo de comercial <span class="n">0</span>')

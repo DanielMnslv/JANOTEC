@@ -65,3 +65,31 @@ def calcular(ficha):
                       "hecho": hecho[clave], "actual": es_actual, "bloqueado": not hecho[clave] and not es_actual})
     return {"pasos": pasos, "total": len(pasos), "paso": next((p for p in pasos if p["actual"]), None),
             "rechazada": etapa == Et.RECHAZADA, "levantamiento": etapa == Et.LEVANTAMIENTO}
+
+
+def siguiente(ficha, usuario):
+    """Lo que sigue en el requerimiento, para la columna «Siguiente paso» de la bandeja comercial.
+
+    Devuelve el paso, quién lo hace, «n de N» y, si le toca a quien mira, el enlace y el texto del botón. Comercial
+    registra la respuesta del cliente y hace el traspaso; administrativa arma la propuesta en el cotizador.
+    """
+    from django.urls import reverse
+
+    info = calcular(ficha)
+    if info is None or ficha.etapa in (Et.INSTALACION, Et.RECHAZADA):
+        return None
+    p = info["paso"]
+    if p is None:
+        return None
+    radicado = ficha.ticket.radicado
+    detalle = reverse("comercial:detalle", args=[radicado])
+    nombre, quien, url, boton = p["nombre"], p["quien"], "", ""
+    if info["levantamiento"]:
+        nombre, quien = "Visita de levantamiento", "Área técnica"
+    elif p["clave"] == "propuesta":
+        if usuario.arma_propuestas:
+            url, boton = reverse("comercial:cotizador", args=[radicado]), ("Ajustar propuesta" if ficha.etapa == Et.AJUSTES else "Armar propuesta")
+    elif usuario.gestiona_requerimientos:
+        url, boton = detalle, {"asesor": "Asignar asesor", "informe": "Registrar requerimiento",
+                               "respuesta": "Registrar respuesta", "traspaso": "Pasar a instalación"}[p["clave"]]
+    return {"nombre": nombre, "quien": quien, "numero": p["numero"], "total": info["total"], "url": url, "boton": boton}
