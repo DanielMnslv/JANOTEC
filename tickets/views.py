@@ -441,7 +441,9 @@ def descargar_adjunto(request, pk):
 # ============================================================================
 @login_required
 def salud_procesos(request):
-    """Lo que la plataforma detectó sola en el uso real (solo el superusuario)."""
+    """Lo que la plataforma detectó sola en el uso real (solo el superusuario, y solo si está encendida)."""
+    if not diagnostico.activa():
+        raise Http404("La salud de los procesos está apagada.")
     if not request.user.is_superuser:
         raise PermissionDenied
     from .models import Hallazgo
@@ -480,6 +482,8 @@ def hallazgo_revisar(request, pk):
     """Marcar un caso de «Salud de los procesos» como revisado (con el motivo), o reabrirlo (solo el superusuario)."""
     from .models import Hallazgo
 
+    if not diagnostico.activa():
+        raise Http404("La salud de los procesos está apagada.")
     h = get_object_or_404(Hallazgo, pk=pk)
     if request.POST.get("accion") == "reabrir":
         if not request.user.is_superuser:

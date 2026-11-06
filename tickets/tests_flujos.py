@@ -390,6 +390,7 @@ class FlujoComercialTests(BaseFlujos):
         self.assertContains(self.client.get(reverse("oportunidades")), "alarma para la bodega")
 
 
+@override_settings(SALUD_PROCESOS=True)  # retirada el 06/11/2026; se prueba encendida por si se reactiva
 class SaludDeLosProcesosTests(BaseFlujos):
     """La plataforma detecta sola lo que no sigue la lógica del proceso y avisa al superusuario."""
 
@@ -464,6 +465,7 @@ class ContactoPorSedeTests(BaseFlujos):
         self.assertFalse(Hallazgo.objects.filter(ticket=t, regla__in=["contacto_interno", "autorizaciones"]).exists())
 
 
+@override_settings(SALUD_PROCESOS=True)
 class RevisarCasosDeSaludTests(BaseFlujos):
     """Cada área ve sus casos en su bandeja y marca como revisado (con motivo) lo que no requiere acción."""
 
@@ -497,6 +499,27 @@ class RevisarCasosDeSaludTests(BaseFlujos):
         h.refresh_from_db()
         self.assertIsNone(h.revisado_en)
         self.assertIn(h, diagnostico.casos_para(self.jguana))
+
+
+class SaludApagadaTests(BaseFlujos):
+    """Retirada el 06/11/2026: no revisa, no avisa y no sale en ninguna pantalla; lo ya detectado se conserva."""
+
+    def test_no_aparece_en_ninguna_parte(self):
+        from tickets import diagnostico
+        from tickets.models import Hallazgo
+        admin = Usuario.objects.create_superuser("admin", "d.jimenez@seguridadjano.com", "Clave-segura-1")
+        self.ticket(contacto_email=COORD, estado=E.RECEPCIONADO)  # antes era un caso de «contacto interno»
+        mail.outbox.clear()
+        diagnostico.revisar_si_toca()
+        self.assertFalse(Hallazgo.objects.exists())
+        self.assertEqual(mail.outbox, [])
+        self.client.force_login(admin)
+        r = self.client.get(reverse("panel"))
+        self.assertNotContains(r, "Situaciones por revisar")
+        self.assertNotContains(r, reverse("salud_procesos"))
+        self.assertEqual(self.client.get(reverse("salud_procesos")).status_code, 404)
+        self.client.force_login(self.jguana)
+        self.assertNotContains(self.client.get(reverse("panel")), "Situaciones por revisar")
 
 
 class ServicioRepetidoTests(BaseFlujos):

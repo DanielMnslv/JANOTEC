@@ -160,6 +160,9 @@ RADICADO_PREFIJO = os.getenv("RADICADO_PREFIJO", "JNT")
 
 # Días que espera un ticket «Resuelto» la confirmación del cliente antes de cerrarse solo
 TICKET_DIAS_CIERRE_AUTOMATICO = int(os.getenv("TICKET_DIAS_CIERRE_AUTOMATICO", "3"))
+# «Salud de los procesos» (tickets/diagnostico.py): retirada el 06/11/2026 para que cada área vea solo su trabajo.
+# Apagada no revisa, no envía correos ni muestra «Situaciones por revisar»; lo detectado queda guardado. SALUD_PROCESOS=1 la reactiva.
+SALUD_PROCESOS = os.getenv("SALUD_PROCESOS", "0") == "1"
 
 # --- Seguridad en producción ------------------------------------------------
 if not DEBUG:

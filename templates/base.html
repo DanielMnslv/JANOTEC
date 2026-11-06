@@ -12,98 +12,50 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Carlito:wght@400;700&display=swap" rel="stylesheet">
   <link href="{% static 'vendor/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
   <link href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}" rel="stylesheet">
-  <link href="{% static 'css/janotec.css' %}?v=20261030a" rel="stylesheet">
+  <link href="{% static 'css/janotec.css' %}?v=20261106a" rel="stylesheet">
   {% block head %}{% endblock %}
 </head>
 <body>
 {% block cuerpo %}
-<nav class="navbar navbar-expand-lg navbar-dark navbar-jn">
-  <div class="container-xl">
-    <a class="navbar-brand d-flex align-items-center" href="{% url 'inicio' %}">
+<div class="app-jn">
+{# Menú lateral: fijo a la izquierda en pantallas grandes; en el celular se abre con el botón ☰ #}
+<aside class="offcanvas-lg offcanvas-start barra-lateral" tabindex="-1" id="menuLateral" aria-label="Menú principal">
+  <div class="barra-marca">
+    <a href="{% url 'inicio' %}" class="d-flex align-items-center text-decoration-none">
       <img src="{% static 'img/marca/logo-blanco.webp' %}" alt="JANOTEC" class="logo-nav">
-      <span class="marca-sub d-none d-sm-inline">Soporte</span>
+      <span class="marca-sub">Soporte</span>
     </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav" aria-label="Menú"><span class="navbar-toggler-icon"></span></button>
-    <div class="collapse navbar-collapse" id="nav">
-      <ul class="navbar-nav me-auto">
-        {% if user.es_personal %}
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'panel' %}active{% endif %}" href="{% url 'panel' %}"><i class="bi bi-kanban"></i> {% if user.es_supervisor %}Recepción{% else %}Mis tickets{% endif %}</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'cronograma' and request.resolver_match.url_name != 'horas_extras' %}active{% endif %}" href="{% url 'cronograma:semana' %}"><i class="bi bi-calendar-week"></i> Cronograma</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'horas_extras' %}active{% endif %}" href="{% url 'cronograma:horas_extras' %}"><i class="bi bi-clock-history"></i> Horas extras</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'actas_lista' or request.resolver_match.url_name == 'acta_detalle' %}active{% endif %}" href="{% url 'actas_lista' %}"><i class="bi bi-clipboard-check"></i> Actas</a></li>
-          {% if user.ve_inventario %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'inventario' %}active{% endif %}" href="{% if user.gestiona_inventario %}{% url 'inventario:productos' %}{% else %}{% url 'inventario:mi_material' %}{% endif %}"><i class="bi bi-boxes"></i> {% if user.gestiona_inventario %}Inventario{% else %}Mi material{% endif %}</a></li>
-          {% elif user.es_coordinador %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'inventario' %}active{% endif %}" href="{% url 'inventario:funcionarios' %}"><i class="bi bi-people"></i> Funcionarios</a></li>{% endif %}
-          {% if user.ve_comercial %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'comercial' and request.resolver_match.url_name not in modulo_administrativo %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Comercial</a></li>
-          {% if user.ve_financiera %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'financiera' %}active{% endif %}" href="{% url 'inventario:financiera' %}"><i class="bi bi-cash-stack"></i> Financiera{% if compras_por_pagar %} <span class="badge text-bg-danger" title="Órdenes de compra por pagar">{{ compras_por_pagar }}</span>{% endif %}</a></li>{% endif %}
-          {% if user.arma_propuestas %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name in modulo_administrativo %}active{% endif %}" href="{% url 'comercial:propuestas' %}"><i class="bi bi-calculator"></i> Administrativo{% if propuestas_por_aprobar %} <span class="badge text-bg-warning" title="Propuestas esperando su aprobación">{{ propuestas_por_aprobar }}</span>{% endif %}</a></li>{% endif %}
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'oportunidades' %}active{% endif %}" href="{% url 'oportunidades' %}"><i class="bi bi-graph-up-arrow"></i> Oportunidades</a></li>{% endif %}
-          {% if user.es_supervisor %}<li class="nav-item"><a class="nav-link {% if 'cliente' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'clientes' %}"><i class="bi bi-building"></i> Clientes</a></li>{% endif %}
-          {% if user.es_supervisor %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'reportes' %}active{% endif %}" href="{% url 'reportes' %}"><i class="bi bi-bar-chart"></i> Reportes</a></li>{% endif %}
-          {% if user.is_superuser %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'salud_procesos' %}active{% endif %}" href="{% url 'salud_procesos' %}"><i class="bi bi-heart-pulse"></i> Salud</a></li>{% endif %}
-          {% if user.es_supervisor %}<li class="nav-item"><a class="nav-link" href="{% url 'admin:index' %}"><i class="bi bi-gear"></i> Configuración</a></li>{% endif %}
-        {% elif user.es_bodega %}
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
-          {# Bodega: todo el inventario en un solo menú desplegable, con los mismos nombres de siempre #}
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {% if request.resolver_match.namespace == 'inventario' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-boxes"></i> Inventario</a>
-            <ul class="dropdown-menu menu-bodega">{% menu_bodega as grupos %}
-              {% for g in grupos %}{% if not forloop.first %}<li><hr class="dropdown-divider"></li>{% endif %}
-              <li><h6 class="dropdown-header"><i class="bi {{ g.icono }}"></i> {{ g.titulo }}</h6></li>
-              {% for o in g.opciones %}<li><a class="dropdown-item ps-4" href="{{ o.url }}"><i class="bi {{ o.icono }}"></i> {{ o.nombre }}</a></li>{% endfor %}
-              {% endfor %}
-            </ul>
-          </li>
-          {% if user.es_comercial %}{# bodega que también atiende lo comercial #}
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'comercial' and request.resolver_match.url_name not in modulo_administrativo %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Comercial</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'oportunidades' %}active{% endif %}" href="{% url 'oportunidades' %}"><i class="bi bi-graph-up-arrow"></i> Oportunidades</a></li>
-          {% endif %}
-          {% if user.es_financiera %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'financiera' %}active{% endif %}" href="{% url 'inventario:financiera' %}"><i class="bi bi-cash-stack"></i> Financiera{% if compras_por_pagar %} <span class="badge text-bg-danger" title="Órdenes de compra por pagar">{{ compras_por_pagar }}</span>{% endif %}</a></li>{% endif %}
-          {% if user.es_administrativo %}{# bodega que también arma las propuestas (área administrativa) #}
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'comercial' %}active{% endif %}" href="{% url 'comercial:propuestas' %}"><i class="bi bi-calculator"></i> Administrativo</a></li>
-          {% endif %}
-        {% elif user.es_comercial %}
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'bandeja' %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Requerimientos</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'nuevo' %}active{% endif %}" href="{% url 'comercial:nuevo' %}"><i class="bi bi-plus-circle"></i> Nuevo requerimiento</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'oportunidades' %}active{% endif %}" href="{% url 'oportunidades' %}"><i class="bi bi-graph-up-arrow"></i> Oportunidades</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'nuevo_ticket' or request.resolver_match.url_name == 'mis_tickets' %}active{% endif %}" href="{% url 'mis_tickets' %}"><i class="bi bi-tools"></i> Solicitudes técnicas</a></li>
-        {% elif user.es_administrativo %}{# área administrativa: arma las propuestas #}
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'comercial' %}active{% endif %}" href="{% url 'comercial:propuestas' %}"><i class="bi bi-calculator"></i> Administrativo</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.namespace == 'inventario' %}active{% endif %}" href="{% url 'inventario:cotizaciones' %}"><i class="bi bi-envelope-paper"></i> Cotizar con proveedores</a></li>
-        {% elif user.es_financiera %}{# área financiera: pagos de las compras y facturas #}
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'financiera' %}active{% endif %}" href="{% url 'inventario:financiera' %}"><i class="bi bi-cash-stack"></i> Financiera{% if compras_por_pagar %} <span class="badge text-bg-danger" title="Órdenes de compra por pagar">{{ compras_por_pagar }}</span>{% endif %}</a></li>
-        {% elif user.es_central %}
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'nuevo_ticket' %}active{% endif %}" href="{% url 'nuevo_ticket' %}"><i class="bi bi-plus-circle"></i> Registrar solicitud</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'mis_tickets' %}active{% endif %}" href="{% url 'mis_tickets' %}"><i class="bi bi-list-check"></i> Solicitudes registradas</a></li>
-        {% else %}
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'mis_tickets' %}active{% endif %}" href="{% url 'mis_tickets' %}"><i class="bi bi-list-check"></i> Mis solicitudes</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'nuevo_ticket' %}active{% endif %}" href="{% url 'nuevo_ticket' %}"><i class="bi bi-plus-circle"></i> Radicar solicitud</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'actas_lista' or request.resolver_match.url_name == 'acta_detalle' %}active{% endif %}" href="{% url 'actas_lista' %}"><i class="bi bi-clock-history"></i> Historial de servicio</a></li>
-        {% endif %}
-      </ul>
-      <form class="d-flex me-lg-3 my-2 my-lg-0" action="{% url 'buscar_radicado' %}" method="get" role="search">
-        <input class="form-control form-control-sm buscar-radicado" name="radicado" placeholder="Consultar radicado…" aria-label="Número de radicado">
-      </form>
-      <div class="dropdown">
-        <a class="nav-link dropdown-toggle text-white" href="#" data-bs-toggle="dropdown">
-          <i class="bi bi-person-circle"></i> <span title="{{ user.get_full_name }}">{{ user.first_name|default:user.username }}</span>
-          <span class="badge badge-rol ms-1" title="{{ user.get_rol_display }}">{{ user.rol_corto }}</span>
-        </a>
-        <ul class="dropdown-menu dropdown-menu-end">
-          {% if user.empresa %}<li><span class="dropdown-item-text small text-muted">{{ user.empresa }}</span></li><li><hr class="dropdown-divider"></li>{% endif %}
-          {% if user.is_superuser or request.session.actuar_como_original %}<li><a class="dropdown-item" href="{% url 'probar_como' %}"><i class="bi bi-person-badge"></i> Actuar como otra área (prueba)</a></li>{% endif %}
-          <li><a class="dropdown-item" href="{% url 'password_change' %}"><i class="bi bi-key"></i> Cambiar contraseña</a></li>
-          <li><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="dropdown-item"><i class="bi bi-box-arrow-right"></i> Salir</button></form></li>
-        </ul>
-      </div>
-    </div>
+    <button type="button" class="btn-close btn-close-white d-lg-none ms-auto" data-bs-dismiss="offcanvas" data-bs-target="#menuLateral" aria-label="Cerrar menú"></button>
   </div>
-</nav>
+  <nav class="barra-menu"><ul class="nav flex-column menu-lateral">{% include "_menu_lateral.html" %}</ul></nav>
+  <div class="barra-pie">Jano Tec S.A.S.</div>
+</aside>
+
+<div class="app-principal">
+<header class="barra-superior">
+  <button class="btn btn-icono d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#menuLateral" aria-controls="menuLateral" aria-label="Abrir el menú"><i class="bi bi-list"></i></button>
+  <a class="d-lg-none marca-movil" href="{% url 'inicio' %}"><img src="{% static 'img/marca/logo-blanco.webp' %}" alt="JANOTEC" class="logo-nav"></a>
+  <form class="buscar-superior" action="{% url 'buscar_radicado' %}" method="get" role="search">
+    <i class="bi bi-search" aria-hidden="true"></i>
+    <input class="form-control form-control-sm buscar-radicado" name="radicado" placeholder="Consultar radicado…" aria-label="Número de radicado">
+  </form>
+  <div class="dropdown ms-auto">
+    <a class="usuario-menu dropdown-toggle" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+      <span class="avatar" aria-hidden="true">{{ user.first_name|default:user.username|first|upper }}{{ user.last_name|first|upper }}</span>
+      <span class="d-none d-sm-inline" title="{{ user.get_full_name }}">{{ user.first_name|default:user.username }}</span>
+      <span class="badge badge-rol ms-1" title="{{ user.get_rol_display }}">{{ user.rol_corto }}</span>
+    </a>
+    <ul class="dropdown-menu dropdown-menu-end">
+      {% if user.empresa %}<li><span class="dropdown-item-text small text-muted">{{ user.empresa }}</span></li><li><hr class="dropdown-divider"></li>{% endif %}
+      {% if user.is_superuser or request.session.actuar_como_original %}<li><a class="dropdown-item" href="{% url 'probar_como' %}"><i class="bi bi-person-badge"></i> Actuar como otra área (prueba)</a></li>{% endif %}
+      <li><a class="dropdown-item" href="{% url 'password_change' %}"><i class="bi bi-key"></i> Cambiar contraseña</a></li>
+      <li><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="dropdown-item"><i class="bi bi-box-arrow-right"></i> Salir</button></form></li>
+    </ul>
+  </div>
+</header>
 
 {% if request.session.actuar_como_original %}
-<div class="alert alert-warning rounded-0 border-0 border-bottom border-warning mb-0 py-2 d-flex flex-wrap align-items-center gap-2 small" role="status">
+<div class="alert alert-warning rounded-0 border-0 border-bottom border-warning mb-0 py-2 d-flex flex-wrap align-items-center gap-2 small no-imprimir" role="status">
   <i class="bi bi-person-badge"></i>
   <span>Está actuando como <strong>{{ user.get_full_name }}</strong> ({{ user.get_rol_display }}). Solo se guarda lo de PRUEBA.</span>
   <a class="btn btn-sm btn-outline-dark ms-auto" href="{% url 'probar_como' %}">Cambiar de área</a>
@@ -119,6 +71,8 @@
   {% block contenido %}{% endblock %}
 </main>
 <footer class="pie container-xl pb-4">Jano Tec S.A.S. · {{ MARCA.lema }}</footer>
+</div>
+</div>
 {% endblock %}
 <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
 <script>

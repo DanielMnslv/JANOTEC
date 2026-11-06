@@ -1,0 +1,71 @@
+{% load inventario_extras %}{% with u=request.resolver_match.url_name ns=request.resolver_match.namespace %}
+{# Menú lateral agrupado por área. Cada rol ve solo sus grupos; los permisos son los mismos del menú anterior. #}
+{% if user.es_personal %}
+  <li class="menu-grupo">Área técnica</li>
+  <li class="nav-item"><a class="nav-link {% if u == 'panel' %}active{% endif %}" href="{% url 'panel' %}"><i class="bi bi-kanban"></i> {% if user.es_supervisor %}Recepción{% else %}Mis tickets{% endif %}</a></li>
+  <li class="nav-item"><a class="nav-link {% if ns == 'cronograma' and u != 'horas_extras' %}active{% endif %}" href="{% url 'cronograma:semana' %}"><i class="bi bi-calendar-week"></i> Cronograma</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'horas_extras' %}active{% endif %}" href="{% url 'cronograma:horas_extras' %}"><i class="bi bi-clock-history"></i> Horas extras</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'actas_lista' or u == 'acta_detalle' %}active{% endif %}" href="{% url 'actas_lista' %}"><i class="bi bi-clipboard-check"></i> Actas</a></li>
+  {% if user.ve_inventario and not user.gestiona_inventario %}<li class="nav-item"><a class="nav-link {% if ns == 'inventario' %}active{% endif %}" href="{% url 'inventario:mi_material' %}"><i class="bi bi-boxes"></i> Mi material</a></li>
+  {% elif not user.ve_inventario and user.es_coordinador %}<li class="nav-item"><a class="nav-link {% if ns == 'inventario' %}active{% endif %}" href="{% url 'inventario:funcionarios' %}"><i class="bi bi-people"></i> Funcionarios</a></li>{% endif %}
+  {% if user.ve_comercial %}
+  <li class="menu-grupo">Comercial</li>
+  <li class="nav-item"><a class="nav-link {% if ns == 'comercial' and u not in modulo_administrativo %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Comercial</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'oportunidades' %}active{% endif %}" href="{% url 'oportunidades' %}"><i class="bi bi-graph-up-arrow"></i> Oportunidades</a></li>
+  {% endif %}
+  {% if user.gestiona_inventario or user.ve_comercial and user.ve_financiera or user.ve_comercial and user.arma_propuestas %}
+  <li class="menu-grupo">Administración</li>
+  {% if user.ve_comercial and user.arma_propuestas %}<li class="nav-item"><a class="nav-link {% if u in modulo_administrativo %}active{% endif %}" href="{% url 'comercial:propuestas' %}"><i class="bi bi-calculator"></i> Administrativo{% if propuestas_por_aprobar %} <span class="badge text-bg-warning ms-auto" title="Propuestas esperando su aprobación">{{ propuestas_por_aprobar }}</span>{% endif %}</a></li>{% endif %}
+  {% if user.gestiona_inventario %}<li class="nav-item"><a class="nav-link {% if ns == 'inventario' and u != 'financiera' %}active{% endif %}" href="{% url 'inventario:productos' %}"><i class="bi bi-boxes"></i> Inventario</a></li>{% endif %}
+  {% if user.ve_comercial and user.ve_financiera %}<li class="nav-item"><a class="nav-link {% if u == 'financiera' %}active{% endif %}" href="{% url 'inventario:financiera' %}"><i class="bi bi-cash-stack"></i> Financiera{% if compras_por_pagar %} <span class="badge text-bg-danger ms-auto" title="Órdenes de compra por pagar">{{ compras_por_pagar }}</span>{% endif %}</a></li>{% endif %}
+  {% endif %}
+  {% if user.es_supervisor %}
+  <li class="menu-grupo">Gestión</li>
+  <li class="nav-item"><a class="nav-link {% if 'cliente' in u %}active{% endif %}" href="{% url 'clientes' %}"><i class="bi bi-building"></i> Clientes</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'reportes' %}active{% endif %}" href="{% url 'reportes' %}"><i class="bi bi-bar-chart"></i> Reportes</a></li>
+  <li class="nav-item"><a class="nav-link" href="{% url 'admin:index' %}"><i class="bi bi-gear"></i> Configuración</a></li>
+  {% endif %}
+{% elif user.es_bodega %}
+  <li class="menu-grupo">Bodega</li>
+  <li class="nav-item"><a class="nav-link {% if u == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
+  {% menu_bodega as grupos %}{% for g in grupos %}
+  <li class="menu-grupo">{{ g.titulo }}</li>
+  {% for o in g.opciones %}<li class="nav-item"><a class="nav-link {% if request.get_full_path == o.url %}active{% endif %}" href="{{ o.url }}"><i class="bi {{ o.icono }}"></i> {{ o.nombre }}</a></li>{% endfor %}
+  {% endfor %}
+  {% if user.es_comercial or user.es_financiera or user.es_administrativo %}<li class="menu-grupo">Otras áreas</li>{% endif %}
+  {% if user.es_comercial %}{# bodega que también atiende lo comercial #}
+  <li class="nav-item"><a class="nav-link {% if ns == 'comercial' and u not in modulo_administrativo %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Comercial</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'oportunidades' %}active{% endif %}" href="{% url 'oportunidades' %}"><i class="bi bi-graph-up-arrow"></i> Oportunidades</a></li>
+  {% endif %}
+  {% if user.es_financiera %}<li class="nav-item"><a class="nav-link {% if u == 'financiera' %}active{% endif %}" href="{% url 'inventario:financiera' %}"><i class="bi bi-cash-stack"></i> Financiera{% if compras_por_pagar %} <span class="badge text-bg-danger ms-auto" title="Órdenes de compra por pagar">{{ compras_por_pagar }}</span>{% endif %}</a></li>{% endif %}
+  {% if user.es_administrativo %}{# bodega que también arma las propuestas (área administrativa) #}
+  <li class="nav-item"><a class="nav-link {% if ns == 'comercial' %}active{% endif %}" href="{% url 'comercial:propuestas' %}"><i class="bi bi-calculator"></i> Administrativo</a></li>
+  {% endif %}
+{% elif user.es_comercial %}
+  <li class="menu-grupo">Comercial</li>
+  <li class="nav-item"><a class="nav-link {% if u == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'bandeja' %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Requerimientos</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'nuevo' %}active{% endif %}" href="{% url 'comercial:nuevo' %}"><i class="bi bi-plus-circle"></i> Nuevo requerimiento</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'oportunidades' %}active{% endif %}" href="{% url 'oportunidades' %}"><i class="bi bi-graph-up-arrow"></i> Oportunidades</a></li>
+  <li class="menu-grupo">Soporte técnico</li>
+  <li class="nav-item"><a class="nav-link {% if u == 'nuevo_ticket' or u == 'mis_tickets' %}active{% endif %}" href="{% url 'mis_tickets' %}"><i class="bi bi-tools"></i> Solicitudes técnicas</a></li>
+{% elif user.es_administrativo %}{# área administrativa: arma las propuestas #}
+  <li class="menu-grupo">Área administrativa</li>
+  <li class="nav-item"><a class="nav-link {% if u == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
+  <li class="nav-item"><a class="nav-link {% if ns == 'comercial' %}active{% endif %}" href="{% url 'comercial:propuestas' %}"><i class="bi bi-calculator"></i> Administrativo</a></li>
+  <li class="nav-item"><a class="nav-link {% if ns == 'inventario' %}active{% endif %}" href="{% url 'inventario:cotizaciones' %}"><i class="bi bi-envelope-paper"></i> Cotizar con proveedores</a></li>
+{% elif user.es_financiera %}{# área financiera: pagos de las compras y facturas #}
+  <li class="menu-grupo">Área financiera</li>
+  <li class="nav-item"><a class="nav-link {% if u == 'financiera' %}active{% endif %}" href="{% url 'inventario:financiera' %}"><i class="bi bi-cash-stack"></i> Financiera{% if compras_por_pagar %} <span class="badge text-bg-danger ms-auto" title="Órdenes de compra por pagar">{{ compras_por_pagar }}</span>{% endif %}</a></li>
+{% elif user.es_central %}
+  <li class="menu-grupo">Central de atención</li>
+  <li class="nav-item"><a class="nav-link {% if u == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'nuevo_ticket' %}active{% endif %}" href="{% url 'nuevo_ticket' %}"><i class="bi bi-plus-circle"></i> Registrar solicitud</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'mis_tickets' %}active{% endif %}" href="{% url 'mis_tickets' %}"><i class="bi bi-list-check"></i> Solicitudes registradas</a></li>
+{% else %}
+  <li class="menu-grupo">Mis servicios</li>
+  <li class="nav-item"><a class="nav-link {% if u == 'mis_tickets' %}active{% endif %}" href="{% url 'mis_tickets' %}"><i class="bi bi-list-check"></i> Mis solicitudes</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'nuevo_ticket' %}active{% endif %}" href="{% url 'nuevo_ticket' %}"><i class="bi bi-plus-circle"></i> Radicar solicitud</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'actas_lista' or u == 'acta_detalle' %}active{% endif %}" href="{% url 'actas_lista' %}"><i class="bi bi-clock-history"></i> Historial de servicio</a></li>
+{% endif %}
+{% endwith %}

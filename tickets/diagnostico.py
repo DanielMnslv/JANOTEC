@@ -6,6 +6,9 @@ se cierra solo. Así se ve qué se repite, con quién y qué conviene mejorar (e
 
 Se ejecuta sola (como máximo cada 30 minutos, al usar la plataforma) o con ``python manage.py diagnosticar``.
 Solo el superusuario ve los hallazgos; le llega un correo con lo nuevo (como máximo cada 4 horas).
+
+Retirada el 06/11/2026 (``settings.SALUD_PROCESOS`` en falso): no revisa sola, no avisa, no sale en el menú ni en las
+bandejas de las áreas. Los hallazgos ya guardados se conservan; con ``SALUD_PROCESOS=1`` en el .env vuelve todo.
 """
 import logging
 from dataclasses import dataclass, field
@@ -374,8 +377,15 @@ def pendientes():
     return Hallazgo.objects.filter(resuelto__isnull=True, revisado_en__isnull=True)
 
 
+def activa():
+    """¿Está encendida la salud de los procesos? (ver ``settings.SALUD_PROCESOS``)."""
+    return getattr(settings, "SALUD_PROCESOS", False)
+
+
 def casos_para(usuario, areas=None):
-    """Lo que le toca revisar a cada área en su bandeja: abierto y sin revisar, lo más grave primero."""
+    """Lo que le toca revisar a cada área en su bandeja: abierto y sin revisar, lo más grave primero (nada si está apagada)."""
+    if not activa():
+        return []
     areas = areas_de(usuario) if areas is None else set(areas) & areas_de(usuario)
     orden = {"alta": 0, "media": 1, "baja": 2}
     casos = list(pendientes().filter(area__in=areas).select_related("ticket"))
@@ -431,6 +441,8 @@ def avisar(forzar=False):
 
 def revisar_si_toca():
     """Desde las vistas principales: como máximo cada 30 minutos; nunca interrumpe a quien está trabajando."""
+    if not activa():
+        return
     if cache.add("diagnostico:revision", True, INTERVALO_REVISION):
         try:
             revisar()

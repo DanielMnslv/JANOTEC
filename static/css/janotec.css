@@ -334,3 +334,96 @@ tr.fila-interna > td { background: #f4f4f6; }
   body { background: #fff !important; }
   .indicador-formula { color: #444 !important; }
 }
+
+/* ==========================================================================================
+   Fase 1 del rediseño (06/11/2026): menú lateral por áreas y un solo idioma visual
+   ========================================================================================== */
+:root {
+  --jn-lateral: 252px;           /* ancho del menú lateral */
+  --jn-lateral-bg: #3f4049;      /* gris corporativo profundo */
+  --jn-radio: .75rem;
+}
+
+/* --- Estructura: menú lateral + contenido ------------------------------------------------- */
+.app-jn { display: flex; min-height: 100vh; }
+.app-principal { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.app-principal > main { flex: 1; }
+
+.barra-lateral { background: var(--jn-lateral-bg) !important; color: #fff; display: flex; flex-direction: column; }  /* Bootstrap deja transparente el offcanvas-lg en pantalla grande */
+@media (min-width: 992px) {
+  .barra-lateral { width: var(--jn-lateral); flex: 0 0 var(--jn-lateral); position: sticky; top: 0; height: 100vh; }
+}
+@media (max-width: 991.98px) { .barra-lateral.offcanvas-lg { --bs-offcanvas-width: 280px; --bs-offcanvas-bg: var(--jn-lateral-bg); } }
+.barra-marca { display: flex; align-items: center; gap: .5rem; padding: 1rem 1rem .9rem; border-bottom: 3px solid var(--jn-verde); }
+.barra-marca .marca-sub { color: rgba(255,255,255,.8); font-size: .9rem; margin-left: .7rem; padding-left: .7rem; border-left: 1px solid rgba(255,255,255,.35); }
+.barra-menu { flex: 1; overflow-y: auto; padding: .5rem .6rem 1rem; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.25) transparent; }
+.barra-pie { font-size: .75rem; color: rgba(255,255,255,.45); padding: .6rem 1rem; border-top: 1px solid rgba(255,255,255,.08); }
+
+.menu-lateral .menu-grupo { font-family: "Montserrat", system-ui, sans-serif; font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.5); padding: 1rem .7rem .3rem; }
+.menu-lateral .menu-grupo:first-child { padding-top: .4rem; }
+.menu-lateral .nav-link { display: flex; align-items: center; gap: .6rem; color: rgba(255,255,255,.82); padding: .45rem .7rem; border-radius: .5rem; font-size: .93rem; line-height: 1.25; border-left: 3px solid transparent; }
+.menu-lateral .nav-link i { font-size: 1.05rem; width: 1.15rem; text-align: center; opacity: .9; }
+.menu-lateral .nav-link:hover { background: rgba(255,255,255,.07); color: #fff; }
+.menu-lateral .nav-link.active { background: rgba(172,200,18,.16); color: #fff; border-left-color: var(--jn-verde); font-weight: 700; }
+.menu-lateral .nav-link.active i { color: var(--jn-verde); opacity: 1; }
+.menu-lateral .badge { font-size: .72rem; }
+
+/* --- Barra superior: buscador y usuario ---------------------------------------------------- */
+.barra-superior { position: sticky; top: 0; z-index: 1020; display: flex; align-items: center; gap: .75rem; padding: .55rem 1.25rem; background: #fff; border-bottom: 1px solid var(--jn-border); }
+.buscar-superior { position: relative; flex: 0 1 340px; }
+.buscar-superior i { position: absolute; left: .7rem; top: 50%; transform: translateY(-50%); color: var(--jn-gris); font-size: .9rem; }
+.buscar-superior .form-control { padding-left: 2rem; border-radius: 2rem; background: var(--jn-bg); border-color: transparent; }
+.buscar-superior .form-control:focus { background: #fff; border-color: #b4b5bd; }
+.usuario-menu { display: flex; align-items: center; gap: .45rem; color: var(--jn-texto); text-decoration: none; font-weight: 600; }
+.usuario-menu:hover { color: var(--jn-primario-oscuro); }
+.avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--jn-verde); color: var(--jn-primario-oscuro); display: inline-flex; align-items: center; justify-content: center; font-family: "Montserrat", sans-serif; font-weight: 700; font-size: .78rem; }
+.badge-rol { background: var(--jn-tinte); color: var(--jn-primario-oscuro); font-weight: 700; }
+.btn-icono { border: 0; font-size: 1.5rem; line-height: 1; padding: .2rem .35rem; color: inherit; }
+.marca-movil .logo-nav { height: 28px; }
+@media (max-width: 991.98px) {
+  .barra-superior { background: var(--jn-primario); color: #fff; border-bottom: 3px solid var(--jn-verde); padding: .5rem .75rem; }
+  .barra-superior .usuario-menu { color: #fff; }
+  .buscar-superior { flex: 1 1 auto; }
+  .buscar-superior .form-control { background: rgba(255,255,255,.95); }
+}
+
+/* Las tablas anchas se extienden en el espacio que deja el menú lateral */
+@media (min-width: 1200px) { .tabla-ancha { width: calc(100vw - var(--jn-lateral) - 48px); } }
+
+/* --- Un solo idioma visual -------------------------------------------------------------------- */
+/* Estados: etiquetas suaves (fondo claro y texto oscuro del mismo color) iguales en todos los módulos.
+   azul = en proceso · ámbar = espera a alguien · verde = listo · rojo = urgente o devuelto · gris = cerrado */
+.badge.rounded-pill { font-weight: 700; letter-spacing: .01em; padding: .38em .75em; border: 1px solid transparent; }
+.badge.rounded-pill.text-bg-primary   { background: #e8ecf6 !important; color: #2c3e73 !important; border-color: #c9d3ec; }
+.badge.rounded-pill.text-bg-info      { background: #e3f2fb !important; color: #0b5378 !important; border-color: #b9def3; }
+.badge.rounded-pill.text-bg-success   { background: #eaf4dc !important; color: #3b6510 !important; border-color: #cbe3a8; }
+.badge.rounded-pill.text-bg-warning   { background: #fdf1d8 !important; color: #7a4b00 !important; border-color: #f4d79a; }
+.badge.rounded-pill.text-bg-danger    { background: #fbe6e6 !important; color: #8f1d1d !important; border-color: #f2bcbc; }
+.badge.rounded-pill.text-bg-secondary { background: #eeeef1 !important; color: #4e4f59 !important; border-color: #dcdce2; }
+.badge.rounded-pill.text-bg-dark      { background: #e4e4e8 !important; color: #2f3036 !important; border-color: #cfd0d6; }
+.badge.rounded-pill.text-bg-light     { background: #f7f7f8 !important; color: #5f606b !important; border-color: #e2e2e6; }
+
+/* Prioridad: suave para lo normal y fuerte solo para lo crítico, así lo urgente se ve primero */
+.badge.prioridad { font-weight: 700; border-radius: 2rem; border: 1px solid transparent; }
+.badge.prioridad.prioridad-baja    { background: #eaf4dc; color: #3b6510; border-color: #cbe3a8; }
+.badge.prioridad.prioridad-media   { background: #fdf1d8; color: #7a4b00; border-color: #f4d79a; }
+.badge.prioridad.prioridad-alta    { background: #fbe6e6; color: #8f1d1d; border-color: #f2bcbc; }
+.badge.prioridad.prioridad-critica { background: #b3141c; color: #fff; }
+
+/* Tarjetas, tablas y botones más limpios */
+.card { border-radius: var(--jn-radio); }
+.kpi { border-radius: var(--jn-radio); transition: border-color .15s, transform .15s; }
+a.kpi:hover { transform: translateY(-1px); }
+.table-tickets > :not(caption) > * > * { padding-top: .7rem; padding-bottom: .7rem; }
+.table-tickets tbody tr:hover > * { background: #fafbf6; }
+.table-tickets th { font-size: .72rem; }
+.radicado a, a.radicado { text-decoration: none; }
+.page-title { color: var(--jn-texto); }
+.btn { border-radius: .55rem; }
+:focus-visible { outline: 3px solid rgba(172,200,18,.6); outline-offset: 2px; }
+.alert { border-radius: var(--jn-radio); }
+
+@media print {
+  .barra-lateral, .barra-superior { display: none !important; }
+  .app-jn { display: block; }
+}
