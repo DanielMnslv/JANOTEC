@@ -154,10 +154,12 @@ def _es_interno(usuario):
 
 
 def firmar(mensaje, usuario=None):
-    """Pone el nombre de quien actúa como remitente visible y su correo en «Responder a».
+    """Pone el nombre de quien actúa como remitente visible y decide a dónde llegan las respuestas.
 
     La dirección del remitente sigue siendo el buzón de envío (Plesk solo deja enviar desde el buzón que
-    inicia sesión). Si el mensaje ya trae otro remitente o un «Responder a», se respeta.
+    inicia sesión), que es el oficial de atención al cliente. Entre el personal, «Responder a» es el correo
+    de quien actúa; si el correo va a un cliente o a alguien de fuera, la respuesta llega al buzón oficial.
+    Si el mensaje ya trae otro remitente o un «Responder a», se respeta.
     """
     usuario = usuario or _actor.get()
     if not _es_interno(usuario):
@@ -169,7 +171,10 @@ def firmar(mensaje, usuario=None):
     # Sin formataddr: Django codifica el encabezado al enviar (formataddr lo dejaría ilegible en el asunto).
     mensaje.from_email = f'"{nombre.replace(chr(34), "")} · JANOTEC" <{buzon}>'
     if not mensaje.reply_to:
-        mensaje.reply_to = [usuario.email]
+        internos = correos_internos()
+        destinos = list(mensaje.to or []) + list(mensaje.cc or []) + list(mensaje.bcc or [])
+        solo_personal = all(parseaddr(d)[1].lower() in internos for d in destinos)
+        mensaje.reply_to = [usuario.email] if solo_personal else [buzon]
     return mensaje
 
 

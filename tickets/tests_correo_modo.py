@@ -55,6 +55,17 @@ class CorreoModoTests(TestCase):
             _actor.reset(marca)
         self.assertIn("de: Juan Daniel Guana · JANOTEC · iba para: tec@janotec.test", mail.outbox[-1].subject)
 
+    @override_settings(CORREO_MODO="real")
+    def test_si_va_al_cliente_la_respuesta_llega_al_buzon_oficial(self):
+        marca = _actor.set(self.coordinador)
+        try:
+            send_mail("Su visita", "x", None, ["cliente@empresa.co"])
+        finally:
+            _actor.reset(marca)
+        m = mail.outbox[-1]
+        self.assertEqual(m.from_email, '"Juan Daniel Guana · JANOTEC" <notificaciones@janotec.test>')
+        self.assertEqual(m.reply_to, ["notificaciones@janotec.test"])
+
     def test_sin_quien_actue_o_si_es_cliente_queda_el_remitente_de_la_plataforma(self):
         cliente = Usuario.objects.create_user("cli", "cli@empresa.co", "Clave-segura-1", rol=Usuario.Rol.CLIENTE)
         for usuario in (None, cliente):
