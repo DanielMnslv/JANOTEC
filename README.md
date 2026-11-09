@@ -294,6 +294,16 @@ cd /ruta/de/la/plataforma && ./actualizar.sh
 
 El script baja lo último de GitHub, instala dependencias, aplica migraciones, prepara los estilos y reinicia. En el servidor solo se edita a mano el `.env`.
 
+### Publicación automática (Plesk)
+
+En el servidor de producción no hace falta correr nada a mano:
+
+1. Cada push a `main` dispara un webhook de GitHub hacia el panel Plesk del mismo servidor (`app.janotec.app:8443`).
+2. Plesk Git (repositorio en modo **automático**) baja los cambios a la carpeta del sitio.
+3. Las acciones posteriores de Plesk corren `migrate`, `collectstatic` y `touch tmp/restart.txt`, con el Python de Plesk (`/opt/plesk/python/3/bin/python3.10`).
+
+Si un cambio no aparece, en Plesk → Git → «Extraer actualizaciones» se baja a mano. `actualizar.sh` queda como respaldo.
+
 ## Ideas para siguientes versiones
 - Tiempos de respuesta (SLA) por prioridad con alertas de vencimiento.
 - Notificaciones por WhatsApp (API de Meta / Twilio).
