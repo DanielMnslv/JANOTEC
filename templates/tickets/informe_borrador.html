@@ -31,7 +31,39 @@
   </div>
 {% endif %}
 
-<form method="post" class="card" enctype="multipart/form-data">{% csrf_token %}
+{# Los tres pasos del informe y, arriba (sin bajar hasta el final), el botón del paso que le toca a quien lo abre #}
+<div class="card mb-3 border-primary-subtle">
+  <div class="card-body py-3">
+    <div class="d-flex flex-wrap align-items-center gap-2 small mb-2">
+      <span class="badge rounded-pill {% if not borrador.en_revision and not borrador.aprobado %}text-bg-warning{% else %}text-bg-success{% endif %}">1 · Coordinación revisa y envía</span>
+      <i class="bi bi-chevron-right text-muted-jn"></i>
+      <span class="badge rounded-pill {% if borrador.en_revision %}text-bg-info{% elif borrador.aprobado %}text-bg-success{% else %}text-bg-light border{% endif %}">2 · Dirección aprueba</span>
+      <i class="bi bi-chevron-right text-muted-jn"></i>
+      <span class="badge rounded-pill {% if borrador.aprobado %}text-bg-success{% else %}text-bg-light border{% endif %}">3 · Coordinación lo entrega</span>
+    </div>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div class="fw-semibold">
+        {% if borrador.aprobado %}<i class="bi bi-check2-circle text-success"></i> Aprobado: vuelva al ticket y entréguelo (al cliente o a comercial).
+        {% elif not en_informe %}<i class="bi bi-lock"></i> El informe se trabaja con el ticket en «Informe en elaboración».
+        {% elif borrador.en_revision and puede_aprobar %}<i class="bi bi-arrow-right-circle text-primary"></i> Le toca a usted: revíselo y apruébelo, o devuélvalo con observaciones.
+        {% elif borrador.en_revision %}<i class="bi bi-hourglass-split"></i> Está con dirección. Le avisaremos por correo cuando lo apruebe o lo devuelva.
+        {% elif puede_enviar %}<i class="bi bi-arrow-right-circle text-primary"></i> Le toca a usted: revise el texto y oprima «Enviar a dirección».
+        {% elif puede_aprobar %}<i class="bi bi-arrow-right-circle text-primary"></i> Puede aprobarlo directamente si ya está bien.
+        {% else %}Coordinación lo revisa y lo envía a dirección.{% endif %}
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        {% if borrador.aprobado %}<a class="btn btn-accent btn-sm" href="{{ ticket.get_absolute_url }}#informe"><i class="bi bi-box-arrow-up-right"></i> Ir a entregar</a>
+        {% elif en_informe and not bloqueado %}
+          {% if puede_enviar %}<button form="form-informe" class="btn btn-accent btn-sm" name="accion" value="enviar" onclick="return confirm('Se envía a dirección para su revisión y aprobación; mientras tanto no se puede corregir. ¿Enviar?')"><i class="bi bi-send"></i> Enviar a dirección</button>{% endif %}
+          {% if puede_aprobar %}<button form="form-informe" class="btn btn-accent btn-sm" name="accion" value="aprobar" onclick="return confirm('Se genera el PDF definitivo y queda como informe oficial del ticket. ¿Aprobar?')"><i class="bi bi-check2-circle"></i> Aprobar y pasar a limpio</button>{% endif %}
+          {% if puede_aprobar and borrador.en_revision %}<a class="btn btn-outline-danger btn-sm" href="#motivo-devolver"><i class="bi bi-arrow-return-left"></i> Devolver con observaciones</a>{% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<form method="post" class="card" enctype="multipart/form-data" id="form-informe">{% csrf_token %}
   <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
     <span><i class="bi bi-file-earmark-text"></i> {{ borrador.get_tipo_display }}</span>
     {% if not borrador.aprobado and en_informe %}

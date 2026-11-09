@@ -176,3 +176,56 @@ class CelularTests(Base):
             self.client.force_login(usuario)
             r = self.client.get(reverse("inicio"), follow=True)
             self.assertNotIn('class="barra-inferior', r.content.decode(), usuario.username)
+
+
+class InformesCoordinacionTests(Base):
+    """Coordinación ve cada informe con su siguiente paso; el PDF lleva la firma centrada del coordinador."""
+
+    def borrador(self, t, estado, **kw):
+        return InformeBorrador.objects.create(ticket=t, estado=estado, destinatario="Señores", asunto="Informe",
+                                              introduccion="x", actividades="x", conclusiones="x", **kw)
+
+    def test_cada_informe_con_su_paso(self):
+        sin = self.ticket(estado=Ticket.Estado.INFORME, asunto="Sin borrador")
+        por_enviar = self.ticket(estado=Ticket.Estado.INFORME, asunto="Por enviar")
+        self.borrador(por_enviar, InformeBorrador.Estado.BORRADOR, creado_por=self.coord)
+        en_direccion = self.ticket(estado=Ticket.Estado.INFORME, asunto="Con dirección")
+        self.borrador(en_direccion, InformeBorrador.Estado.REVISION)
+        aprobado = self.ticket(estado=Ticket.Estado.INFORME, asunto="Aprobado")
+        self.borrador(aprobado, InformeBorrador.Estado.APROBADO, aprobado_por=self.miguel, aprobado_en=timezone.now())
+        html = self.ver(self.coord)
+        self.assertIn("Informes técnicos", html)
+        for t, boton in ((sin, "Generar borrador"), (por_enviar, "Revisar y enviar a dirección"),
+                         (en_direccion, "Ver informe"), (aprobado, "Entregar informe")):
+            self.assertIn(t.radicado, html)
+            self.assertIn(boton, html)
+        self.assertIn("Aprobado por Miguel", html)
+
+    def test_la_pagina_del_informe_muestra_el_paso_arriba(self):
+        t = self.ticket(estado=Ticket.Estado.INFORME)
+        self.borrador(t, InformeBorrador.Estado.BORRADOR, creado_por=self.coord)
+        self.client.force_login(self.coord)
+        html = self.client.get(reverse("informe_borrador", args=[t.radicado])).content.decode()
+        self.assertIn("Le toca a usted: revise el texto y oprima «Enviar a dirección»", html)
+        self.assertIn('form="form-informe"', html)
+        InformeBorrador.objects.filter(ticket=t).update(estado=InformeBorrador.Estado.REVISION)
+        self.client.force_login(self.miguel)
+        html = self.client.get(reverse("informe_borrador", args=[t.radicado])).content.decode()
+        self.assertIn("Le toca a usted: revíselo y apruébelo", html)
+        self.assertIn("Aprobar y pasar a limpio", html)
+
+    def test_firma_del_coordinador_centrada(self):
+        from tickets import informe
+
+        t = self.ticket(estado=Ticket.Estado.INFORME)
+        b = self.borrador(t, InformeBorrador.Estado.BORRADOR, creado_por=self.miguel)
+        self.coord.last_name, self.coord.cargo = "Guana", "Coordinador TIC"
+        self.coord.save()
+        self.assertEqual(informe.firmante(b), self.coord)  # aunque lo haya generado dirección, firma el coordinador
+        tabla = informe._bloque_firma(self.coord, 400)
+        textos = " ".join(getattr(c[0], "text", str(c[0])) for c in tabla._cellvalues)
+        self.assertIn("Juan Guana", textos)
+        self.assertIn("Coordinador TIC", textos)
+        self.assertEqual(tabla.hAlign, "CENTER")
+        nombre, contenido = informe.pdf(b)
+        self.assertTrue(contenido.startswith(b"%PDF"))

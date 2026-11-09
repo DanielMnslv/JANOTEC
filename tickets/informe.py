@@ -391,6 +391,38 @@ def _tabla_equipos(titulo, filas, ancho, borrador=None):
     return [Spacer(1, 10), _barra(titulo, ancho), tabla]
 
 
+def firmante(borrador):
+    """Quién firma el informe: el coordinador del área técnica.
+
+    Si lo generó el coordinador, él; si no, el coordinador activo (el que tenga firma escaneada, de preferencia).
+    """
+    from accounts.models import Usuario
+
+    autor = borrador.creado_por
+    if autor and autor.rol == Usuario.Rol.SUPERVISOR:
+        return autor
+    coordinadores = Usuario.objects.filter(rol=Usuario.Rol.SUPERVISOR, is_active=True).order_by("pk")
+    return next((u for u in coordinadores if u.firma), None) or coordinadores.first() or autor
+
+
+def _bloque_firma(usuario, ancho):
+    """Firma centrada: imagen de la firma (si la subió en su usuario), la línea, el nombre y el cargo."""
+    from comercial.pdf import _firma_usuario
+
+    nombre = (usuario.get_full_name() or usuario.username) if usuario else "Coordinación del área técnica"
+    cargo = (usuario.cargo if usuario else "") or "Coordinador TIC"
+    centrado = ParagraphStyle("firma", parent=E_TEXTO, alignment=1, spaceBefore=0, spaceAfter=0, leading=13)
+    imagen = _firma_usuario(usuario, ancho * 0.4, 48)
+    if imagen:
+        imagen.hAlign = "CENTER"
+    filas = [[imagen or Spacer(1, 40)], ["_" * 40], [Paragraph(f"<b>{_esc(nombre)}</b>", centrado)],
+             [Paragraph(_esc(cargo), centrado)], [Paragraph("JANOTEC S.A.S.", centrado)]]
+    tabla = Table(filas, colWidths=[ancho * 0.6], hAlign="CENTER")
+    tabla.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+                               ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
+    return tabla
+
+
 def pdf(borrador, definitivo=False):
     """(nombre, bytes). Si no es el definitivo lleva la marca de agua BORRADOR."""
     t = borrador.ticket
@@ -457,16 +489,9 @@ def pdf(borrador, definitivo=False):
     if borrador.garantia.strip():
         h += [Spacer(1, 4), Paragraph(f"<b>Garantía y vida útil:</b> {_esc(borrador.garantia)}", E_TEXTO)]
 
-    # Firmas: elabora quien generó el informe (coordinación) y aprueba dirección
-    def firma(usuario, cargo):
-        return f"{usuario.get_full_name() or usuario.username}\n{usuario.cargo or cargo}"
-
-    elaboro = "Elaboró: " + (firma(borrador.creado_por, "Coordinación del área técnica") if borrador.creado_por
-                             else "Coordinación del área técnica")
-    aprobo = "Aprobó: " + (firma(borrador.aprobado_por, "Dirección") if definitivo and borrador.aprobado_por
-                           else "pendiente\nDirección")
-    h += [Spacer(1, 30), KeepTogether(Table([["_" * 38, "_" * 38], [_p(f"{elaboro}\nJANOTEC S.A.S."), _p(f"{aprobo}\nJANOTEC S.A.S.")]],
-                                            colWidths=[ancho / 2, ancho / 2]))]
+    # Firma al final, centrada: la del coordinador del área técnica (su firma escaneada, la línea, nombre y cargo).
+    # La aprobación de dirección queda registrada en la plataforma (quién y cuándo), no en el documento.
+    h += [Spacer(1, 26), KeepTogether(_bloque_firma(firmante(borrador), ancho))]
 
     def pagina(canvas, documento):
         """Pie de página en cada hoja y, mientras no esté aprobado, la marca de agua «BORRADOR»."""

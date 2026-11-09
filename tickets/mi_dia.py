@@ -127,6 +127,8 @@ def coordinacion(usuario):
                          "Recepcionados o pendientes de nueva visita: póngalos en el cronograma."))
     grupos.append(_grupo("sin_acta", "Visitas pasadas sin acta", "bi-clipboard-x", _visitas_sin_acta(usuario),
                          "La fecha de la visita ya pasó y nadie diligenció el acta. Si no se hizo, aplácela o reprográmela."))
+    grupos.append(_grupo("informes", "Informes técnicos", "bi-file-earmark-text", _informes_coordinacion(usuario),
+                         "Genere el borrador, revíselo y envíelo a dirección. Cuando dirección lo apruebe, entréguelo."))
     hoy, ahora = timezone.localdate(), timezone.now()
     A = Actividad.Autorizacion
     items = []
@@ -152,6 +154,38 @@ def coordinacion(usuario):
         grupos.append(_grupo("salidas", "Salidas de material por autorizar", "bi-box-arrow-right", salidas,
                              "Bodega ya validó: falta su firma (o la de dirección) para que el material salga."))
     return grupos
+
+
+def _informes_coordinacion(usuario):
+    """Cada informe en elaboración con el paso que le toca a coordinación.
+
+    Sin borrador → generarlo; borrador (o devuelto por dirección) → revisarlo y enviarlo a dirección;
+    en revisión → solo se informa que está con dirección; aprobado → entregarlo.
+    """
+    from . import informe as inf
+
+    items = []
+    for t in (_Filtro(usuario).tickets(Ticket.objects.filter(estado=E.INFORME)).select_related("empresa")
+              .order_by("actualizado")):
+        borrador = inf.vigente(t)
+        titulo = f"{t.radicado} · {_cliente(t)}"
+        url = reverse("informe_borrador", args=[t.radicado])
+        if borrador is None:
+            items.append(_item(titulo, f"Acta lista: falta generar el borrador del informe. {t.asunto[:80]}",
+                               _ficha(t), "Generar borrador", _dias(t.actualizado) >= 2))
+        elif borrador.aprobado:
+            quien = borrador.aprobado_por.get_full_name() if borrador.aprobado_por else "dirección"
+            items.append(_item(titulo, f"Aprobado por {quien} {_hace(borrador.aprobado_en)}: ya puede entregarlo.",
+                               _ficha(t), "Entregar informe", True))
+        elif borrador.en_revision:
+            items.append(_item(titulo, f"En revisión de dirección desde {_hace(borrador.actualizado)}.", url, "Ver informe"))
+        else:
+            devuelto = t.seguimientos.filter(mensaje__startswith="Devolvió el informe técnico para corregir").filter(
+                creado__gte=borrador.actualizado).exists()
+            items.append(_item(titulo, ("Dirección lo devolvió con observaciones: corríjalo y envíelo de nuevo."
+                                        if devuelto else "Borrador listo: revíselo y envíelo a dirección para aprobar."),
+                               url, "Revisar y enviar a dirección", devuelto or _dias(borrador.actualizado) >= 2))
+    return items
 
 
 def _visitas_sin_acta(usuario, tecnico=None):
