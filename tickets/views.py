@@ -964,6 +964,22 @@ def mejorar_redaccion(request):
 
 @login_required
 @personal_requerido
+@require_POST
+def revisar_ortografia(request):
+    """Botón «Revisar ortografía» del acta (gratuito, LanguageTool): devuelve los errores y sus sugerencias (JSON)."""
+    from django.http import JsonResponse
+
+    from . import redaccion
+
+    try:
+        errores = redaccion.revisar_ortografia(request.POST.get("texto", ""))
+    except redaccion.RedaccionNoDisponible as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    return JsonResponse({"errores": errores})
+
+
+@login_required
+@personal_requerido
 def acta_nueva(request, radicado):
     """Diligenciar el acta de la visita del ticket. Paso a paso: solo cuando el ticket tiene técnico y la visita
     está en el cronograma, salvo que coordinación haya omitido esos pasos.
@@ -1175,7 +1191,7 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
     from . import redaccion
 
     return render(request, "tickets/acta_form.html", {
-        "redaccion": redaccion.configuracion(reverse("mejorar_redaccion")),
+        "redaccion": redaccion.configuracion(reverse("mejorar_redaccion"), reverse("revisar_ortografia")),
         "ticket": ticket, "empresa": empresa, "sede": sede, "grupos_equipos": grupos_equipos,
         "form": form, "equipos": equipos, "utilizados": utilizados, "retirados": retirados, "requeridos": requeridos,
         "mat_activos": mat_activos,

@@ -22,6 +22,7 @@ urlpatterns = [
     path("historial/archivo/<str:tipo>/<int:pk>/", views.archivo_acta, name="archivo_acta"),
     path("ticket/<str:radicado>/acta/", views.acta_nueva, name="acta_nueva"),
     path("acta/mejorar-redaccion/", views.mejorar_redaccion, name="mejorar_redaccion"),
+    path("acta/revisar-ortografia/", views.revisar_ortografia, name="revisar_ortografia"),
     path("ticket/<str:radicado>/acta/vincular/", views.vincular_acta, name="vincular_acta"),
     path("ticket/<str:radicado>/acta/<int:numero>/desvincular/", views.desvincular_acta, name="desvincular_acta"),
     # Oportunidades comerciales detectadas en campo

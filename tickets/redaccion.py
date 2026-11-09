@@ -1,10 +1,13 @@
 """Ayuda de redacción para los campos que escriben los técnicos en el acta de soporte.
 
-Dos niveles:
+Tres niveles:
 
 1. Ayuda fija, sin costo: a cada campo le corresponde una guía corta, frases rápidas para tocar y un mínimo de
-   palabras para avisar cuando el texto queda muy pobre. Lo usa static/js/redaccion.js.
-2. Botón «Mejorar redacción»: le pide a Claude (Anthropic) que reescriba el texto del técnico en español formal
+   palabras para avisar cuando el texto queda muy pobre; además el corrector en español del navegador o del
+   celular subraya las palabras mal escritas. Lo usa static/js/redaccion.js.
+2. Botón «Revisar ortografía», gratuito: LanguageTool señala tildes, ortografía, gramática y puntuación, y el técnico
+   aplica cada corrección con un toque (o todas a la vez).
+3. Botón «Mejorar redacción» (opcional, con costo): le pide a Claude (Anthropic) que reescriba el texto del técnico en español formal
    y claro, sin agregar hechos. Solo se activa si el servidor tiene ANTHROPIC_API_KEY en el .env y la librería
    «anthropic» instalada; si falta cualquiera de las dos, el botón no aparece y lo demás sigue funcionando.
 
@@ -75,16 +78,61 @@ def ia_disponible():
     return True
 
 
-def configuracion(url_mejorar=""):
-    """Lo que necesita static/js/redaccion.js: guías, frases, mínimos y, si aplica, la dirección del botón de IA."""
+def configuracion(url_mejorar="", url_ortografia=""):
+    """Lo que necesita static/js/redaccion.js: guías, frases, mínimos, la dirección del botón «Revisar ortografía»
+    (gratuito, siempre disponible) y, si hay clave, la del botón de IA."""
     return {
         "tipos": {clave: {k: t[k] for k in ("guia", "frases", "minimo")} for clave, t in TIPOS.items()},
         "url": url_mejorar if ia_disponible() else "",
+        "ortografia": url_ortografia,
     }
 
 
 class RedaccionNoDisponible(Exception):
     """El texto no se pudo mejorar (sin clave, sin conexión, servicio ocupado…): el técnico deja el suyo."""
+
+
+# --- Revisión de ortografía gratuita (LanguageTool) ----------------------------------
+LANGUAGETOOL_URL = "https://api.languagetool.org/v2/check"  # servicio público: gratis, sin clave, ~20 revisiones/min
+
+
+def revisar_ortografia(texto):
+    """Errores de ortografía, tildes, gramática y puntuación del texto, según LanguageTool (gratuito).
+
+    Devuelve una lista de {inicio, largo, error, mensaje, sugerencias (hasta 3)}; lista vacía si no hay errores.
+    Solo viaja el párrafo del campo. Lanza RedaccionNoDisponible si el servicio no responde.
+    """
+    import json
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    texto = texto or ""
+    if not texto.strip():
+        raise RedaccionNoDisponible("Escriba primero el texto que quiere revisar.")
+    if len(texto) > LARGO_MAXIMO:
+        raise RedaccionNoDisponible(f"El texto es muy largo para revisarlo (máximo {LARGO_MAXIMO} caracteres).")
+    datos = urllib.parse.urlencode({"text": texto, "language": "es"}).encode()
+    pedido = urllib.request.Request(LANGUAGETOOL_URL, data=datos, headers={"User-Agent": "JANOTEC-soporte/1.0"})
+    try:
+        with urllib.request.urlopen(pedido, timeout=20) as r:
+            respuesta = json.load(r)
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            raise RedaccionNoDisponible("El revisor gratuito está ocupado. Intente en un minuto.")
+        log.warning("Ortografía: LanguageTool respondió %s", e.code)
+        raise RedaccionNoDisponible("El revisor de ortografía no respondió bien. Intente de nuevo.")
+    except (urllib.error.URLError, TimeoutError, ValueError):
+        raise RedaccionNoDisponible("No hay conexión con el revisor de ortografía. Revise el internet e intente de nuevo.")
+    errores = []
+    for m in respuesta.get("matches", []):
+        inicio, largo = m.get("offset", 0), m.get("length", 0)
+        errores.append({
+            "inicio": inicio, "largo": largo, "error": texto[inicio:inicio + largo],
+            "mensaje": m.get("shortMessage") or m.get("message", ""),
+            "sugerencias": [s["value"] for s in m.get("replacements", [])[:3]],
+        })
+    return errores
 
 
 def mejorar(texto, tipo):

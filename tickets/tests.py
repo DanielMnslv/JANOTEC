@@ -1610,6 +1610,36 @@ class AyudaRedaccionTests(ActaBase):
         with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}):
             self.assertIn("no está activada", self.client.post(url, {"texto": "algo"}).json()["error"])
 
+    def test_revisar_ortografia_gratuita_devuelve_errores_y_sugerencias(self):
+        import io
+        import json
+        from unittest import mock
+        self.client.force_login(self.agente)
+        html = self.client.get(reverse("acta_nueva", args=[self.ticket.radicado]))
+        self.assertEqual(html.context["redaccion"]["ortografia"], reverse("revisar_ortografia"))  # siempre, sin clave
+        lt = {"matches": [{"offset": 0, "length": 6, "shortMessage": "Error de ortografía",
+                           "replacements": [{"value": "Cámara"}, {"value": "Cámaras"}, {"value": "Camada"},
+                                            {"value": "Casara"}]}]}
+        with mock.patch("urllib.request.urlopen", return_value=io.BytesIO(json.dumps(lt).encode())) as abrir:
+            r = self.client.post(reverse("revisar_ortografia"), {"texto": "camara 3 sin imagen"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["errores"], [{"inicio": 0, "largo": 6, "error": "camara", "mensaje": "Error de ortografía",
+                                                "sugerencias": ["Cámara", "Cámaras", "Camada"]}])
+        pedido = abrir.call_args.args[0]
+        self.assertIn("languagetool.org", pedido.full_url)
+        self.assertIn(b"language=es", pedido.data)
+
+    def test_revisar_ortografia_sin_conexion_avisa(self):
+        import urllib.error
+        from unittest import mock
+        self.client.force_login(self.agente)
+        url = reverse("revisar_ortografia")
+        with mock.patch("urllib.request.urlopen", side_effect=urllib.error.URLError("sin red")):
+            r = self.client.post(url, {"texto": "camara"})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("conexión", r.json()["error"])
+        self.assertEqual(self.client.post(url, {"texto": " "}).status_code, 400)
+
     def test_solo_el_personal_y_solo_por_post(self):
         url = reverse("mejorar_redaccion")
         self.client.force_login(self.cli_a)
