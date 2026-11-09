@@ -10,20 +10,27 @@ SERVICIO="${SERVICIO:-janotec}"
 echo "== Bajando cambios de GitHub"
 git pull --ff-only
 
-echo "== Activando el entorno de Python"
-source .venv/bin/activate
-
-echo "== Instalando dependencias"
-pip install -q -r requirements.txt
+echo "== Eligiendo el Python de la plataforma"
+# Con entorno propio (.venv) se usa ese; en el servidor Plesk es el Python de Plesk, el mismo de PassengerPython
+if [ -x .venv/bin/python ]; then
+    PY=.venv/bin/python
+    echo "== Instalando dependencias"
+    "$PY" -m pip install -q -r requirements.txt
+elif [ -x /opt/plesk/python/3/bin/python3.10 ]; then
+    PY=/opt/plesk/python/3/bin/python3.10
+else
+    PY=python3
+fi
+echo "Python: $PY"
 
 echo "== Aplicando cambios a la base de datos"
-python manage.py migrate --noinput
+"$PY" manage.py migrate --noinput
 
 echo "== Preparando estilos e imágenes"
-python manage.py collectstatic --noinput -v 0
+"$PY" manage.py collectstatic --noinput -v 0
 
 echo "== Revisando la configuración"
-python manage.py check
+"$PY" manage.py check
 
 echo "== Reiniciando la plataforma"
 if systemctl list-unit-files "${SERVICIO}.service" >/dev/null 2>&1 && systemctl cat "${SERVICIO}.service" >/dev/null 2>&1; then
