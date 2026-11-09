@@ -85,7 +85,7 @@
                 <div class="d-flex justify-content-between align-items-start gap-1">
                   <span class="hora">{{ a.hora_inicio|time:"g:i a" }} – {{ a.hora_fin|time:"g:i a" }}</span>
                   {% if a.es_interna %}<span class="badge text-bg-dark" title="Sin ticket: no lleva autorización del cliente"><i class="bi bi-building"></i> Interna</span>{% else %}
-                  <span class="badge text-bg-{{ a.color_autorizacion }}" title="{{ a.get_autorizacion_display }}">{% if a.autorizacion == 'aceptada' %}<i class="bi bi-check2"></i>{% elif a.autorizacion == 'rechazada' %}<i class="bi bi-x-lg"></i>{% elif a.autorizacion == 'enviada' %}<i class="bi bi-envelope"></i>{% else %}<i class="bi bi-envelope-dash"></i>{% endif %}</span>{% endif %}
+                  <span class="badge text-bg-{{ a.color_autorizacion }}" title="{{ a.get_autorizacion_display }}{% if a.quien_respondio %} · respondió {{ a.quien_respondio }}{% endif %}">{% if a.autorizacion == 'aceptada' %}<i class="bi bi-check2"></i>{% elif a.autorizacion == 'rechazada' %}<i class="bi bi-x-lg"></i>{% elif a.autorizacion == 'enviada' %}<i class="bi bi-envelope"></i>{% else %}<i class="bi bi-envelope-dash"></i>{% endif %}</span>{% endif %}
                 </div>
                 <div class="fw-semibold">{{ a.cliente }}</div>
                 {% if a.sede %}<div class="small text-muted-jn">{{ a.sede }}{% if a.ticket.enlace_mapa %} · <a href="{{ a.ticket.enlace_mapa }}" target="_blank" rel="noopener" title="Cómo llegar"><i class="bi bi-geo-alt"></i></a>{% endif %}</div>{% endif %}

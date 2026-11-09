@@ -10,7 +10,7 @@
       <li class="list-group-item small{% if a.en_rojo %} list-group-item-danger{% endif %}">
         <div class="d-flex flex-wrap justify-content-between gap-1">
           <strong>{{ a.fecha|date:"l j \d\e F" }} · {{ a.hora_inicio|time:"g:i a" }} – {{ a.hora_fin|time:"g:i a" }}</strong>
-          <span class="badge text-bg-{{ a.color_autorizacion }}">{{ a.get_autorizacion_display }}</span>
+          <span class="badge text-bg-{{ a.color_autorizacion }}">{{ a.get_autorizacion_display }}{% if a.quien_respondio %} · {{ a.quien_respondio }}{% endif %}</span>
         </div>
         <div>{{ a.get_tipo_display }} · {% for u in a.tecnicos %}{{ u.get_full_name|default:u.username }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>
         {% if a.en_rojo %}<div class="text-danger"><i class="bi bi-exclamation-triangle"></i> {{ a.motivo_rojo }}</div>{% endif %}

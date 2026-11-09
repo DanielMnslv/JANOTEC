@@ -27,16 +27,38 @@
       {% if a.autorizacion == 'aceptada' or a.autorizacion == 'rechazada' %}
         <div class="alert alert-info small">Ya había respondido: <strong>{{ a.get_autorizacion_display|lower }}</strong>. Puede cambiar su respuesta.</div>
       {% endif %}
-      <div class="d-flex flex-wrap gap-2">
-        <form method="post">{% csrf_token %}<input type="hidden" name="accion" value="aceptar">
-          <button class="btn btn-success btn-lg{% if elegida == 'rechazar' %} btn-outline-success{% endif %}"><i class="bi bi-check2"></i> Aceptar la visita</button></form>
-        <button type="button" class="btn btn-outline-danger btn-lg" data-bs-toggle="collapse" data-bs-target="#rechazo"><i class="bi bi-x-lg"></i> Rechazar</button>
-      </div>
-      <form method="post" id="rechazo" class="collapse{% if elegida == 'rechazar' %} show{% endif %} mt-3">{% csrf_token %}
-        <input type="hidden" name="accion" value="rechazar">
-        <label class="form-label" for="motivo">¿Por qué no puede recibirnos? (opcional)</label>
-        <textarea class="form-control mb-2" name="motivo" id="motivo" rows="2" maxlength="300" placeholder="Ej.: ese día no hay personal en la sede; mejor la próxima semana"></textarea>
-        <button class="btn btn-danger">Confirmar rechazo</button>
+      <form method="post">{% csrf_token %}
+        {# Cualquiera de los correos que recibieron la autorización puede responder: queda registrado quién fue #}
+        <div class="border rounded p-3 mb-3 bg-body-tertiary">
+          <div class="fw-semibold mb-2"><i class="bi bi-person-check"></i> ¿Quién responde?</div>
+          {% if error %}<div class="alert alert-danger small py-2">{{ error }}</div>{% endif %}
+          <div class="row g-2">
+            <div class="col-sm-6">
+              <label class="form-label small mb-1" for="correo">Su correo</label>
+              {% if correos|length > 1 %}
+              <select class="form-select" name="correo" id="correo" required>
+                <option value="">Elija su correo…</option>
+                {% for c in correos %}<option value="{{ c }}"{% if c|lower == correo_elegido|lower %} selected{% endif %}>{{ c }}</option>{% endfor %}
+              </select>
+              {% else %}
+              <input type="hidden" name="correo" value="{{ correos.0 }}"><input class="form-control" value="{{ correos.0 }}" disabled id="correo">
+              {% endif %}
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label small mb-1" for="nombre">Su nombre</label>
+              <input class="form-control" name="nombre" id="nombre" maxlength="150" required value="{{ nombre }}" placeholder="Nombre y apellido">
+            </div>
+          </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+          <button class="btn btn-success btn-lg{% if elegida == 'rechazar' %} btn-outline-success{% endif %}" name="accion" value="aceptar"><i class="bi bi-check2"></i> Aceptar la visita</button>
+          <button type="button" class="btn btn-outline-danger btn-lg" data-bs-toggle="collapse" data-bs-target="#rechazo"><i class="bi bi-x-lg"></i> Rechazar</button>
+        </div>
+        <div id="rechazo" class="collapse{% if elegida == 'rechazar' %} show{% endif %} mt-3">
+          <label class="form-label" for="motivo">¿Por qué no puede recibirnos? (opcional)</label>
+          <textarea class="form-control mb-2" name="motivo" id="motivo" rows="2" maxlength="300" placeholder="Ej.: ese día no hay personal en la sede; mejor la próxima semana"></textarea>
+          <button class="btn btn-danger" name="accion" value="rechazar">Confirmar rechazo</button>
+        </div>
       </form>
     {% endif %}
   </div></div>

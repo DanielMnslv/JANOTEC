@@ -31,6 +31,18 @@ def correos_cliente(ticket):
 
 _DATO = re.compile(r"^([^:\n]{2,40}):\s+(\S.*)$")
 _URL = re.compile(r"https?://\S+$")
+_DESPEDIDA = re.compile(r"(?:^|\n)\s*(?:Cordialmente|Atentamente|Saludos)[,.]?\s*\n(.+)\Z", re.S | re.I)
+_SALUDO = re.compile(r"^(Señor(es|a)?\b|Cordial saludo|Buen(os|as) (días|tardes|noches)|Hola\b|Estimad[oa]s?\b).*$", re.I)
+
+
+def _firma_de_quien_actua():
+    """«Nombre · área» de quien hizo la acción (si es del personal); si no, la plataforma."""
+    from config.correo import _actor, _es_interno
+
+    usuario = _actor.get()
+    if _es_interno(usuario):
+        return f"{usuario.get_full_name() or usuario.username} · {usuario.rol_corto}"
+    return "Plataforma de soporte"
 
 
 def html_desde_texto(asunto, cuerpo):
@@ -41,8 +53,19 @@ def html_desde_texto(asunto, cuerpo):
     """
     radicado = (re.search(r"JNT-\d{4}-\d{6}", asunto) or [""])[0]
     titulo = re.sub(r"^(\[[^\]]*\]\s*)+", "", asunto).strip() or asunto
-    parrafos, datos, boton, firma = [], [], None, "Plataforma de soporte"
-    for bloque in re.split(r"\n\s*\n", cuerpo.strip()):
+    parrafos, datos, boton, firma = [], [], None, _firma_de_quien_actua()
+    saludo = "Cordial saludo."
+    cuerpo = cuerpo.strip()
+    # Si el texto ya trae su despedida («Cordialmente,» y debajo quien firma), esa es la firma.
+    despedida = _DESPEDIDA.search(cuerpo)
+    quien_firma = [l.strip() for l in despedida[1].splitlines() if l.strip()] if despedida else []
+    if 0 < len(quien_firma) <= 4:
+        cuerpo, firma = cuerpo[:despedida.start()].strip(), " · ".join(quien_firma)
+    # Si empieza con su propio saludo («Señores …:», «Buenos días»), ese reemplaza al de siempre.
+    primera, _, resto = cuerpo.partition("\n")
+    if _SALUDO.match(primera.strip()):
+        saludo, cuerpo = primera.strip(), resto.strip()
+    for bloque in re.split(r"\n\s*\n", cuerpo):
         lineas = [l for l in bloque.splitlines() if l.strip()]
         sueltas = []
         for linea in lineas:
@@ -60,7 +83,7 @@ def html_desde_texto(asunto, cuerpo):
                 sueltas.append(linea.rstrip())
         if sueltas:
             parrafos.append("\n".join(sueltas))
-    contexto = {"titulo": titulo, "saludo": "Cordial saludo.", "parrafos": parrafos, "datos": datos, "radicado": radicado,
+    contexto = {"titulo": titulo, "saludo": saludo, "parrafos": parrafos, "datos": datos, "radicado": radicado,
                 "firma": firma, "boton_texto": boton[0] if boton else "", "boton_url": boton[1] if boton else "",
                 "resumen": (parrafos[0] if parrafos else titulo)[:140], "estrellas": [], "acciones": []}
     return render_to_string("correos/cliente.html", contexto)
@@ -84,6 +107,7 @@ def enviar_al_cliente(asunto, destinatarios, titulo, parrafos, saludo="", datos=
                       acciones=()):
     """Correo formal para el cliente: HTML con la marca de JANOTEC y la misma información en texto plano.
 
+    `destinatarios`: el primero es el principal («Para»); los demás van en copia («CC»).
     `boton` = (texto, url); `adjuntos` = [(nombre, contenido, tipo)]; `calificar` = ticket cuyo correo lleva
     las 10 estrellas para calificar la atención. Nunca interrumpe la operación si falla.
     """
@@ -114,7 +138,9 @@ def enviar_al_cliente(asunto, destinatarios, titulo, parrafos, saludo="", datos=
     texto += ["", "Cordialmente,", firma, "JANOTEC S.A.S.", "",
               "Cra 40A N.º 16-21, Barrio Villa María · Villavicencio, Meta · Tel: 310 229 8160 · janotec@janotec.app"]
     try:
-        correo = EmailMultiAlternatives(asunto, "\n".join(texto), settings.DEFAULT_FROM_EMAIL, destinatarios)
+        # Como en un correo normal: el primero (quien gestiona) en «Para» y los demás en copia
+        correo = EmailMultiAlternatives(asunto, "\n".join(texto), settings.DEFAULT_FROM_EMAIL, destinatarios[:1],
+                                        cc=destinatarios[1:])
         correo.attach_alternative(render_to_string("correos/cliente.html", contexto), "text/html")
         for nombre, contenido, tipo in adjuntos:
             correo.attach(nombre, contenido, tipo)
@@ -343,9 +369,9 @@ def oportunidad_detectada(oportunidad):
 
 def acta_registrada(acta):
     """Copia del acta a los correos indicados en «Copia correo a» (como hacía SafetyTrack) y al cliente."""
-    destinatarios = [c.strip() for c in acta.copia_correo.split(";") if c.strip()]
-    if acta.ticket:
-        destinatarios += correos_cliente(acta.ticket)
+    # Primero quien gestiona la solicitud (va en «Para»); las copias del acta van después, en copia
+    destinatarios = correos_cliente(acta.ticket) if acta.ticket else []
+    destinatarios += [c.strip() for c in acta.copia_correo.split(";") if c.strip()]
     fecha = timezone.localtime(acta.fecha)
     intervenidos = ", ".join(e.equipo + (f" ({e.get_trabajo_display().lower()})" if e.trabajo else "")
                              for e in acta.equipos_intervenidos if e.equipo)

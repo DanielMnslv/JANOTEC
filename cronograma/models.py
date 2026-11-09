@@ -158,6 +158,9 @@ class Actividad(models.Model):
     autorizacion_enviada = models.DateTimeField(null=True, blank=True)
     autorizacion_respuesta = models.DateTimeField(null=True, blank=True)
     motivo_rechazo = models.CharField("motivo del rechazo", max_length=300, blank=True)
+    # Quién respondió la autorización: cualquiera de los correos notificados (principal o copia) puede hacerlo
+    respondio_correo = models.EmailField("correo de quien respondió", blank=True)
+    respondio_nombre = models.CharField("nombre de quien respondió", max_length=150, blank=True)
     # Sube cuando se reprograma: los enlaces de correos anteriores dejan de valer
     version_enlace = models.PositiveIntegerField(default=1)
     choque = models.CharField("cruce con la disponibilidad del cliente", max_length=300, blank=True)
@@ -219,6 +222,13 @@ class Actividad(models.Model):
         if self.es_interna:
             return []
         return [c.strip() for c in self.notificar_a.replace(",", ";").split(";") if c.strip()]
+
+    @property
+    def quien_respondio(self):
+        """«Nombre (correo)» de quien aceptó o rechazó la visita, para que coordinación sepa quién fue."""
+        if not self.respondio_correo:
+            return ""
+        return f"{self.respondio_nombre} ({self.respondio_correo})" if self.respondio_nombre else self.respondio_correo
 
     @property
     def en_rojo(self):

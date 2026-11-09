@@ -184,7 +184,8 @@ class AutorizacionTests(BaseCronograma):
         a.refresh_from_db()
         self.assertEqual(a.autorizacion, A.ENVIADA)
         correo = mail.outbox[0]
-        self.assertEqual(set(correo.to), {"fernando@llano.co", "admin@llano.co"})
+        self.assertEqual((correo.to, set(correo.cc) - {"soporte@janotec.test", "coordinador@janotec.test"}),
+                         (["fernando@llano.co"], {"admin@llano.co"}))  # principal en «Para», los demás en copia
         self.assertEqual(len(correo.attachments), 4)  # cédula y seguridad social de cada técnico
         html = correo.alternatives[0][0]
         self.assertIn("Aceptar", html)
@@ -225,13 +226,20 @@ class AutorizacionTests(BaseCronograma):
         a.refresh_from_db()
         self.assertEqual(a.autorizacion, A.ENVIADA)
         mail.outbox.clear()
-        self.client.post(url, {"accion": "aceptar"})
+        # Debe decir quién responde: su correo (de los notificados) y su nombre
+        self.client.post(url, {"accion": "aceptar", "correo": "otro@cliente.co", "nombre": "Ana"})
         a.refresh_from_db()
+        self.assertEqual(a.autorizacion, A.ENVIADA)
+        correo = a.correos[0]
+        self.client.post(url, {"accion": "aceptar", "correo": correo.upper(), "nombre": "Ana Ruiz"})
+        a.refresh_from_db()
+        self.assertEqual(a.quien_respondio, f"Ana Ruiz ({correo})")
         self.ticket.refresh_from_db()
         self.assertEqual((a.autorizacion, self.ticket.estado), (A.ACEPTADA, E.AUTORIZADO))
         sst = next(m for m in mail.outbox if "sst@janotec.test" in m.to)
         self.assertIn("Javier Jaramillo", sst.body)
-        self.assertTrue(any("coordinador@janotec.test" in m.to and "ACEPTÓ" in m.subject for m in mail.outbox))
+        self.assertTrue(any("coordinador@janotec.test" in m.to and "ACEPTÓ" in m.subject
+                            and f"Autorizó: Ana Ruiz ({correo})" in m.body for m in mail.outbox))
 
     def test_sin_sst_no_se_avisa_y_rechazo_marca_en_rojo(self):
         self.programar(proximo(1))
@@ -241,7 +249,8 @@ class AutorizacionTests(BaseCronograma):
         url = self.enlace(mail.outbox[-1])
         self.client.logout()
         mail.outbox.clear()
-        self.client.post(url, {"accion": "rechazar", "motivo": "Ese día hay inventario"})
+        self.client.post(url, {"accion": "rechazar", "motivo": "Ese día hay inventario", "correo": a.correos[0],
+                               "nombre": "Pedro"})
         a.refresh_from_db()
         self.ticket.refresh_from_db()
         self.assertEqual((a.autorizacion, a.motivo_rechazo, a.en_rojo), (A.RECHAZADA, "Ese día hay inventario", True))

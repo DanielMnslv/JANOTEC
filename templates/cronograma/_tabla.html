@@ -19,7 +19,7 @@
           <td class="small">{{ a.insumos|default:"—" }}</td>
           <td class="small">{% if a.es_interna %}<span class="badge text-bg-dark"><i class="bi bi-building"></i> Actividad interna</span><div class="text-muted-jn">Sin autorización del cliente</div>
             {% else %}{% for c in a.correos %}<div>{{ c }}</div>{% empty %}<span class="text-danger">Sin correo</span>{% endfor %}
-            <span class="badge text-bg-{{ a.color_autorizacion }} mt-1">{{ a.get_autorizacion_display }}</span>{% endif %}</td>
+            <span class="badge text-bg-{{ a.color_autorizacion }} mt-1">{{ a.get_autorizacion_display }}</span>{% if a.quien_respondio %}<div class="text-muted-jn">Respondió: {{ a.quien_respondio }}</div>{% endif %}{% endif %}</td>
           {% if editable %}<td class="text-nowrap no-imprimir">{% include "cronograma/_acciones.html" %}
             {% if a.autorizacion != 'aceptada' and not a.es_interna %}<form method="post" action="{% url 'cronograma:enviar_autorizacion' a.pk %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-outline-success py-0" title="Enviar autorización al cliente"><i class="bi bi-send"></i></button></form>{% endif %}
             <form method="post" action="{% url 'cronograma:eliminar' a.pk %}" class="d-inline" onsubmit="return confirm('¿Retirar esta actividad del cronograma?')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger py-0" title="Retirar"><i class="bi bi-x-lg"></i></button></form></td>{% endif %}

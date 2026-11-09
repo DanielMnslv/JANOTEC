@@ -1322,7 +1322,9 @@ def editar_ticket(request, radicado):
         motivo = request.POST.get("motivo_ajuste", "").strip()[:500]
         informar = request.POST.get("informar_cliente") == "on"
         campos = [c for c in form.changed_data if c in form.fields and c not in ("archivos", "latitud", "longitud")
-                  and not c.startswith("nd_")]
+                  and not c.startswith("nd_") and c != "contacto_copias"]
+        if "contacto_copias" in form.changed_data and "contacto_email" not in campos:
+            campos.append("contacto_email")  # las copias se guardan junto al correo principal
         cambio_disponibilidad = any(c.startswith("nd_") for c in form.changed_data)
         antes = {c: _valor_mostrable(original, c) for c in campos}
         antes["disponibilidad"] = _valor_mostrable(original, "disponibilidad")

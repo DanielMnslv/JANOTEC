@@ -58,15 +58,49 @@ def correos_comercial_y_bodega():
     return correos
 
 
+_BODY = re.compile(r"<body[^>]*>", re.I)
+try:  # Django 5.2 guarda las alternativas como EmailAlternative(content, mimetype)
+    from django.core.mail.message import EmailAlternative as _Alternativa
+except ImportError:  # pragma: no cover — versiones anteriores usan tuplas
+    def _Alternativa(contenido, tipo):
+        return (contenido, tipo)
+
+
+def marcar_prueba(mensaje, iba_para, de=""):
+    """Deja claro que es un correo de prueba sin ensuciar el asunto.
+
+    El asunto solo lleva «[PRUEBA]». De quién era y a quién le habría llegado va en una franja amarilla
+    arriba del correo (y en las primeras líneas del texto plano).
+    """
+    from django.utils.html import escape
+
+    if not mensaje.subject.startswith("[PRUEBA]"):
+        mensaje.subject = f"[PRUEBA] {mensaje.subject}"
+    detalle = (f"De: {de} · " if de else "") + f"Iba para: {', '.join(iba_para)}"
+    mensaje.body = f"*** CORREO DE PRUEBA · {detalle} ***\n\n{mensaje.body}"
+    franja = ('<div style="background:#fff3cd;border-bottom:2px solid #e0b400;padding:10px 16px;font-family:Arial,'
+              'Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#5c4400;text-align:center;">'
+              '<b>Correo de prueba</b> · solo le llegó a quien está probando la plataforma.<br>'
+              f'{escape(detalle)}</div>')
+    alternativas = []
+    for contenido, tipo in getattr(mensaje, "alternatives", []) or []:
+        if tipo == "text/html" and isinstance(contenido, str):
+            marca = _BODY.search(contenido)
+            contenido = contenido[:marca.end()] + franja + contenido[marca.end():] if marca else franja + contenido
+        alternativas.append(_Alternativa(contenido, tipo))
+    if hasattr(mensaje, "alternatives"):
+        mensaje.alternatives = alternativas
+
+
 def a_quienes_prueban(mensaje):
-    """Cambia los destinatarios por quienes prueban; el asunto conserva a quién iba."""
+    """Cambia los destinatarios por quienes prueban; la franja de prueba conserva a quién iba."""
     prueba = settings.CORREO_CLIENTES_PRUEBA
     comercial = settings.CORREO_COMERCIAL_PRUEBA or prueba
     de_comercial = correos_comercial_y_bodega()
     originales = list(dict.fromkeys(list(mensaje.to or []) + list(mensaje.cc or []) + list(mensaje.bcc or [])))
     destinos = {comercial if d.split("<")[-1].strip(" >").lower() in de_comercial else prueba for d in originales}
     mensaje.to, mensaje.cc, mensaje.bcc = sorted(destinos), [], []
-    mensaje.subject = f"[PRUEBA · iba para: {', '.join(originales)}] {mensaje.subject}"
+    marcar_prueba(mensaje, originales)
 
 
 class RedirigirClientesBackend(BaseEmailBackend):
@@ -95,7 +129,7 @@ class RedirigirClientesBackend(BaseEmailBackend):
                 setattr(m, campo, [d for d in lista if d not in fuera])
             if externos:
                 m.to = list(m.to) + [prueba]
-                m.subject = f"[PRUEBA · iba para: {', '.join(externos)}] {m.subject}"
+                marcar_prueba(m, externos)
         return self.real.send_messages(mensajes)
 
 
@@ -113,7 +147,7 @@ def todo_a_pruebas(mensajes):
         originales = list(dict.fromkeys(list(m.to or []) + list(m.cc or []) + list(m.bcc or [])))
         de = parseaddr(m.from_email or settings.DEFAULT_FROM_EMAIL)[0]
         m.to, m.cc, m.bcc = pruebas, [], []
-        m.subject = f"[PRUEBA · {'de: ' + de + ' · ' if de else ''}iba para: {', '.join(originales)}] {m.subject}"
+        marcar_prueba(m, originales, de)
     return list(mensajes)
 
 
@@ -179,6 +213,32 @@ def firmar(mensaje, usuario=None):
     return mensaje
 
 
+def con_diseno(mensaje):
+    """Todo correo sale con el diseño de JANOTEC: si solo trae texto plano, se le agrega la versión HTML.
+
+    La versión HTML se arma del texto (tickets.notificaciones.html_desde_texto): encabezado con la marca,
+    datos «Etiqueta: valor» en tabla, el primer enlace como botón y la firma de quien lo envía.
+    """
+    from django.core.mail import EmailMultiAlternatives
+
+    from tickets.notificaciones import html_desde_texto
+
+    if getattr(mensaje, "content_subtype", "plain") != "plain":
+        return mensaje
+    if any(tipo == "text/html" for _, tipo in getattr(mensaje, "alternatives", []) or []):
+        return mensaje
+    try:
+        html = html_desde_texto(mensaje.subject, mensaje.body or "")
+    except Exception:  # noqa: BLE001 — si el diseño falla, el correo sale igual en texto
+        log.exception("No se pudo armar la versión HTML de «%s»", mensaje.subject)
+        return mensaje
+    if not isinstance(mensaje, EmailMultiAlternatives):
+        mensaje.__class__ = EmailMultiAlternatives
+        mensaje.alternatives = []
+    mensaje.attach_alternative(html, "text/html")
+    return mensaje
+
+
 class JanotecBackend(RedirigirClientesBackend):
     """El que usa la plataforma: firma cada correo con quien actúa y aplica el modo del .env (CORREO_MODO).
 
@@ -189,7 +249,7 @@ class JanotecBackend(RedirigirClientesBackend):
     """
 
     def send_messages(self, mensajes):
-        mensajes = [firmar(m) for m in mensajes]
+        mensajes = [con_diseno(firmar(m)) for m in mensajes]
         modo = settings.CORREO_MODO
         if modo == "todo":
             return self.real.send_messages(todo_a_pruebas(mensajes))

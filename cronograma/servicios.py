@@ -286,7 +286,7 @@ def enviar_autorizacion(actividad, autor):
         asunto = f"[{actividad.ticket.radicado}] " + asunto
     correo = EmailMultiAlternatives(
         asunto, render_to_string("cronograma/correo_autorizacion.txt", contexto), settings.DEFAULT_FROM_EMAIL,
-        actividad.correos, cc=[c for c in [settings.NOTIFICAR_SOPORTE_EMAIL] if c],
+        actividad.correos[:1], cc=actividad.correos[1:] + [c for c in [settings.NOTIFICAR_SOPORTE_EMAIL] if c],
     )
     correo.attach_alternative(render_to_string("cronograma/correo_autorizacion.html", contexto), "text/html")
     for doc in adjuntos:
@@ -300,33 +300,48 @@ def enviar_autorizacion(actividad, autor):
     correo.send(fail_silently=False)
     actividad.autorizacion = A.ENVIADA
     actividad.autorizacion_enviada = timezone.now()
-    actividad.motivo_rechazo = ""
-    actividad.save(update_fields=["autorizacion", "autorizacion_enviada", "motivo_rechazo", "actualizado"])
+    actividad.motivo_rechazo = actividad.respondio_correo = actividad.respondio_nombre = ""
+    actividad.save(update_fields=["autorizacion", "autorizacion_enviada", "motivo_rechazo", "respondio_correo",
+                                  "respondio_nombre", "actualizado"])
     if actividad.ticket:
         _seguimiento(actividad.ticket, autor,
                      f"Enviamos la autorización de ingreso para el {cuando(actividad)} a: {', '.join(actividad.correos)}.")
     return problemas
 
 
-def responder_autorizacion(actividad, aceptada, motivo=""):
-    """El cliente acepta o rechaza desde el correo. Rechazada ⇒ la actividad queda en rojo en el cronograma."""
+def responder_autorizacion(actividad, aceptada, motivo="", correo="", nombre=""):
+    """El cliente acepta o rechaza desde el correo. Rechazada ⇒ la actividad queda en rojo en el cronograma.
+
+    Cualquiera de los correos notificados (el principal o una copia) puede responder. Queda registrado quién
+    fue (`correo` debe ser uno de los notificados; `nombre` lo escribe esa persona) y se le avisa a coordinación.
+    """
     actividad.autorizacion = A.ACEPTADA if aceptada else A.RECHAZADA
     actividad.autorizacion_respuesta = timezone.now()
     actividad.motivo_rechazo = "" if aceptada else motivo[:300]
-    actividad.save(update_fields=["autorizacion", "autorizacion_respuesta", "motivo_rechazo", "actualizado"])
+    validos = {c.lower(): c for c in actividad.correos}
+    actividad.respondio_correo = validos.get((correo or "").strip().lower(), "")
+    actividad.respondio_nombre = (nombre or "").strip()[:150]
+    actividad.save(update_fields=["autorizacion", "autorizacion_respuesta", "motivo_rechazo", "respondio_correo",
+                                  "respondio_nombre", "actualizado"])
+    quien = actividad.quien_respondio
+    por = f" (respondió {quien})" if quien else ""
     ticket = actividad.ticket
     if ticket:
         if aceptada and ticket.estado == E.EN_CRONOGRAMA:
-            ticket.cambiar_estado(E.AUTORIZADO, None, f"El cliente autorizó el ingreso para el {cuando(actividad)}.")
-        elif not aceptada:
-            _seguimiento(ticket, None, f"El cliente rechazó la visita del {cuando(actividad)}"
+            ticket.cambiar_estado(E.AUTORIZADO, None, f"El cliente autorizó el ingreso para el {cuando(actividad)}{por}.")
+        elif aceptada:
+            _seguimiento(ticket, None, f"El cliente autorizó el ingreso para el {cuando(actividad)}{por}.", interno=True)
+        else:
+            _seguimiento(ticket, None, f"El cliente rechazó la visita del {cuando(actividad)}{por}"
                                        + (f": {motivo}" if motivo else ".") + " La reprogramaremos.")
     resultado = "ACEPTÓ" if aceptada else "RECHAZÓ"
     destinos = [settings.NOTIFICAR_SOPORTE_EMAIL] + ([actividad.creado_por.email] if actividad.creado_por else [])
     notif._enviar(
         f"[Cronograma] El cliente {resultado} la visita · {actividad.cliente} · {actividad.fecha:%d/%m/%Y}",
         "\n".join([f"{actividad.cliente} · {actividad.sede}", f"Visita: {cuando(actividad)}",
-                   f"Respuesta: {resultado}" + (f" — {motivo}" if motivo else ""), "",
+                   f"Respuesta: {resultado}" + (f" — {motivo}" if motivo else ""),
+                   f"{'Autorizó' if aceptada else 'Rechazó'}: {quien or 'no indicó quién'}",
+                   f"Correos notificados: {', '.join(actividad.correos)}", "",
                    f"Ver cronograma: {settings.SITIO_URL.rstrip('/')}{reverse('cronograma:semana')}?d={actividad.fecha:%Y-%m-%d}"]),
         destinos,
     )

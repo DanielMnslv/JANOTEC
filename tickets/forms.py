@@ -295,6 +295,12 @@ class RadicacionForm(BootstrapMixin, forms.ModelForm):
     sede_nombre = forms.CharField(label="Sede", max_length=150, required=False)
     sistema = forms.CharField(label="Sistema a intervenir", max_length=150, required=False)
     falla_nombre = forms.CharField(label="Falla o necesidad (opcional)", max_length=200, required=False)
+    # Como en un correo: «Para» (contacto_email, el principal) y «CC» (estas copias). Se guardan juntos en
+    # contacto_email, el principal primero: «principal ; copia1 ; copia2».
+    contacto_copias = forms.CharField(
+        label="Con copia a (opcional)", max_length=400, required=False,
+        help_text="Reciben copia de las respuestas y también pueden autorizar la visita. Separe varios con «;».",
+        widget=forms.TextInput(attrs={"placeholder": "Ej.: jefe@suempresa.com; compras@suempresa.com", "inputmode": "email"}))
 
     class Meta:
         model = Ticket
@@ -309,7 +315,7 @@ class RadicacionForm(BootstrapMixin, forms.ModelForm):
             "impacto": "Nivel de urgencia",
             "contacto_nombre": "Nombre de quien gestiona",
             "contacto_telefono": "Teléfono de contacto",
-            "contacto_email": "Correos para envío de respuestas",
+            "contacto_email": "Correo principal de quien gestiona",
             "punto_referencia": "Punto de referencia (opcional)",
             "restricciones": "Otras restricciones (opcional)",
         }
@@ -324,7 +330,7 @@ class RadicacionForm(BootstrapMixin, forms.ModelForm):
                 "placeholder": "Qué ocurre, qué equipos o zonas están afectados, desde cuándo, si ya intentó algo…",
             }),
             "contacto_telefono": forms.TextInput(attrs={"placeholder": "Ej.: 310 000 0000", "inputmode": "tel"}),
-            "contacto_email": forms.TextInput(attrs={"placeholder": "Ej.: admin@suempresa.com; jefe@suempresa.com",
+            "contacto_email": forms.TextInput(attrs={"placeholder": "Ej.: admin@suempresa.com",
                                                      "inputmode": "email"}),
             "restricciones": forms.TextInput(attrs={"placeholder": "Ej.: festivos no hay personal"}),
         }
@@ -390,7 +396,7 @@ class RadicacionForm(BootstrapMixin, forms.ModelForm):
             if campo in self.fields:
                 self.fields[campo].widget.attrs["aria_required"] = "true"
         self.fields["direccion"].help_text = "Escríbala completa (calle, número, barrio o vereda): un error puede impedir la visita."
-        self.fields["contacto_email"].help_text = "Puede escribir varios, separados por «;»."
+        self.fields["contacto_email"].help_text = "A este correo le enviamos las respuestas. Para copiar a otras personas, use «Con copia a»."
         self.fields["archivos"].help_text = ayuda_adjuntos()
         self.fields["archivos"].widget.attrs.update({"accept": "image/*,video/*,.pdf"})
         agregar_dias_no_disponible(self)
@@ -419,6 +425,7 @@ class RadicacionForm(BootstrapMixin, forms.ModelForm):
                                 falla_nombre=t.falla_display, alturas="si" if t.trabajo_alturas else "no",
                                 sst="si" if t.acompanamiento_sst else "no", latitud=t.latitud, longitud=t.longitud)
             iniciales_no_disponible(self, t.no_disponible)
+            self._separar_correos(t.contacto_email)
             return
         self.initial.setdefault("tipo", Ticket.Tipo.SOPORTE)
         u = self.usuario
@@ -429,12 +436,18 @@ class RadicacionForm(BootstrapMixin, forms.ModelForm):
             self.initial.setdefault("contacto_email", u.email)
             ultimo = Ticket.objects.filter(empresa_id=u.empresa_id).order_by("-creado").first()
             if ultimo:  # lo que indicó la última vez, para no escribirlo cada vez
-                self.initial["contacto_email"] = ultimo.contacto_email or u.email
+                self._separar_correos(ultimo.contacto_email or u.email)
                 iniciales_no_disponible(self, ultimo.no_disponible)
             if self.sedes.count() == 1:
                 sede = self.sedes.first()
                 self.initial.update(sede_nombre=sede.nombre, departamento=sede.departamento, municipio=sede.ciudad,
                                     direccion=sede.direccion)
+
+    def _separar_correos(self, texto):
+        """«principal ; copia1 ; copia2» guardado → el principal en su campo y las copias en «Con copia a»."""
+        correos = [c.strip() for c in (texto or "").replace(",", ";").split(";") if c.strip()]
+        self.initial["contacto_email"] = correos[0] if correos else ""
+        self.initial["contacto_copias"] = "; ".join(correos[1:])
 
     # --- Ayudas para la plantilla -----------------------------------------------------
     def opciones_tipo(self):
@@ -490,9 +503,24 @@ class RadicacionForm(BootstrapMixin, forms.ModelForm):
         return bool(correos) and all(c in correos_internos() or c.endswith("@janotec.app") for c in correos)
 
     # --- Validación -------------------------------------------------------------------
+    def clean_contacto_copias(self):
+        """Valida los correos en copia (pueden ser varios)."""
+        return validar_correos(self.cleaned_data.get("contacto_copias"))
+
     def clean_contacto_email(self):
-        """Valida cada correo de contacto y los deja separados por «;»."""
-        return " ; ".join(validar_correos(self.cleaned_data["contacto_email"]))
+        """Valida el correo principal y le junta las copias: «principal ; copia1 ; copia2» (sin repetidos).
+
+        Si en el principal escribieron varios (como antes), el primero queda de principal y los demás de copia.
+        """
+        correos = validar_correos(self.cleaned_data["contacto_email"])
+        if "contacto_copias" in self.fields:
+            try:
+                correos += validar_correos(self.data.get(self.add_prefix("contacto_copias"), ""))
+            except forms.ValidationError:
+                pass  # el error se muestra en «Con copia a»
+        vistos = set()
+        unicos = [c for c in correos if not (c.lower() in vistos or vistos.add(c.lower()))]
+        return " ; ".join(unicos)
 
     def _id(self, nombre):
         """Compatibilidad: integraciones y pruebas que envían el id (empresa=3, sede=5…)."""

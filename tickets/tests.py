@@ -79,7 +79,7 @@ class ClienteTests(BaseTickets):
         self.assertEqual((t.empresa, t.solicitante, t.estado), (self.emp_a, self.cli_a, E.GENERADO))
         self.assertEqual((t.radicado_por, t.municipio, t.asunto), (self.cli_a, "Villavicencio", "Cámara caída"))
         self.assertEqual(t.adjuntos.count(), 1)
-        destinatarios = {d for m in mail.outbox for d in m.to}
+        destinatarios = {d for m in mail.outbox for d in m.to + m.cc}
         self.assertIn("a@x.co", destinatarios)
         self.assertIn("soporte@janotec.test", destinatarios)
         self.assertIn(t.radicado, mail.outbox[0].subject)
@@ -666,8 +666,26 @@ class FallasYRestriccionesTests(BaseTickets):
         self.client.post(reverse("nuevo_ticket"), self.datos_radicacion(contacto_email="portero@a.co, jefe@a.co"))
         t = Ticket.objects.get()
         self.assertEqual(t.correos_respuesta, ["portero@a.co", "jefe@a.co"])
-        destinatarios = {d for m in mail.outbox for d in m.to}
+        destinatarios = {d for m in mail.outbox for d in m.to + m.cc}
         self.assertTrue({"portero@a.co", "jefe@a.co"} <= destinatarios)
+
+    def test_correo_principal_y_con_copia_como_en_un_correo(self):
+        self.client.force_login(self.cli_a)
+        r = self.client.post(reverse("nuevo_ticket"), self.datos_radicacion(contacto_copias="jefe@a.co; no-es-correo"))
+        self.assertIn("contacto_copias", r.context["form"].errors)
+        mail.outbox.clear()
+        self.client.post(reverse("nuevo_ticket"), self.datos_radicacion(
+            contacto_email="portero@a.co", contacto_copias="jefe@a.co; PORTERO@a.co; compras@a.co"))
+        t = Ticket.objects.get()
+        self.assertEqual(t.correos_respuesta, ["portero@a.co", "jefe@a.co", "compras@a.co"])
+        al_cliente = next(m for m in mail.outbox if "portero@a.co" in m.to)
+        self.assertEqual(al_cliente.to, ["portero@a.co"])
+        self.assertTrue({"jefe@a.co", "compras@a.co"} <= set(al_cliente.cc))
+        # Al volver a abrir el formulario, el principal y las copias se ven por separado
+        self.client.force_login(self.supervisor)
+        form = self.client.get(reverse("editar_ticket", args=[t.radicado])).context["form"]
+        self.assertEqual((form.initial["contacto_email"], form.initial["contacto_copias"]),
+                         ("portero@a.co", "jefe@a.co; compras@a.co"))
 
     def test_dias_no_disponibles_se_guardan_y_los_ve_el_area_administrativa(self):
         self.client.force_login(self.cli_a)
@@ -739,7 +757,7 @@ class ActaEnPlataformaTests(ActaBase):
         self.ticket.refresh_from_db()
         self.assertEqual(self.ticket.estado, E.VISITA_EJECUTADA)
         self.assertTrue(self.ticket.seguimientos.filter(interno=False, mensaje__contains="100001").exists())
-        destinatarios = {d for m in mail.outbox for d in m.to}
+        destinatarios = {d for m in mail.outbox for d in m.to + m.cc}
         self.assertTrue({"otro@a.co", "portero@a.co"} <= destinatarios)
         # Segunda acta: siguiente número
         self.client.post(reverse("acta_nueva", args=[self.ticket.radicado]), self.datos_acta(marcar_resuelto=""))
@@ -1435,7 +1453,7 @@ class CorreoEnFaseDePruebasTests(BaseTickets):
         send_mail("Hola", "x", "de@janotec.test", ["cliente@empresa.co", self.agente.email, "soporte@janotec.test"])
         m = mail.outbox[-1]
         self.assertEqual(set(m.to), {self.agente.email, "soporte@janotec.test", "pruebas@janotec.test"})
-        self.assertIn("iba para: cliente@empresa.co", m.subject)
+        self.assertIn("Iba para: cliente@empresa.co", m.body)
         send_mail("Interno", "x", "de@janotec.test", [self.agente.email])
         self.assertEqual((mail.outbox[-1].to, mail.outbox[-1].subject), ([self.agente.email], "Interno"))
 
@@ -1450,7 +1468,7 @@ class CorreoEnFaseDePruebasTests(BaseTickets):
 
         send_mail(f"[{prueba.radicado}] x", "x", "de@janotec.test", [self.agente.email, "cliente@empresa.co"])
         self.assertEqual(mail.outbox[-1].to, ["pruebas@janotec.test"])
-        self.assertIn(self.agente.email, mail.outbox[-1].subject)
+        self.assertIn(self.agente.email, mail.outbox[-1].body)
         send_mail("[MAT-1] Material · PRUEBA", f"Solicitud · {prueba.radicado}", "de@janotec.test", [bodega.email])
         self.assertEqual(mail.outbox[-1].to, ["yuri@janotec.test"])
         send_mail("[Oportunidad] PRUEBA · CCTV", "x", "de@janotec.test", ["comercial@janotec.test", self.agente.email])

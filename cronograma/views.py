@@ -203,15 +203,28 @@ def autorizacion(request, token):
     actividad = servicios.actividad_de_token(token)
     if actividad is None:
         return render(request, "cronograma/autorizacion.html", {"invalido": True}, status=404)
+    error = ""
+    correos = actividad.correos
     if request.method == "POST":
         accion = request.POST.get("accion")
+        correo = request.POST.get("correo", "").strip()
+        nombre = request.POST.get("nombre", "").strip()
         if accion in ("aceptar", "rechazar"):
-            servicios.responder_autorizacion(actividad, accion == "aceptar", request.POST.get("motivo", "").strip())
-            return render(request, "cronograma/autorizacion.html", {"a": actividad, "respondida": True,
-                                                                    "cuando": servicios.cuando(actividad)})
+            # Cualquiera de los correos notificados puede responder, pero debe decir cuál es el suyo
+            if correos and correo.lower() not in {c.lower() for c in correos}:
+                error = "Elija su correo de la lista para saber quién responde."
+            elif not nombre:
+                error = "Escriba su nombre para saber quién responde."
+            else:
+                servicios.responder_autorizacion(actividad, accion == "aceptar", request.POST.get("motivo", "").strip(),
+                                                 correo=correo, nombre=nombre)
+                return render(request, "cronograma/autorizacion.html", {"a": actividad, "respondida": True,
+                                                                        "cuando": servicios.cuando(actividad)})
     return render(request, "cronograma/autorizacion.html", {
         "a": actividad, "cuando": servicios.cuando(actividad), "tecnicos": actividad.tecnicos(),
-        "elegida": request.GET.get("r", ""),
+        "elegida": request.POST.get("accion") or request.GET.get("r", ""), "correos": correos, "error": error,
+        "correo_elegido": request.POST.get("correo", "") or (correos[0] if len(correos) == 1 else ""),
+        "nombre": request.POST.get("nombre", ""),
     })
 
 

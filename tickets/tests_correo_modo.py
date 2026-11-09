@@ -27,7 +27,8 @@ class CorreoModoTests(TestCase):
         m = mail.outbox[-1]
         self.assertEqual(m.to, ["daniel@janotec.test", "yuri@janotec.test"])
         self.assertEqual((m.cc, m.bcc), ([], []))
-        self.assertIn("iba para: cliente@empresa.co, tec@janotec.test, proveedor@ferreteria.co", m.subject)
+        self.assertTrue(m.subject.startswith("[PRUEBA] "))
+        self.assertIn("Iba para: cliente@empresa.co, tec@janotec.test, proveedor@ferreteria.co", m.body)
 
     @override_settings(CORREO_MODO="todo", CORREO_CLIENTES_PRUEBA="")
     def test_modo_todo_sin_buzon_de_pruebas_no_envia_nada(self):
@@ -53,7 +54,12 @@ class CorreoModoTests(TestCase):
             send_mail("Se le asignó un ticket", "x", None, [self.tecnico.email])
         finally:
             _actor.reset(marca)
-        self.assertIn("de: Juan Daniel Guana · JANOTEC · iba para: tec@janotec.test", mail.outbox[-1].subject)
+        m = mail.outbox[-1]
+        self.assertEqual(m.subject, "[PRUEBA] Se le asignó un ticket")
+        self.assertIn("De: Juan Daniel Guana · JANOTEC · Iba para: tec@janotec.test", m.body)
+        html = m.alternatives[0][0]
+        self.assertIn("Correo de prueba", html)
+        self.assertIn("Iba para: tec@janotec.test", html)
 
     @override_settings(CORREO_MODO="real")
     def test_si_va_al_cliente_la_respuesta_llega_al_buzon_oficial(self):
@@ -90,6 +96,47 @@ class CorreoModoTests(TestCase):
         RemitenteMiddleware(lambda r: visto.setdefault("actor", _actor.get()))(Peticion())
         self.assertEqual(visto["actor"], self.coordinador)
         self.assertIsNone(_actor.get())
+
+
+@override_settings(EMAIL_BACKEND="config.correo.JanotecBackend", EMAIL_BACKEND_REAL=LOCMEM, CORREO_MODO="real",
+                   DEFAULT_FROM_EMAIL="Plataforma JANOTEC <notificaciones@janotec.test>", CORREO_CLIENTES_PRUEBA="")
+class CorreoConDisenoTests(TestCase):
+    """Todo correo sale con el diseño de JANOTEC, aunque se haya escrito solo en texto."""
+
+    def test_el_texto_plano_sale_tambien_en_html_con_la_marca(self):
+        send_mail("[JNT-2026-000001] Algo pasó", "Hay novedades.\n\nEmpresa: ACME\n\nVer: https://x.test/t/1/",
+                  None, ["a@janotec.test"])
+        html, tipo = mail.outbox[-1].alternatives[0]
+        self.assertEqual(tipo, "text/html")
+        for parte in ("JANO", "Algo pasó", "JNT-2026-000001", "ACME", 'href="https://x.test/t/1/"', "Plataforma de soporte"):
+            self.assertIn(parte, html)
+
+    def test_firma_quien_actua_con_su_area(self):
+        jguana = Usuario.objects.create_user("jguana", "coordinadortic@janotec.test", "Clave-segura-1",
+                                             rol=Usuario.Rol.SUPERVISOR, first_name="Juan Daniel", last_name="Guana")
+        marca = _actor.set(jguana)
+        try:
+            send_mail("Aviso", "Texto", None, ["a@janotec.test"])
+        finally:
+            _actor.reset(marca)
+        self.assertIn(f"Juan Daniel Guana · {jguana.rol_corto}", mail.outbox[-1].alternatives[0][0])
+
+    def test_respeta_el_saludo_y_la_despedida_que_ya_trae(self):
+        send_mail("Solicitud de cotización", "Señores Ferretería X:\n\nLe pedimos cotizar.\n\nCordialmente,\n"
+                  "Sindy Pérez\nBodega · JANOTEC S.A.S.", None, ["p@ferreteria.co"])
+        html = mail.outbox[-1].alternatives[0][0]
+        self.assertIn("Señores Ferretería X:", html)
+        self.assertNotIn("Cordial saludo.", html)
+        self.assertIn("Sindy Pérez · Bodega · JANOTEC S.A.S.", html)
+        self.assertEqual(html.count("Cordialmente,"), 1)
+
+    def test_no_toca_un_correo_que_ya_trae_su_html(self):
+        from django.core.mail import EmailMultiAlternatives
+
+        m = EmailMultiAlternatives("x", "x", None, ["a@janotec.test"])
+        m.attach_alternative("<p>propio</p>", "text/html")
+        m.send()
+        self.assertEqual(mail.outbox[-1].alternatives, [("<p>propio</p>", "text/html")])
 
 
 class SMTPServidorLocalTests(TestCase):

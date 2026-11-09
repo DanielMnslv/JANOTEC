@@ -8,6 +8,7 @@
     {% include "tickets/_campo.html" with campo=form.contacto_nombre clase="col-md-4" %}
     {% include "tickets/_campo.html" with campo=form.contacto_telefono clase="col-md-3" %}
     {% include "tickets/_campo.html" with campo=form.contacto_email clase="col-md-5" %}
+    {% if form.contacto_copias %}{% include "tickets/_campo.html" with campo=form.contacto_copias clase="col-12" %}{% endif %}
     <div class="col-12" id="aviso-contacto-interno" hidden><div class="alert alert-warning small py-2 mb-2"><i class="bi bi-exclamation-triangle"></i>
       <b>Ese correo es del personal JANOTEC.</b> Los avisos y la autorización de ingreso no le llegarán al cliente. Escriba los datos de quien recibe en la sede.</div></div>
   </div>
@@ -135,9 +136,11 @@
     const s = sedesDe().find(function (x) { return norm(x[0]) === norm(sede.value); });
     if (!s) return;
     // El contacto de quien recibe en la sede (si está registrado) se llena solo; se puede cambiar
-    Object.entries({contacto_nombre: 4, contacto_telefono: 5, contacto_email: 6}).forEach(function ([campo, i]) {
+    const correosSede = (s[6] || '').split(/[;,]/).map(function (c) { return c.trim(); }).filter(Boolean);
+    Object.entries({contacto_nombre: s[4], contacto_telefono: s[5], contacto_email: correosSede[0],
+                    contacto_copias: correosSede.slice(1).join('; ')}).forEach(function ([campo, valor]) {
       const el = document.getElementById('id_' + campo);
-      if (el && s[i] && (!el.value || el.dataset.auto === '1')) { el.value = s[i]; el.dataset.auto = '1'; }
+      if (el && valor && (!el.value || el.dataset.auto === '1')) { el.value = valor; el.dataset.auto = '1'; }
     });
     revisarContacto();
     Object.entries(ubic).forEach(function ([campo, i]) {
@@ -145,7 +148,7 @@
       if (el && s[i] && (!el.value || el.dataset.auto === '1')) { el.value = s[i]; el.dataset.auto = '1'; }
     });
   }
-  Object.keys(ubic).concat(['contacto_nombre', 'contacto_telefono', 'contacto_email']).forEach(function (c) {
+  Object.keys(ubic).concat(['contacto_nombre', 'contacto_telefono', 'contacto_email', 'contacto_copias']).forEach(function (c) {
     const el = document.getElementById('id_' + c);
     if (el) el.addEventListener('input', function () { el.dataset.auto = ''; });
   });
