@@ -945,6 +945,25 @@ def desvincular_acta(request, radicado, numero):
 
 @login_required
 @personal_requerido
+@require_POST
+def mejorar_redaccion(request):
+    """Botón «Mejorar redacción» del acta: devuelve el texto del técnico reescrito por Claude (JSON).
+
+    El técnico ve la propuesta y decide si la usa; aquí no se guarda nada.
+    """
+    from django.http import JsonResponse
+
+    from . import redaccion
+
+    try:
+        texto = redaccion.mejorar(request.POST.get("texto", ""), request.POST.get("tipo", ""))
+    except redaccion.RedaccionNoDisponible as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    return JsonResponse({"texto": texto})
+
+
+@login_required
+@personal_requerido
 def acta_nueva(request, radicado):
     """Diligenciar el acta de la visita del ticket. Paso a paso: solo cuando el ticket tiene técnico y la visita
     está en el cronograma, salvo que coordinación haya omitido esos pasos.
@@ -1153,7 +1172,10 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
          "Lo que hace falta para solucionar y no se tenía en la visita. Ej.: fuente de 12 V, disco duro de 2 TB. "
          "Pasa sola a la tabla de «equipos y materiales requeridos» del informe."),
     ]
+    from . import redaccion
+
     return render(request, "tickets/acta_form.html", {
+        "redaccion": redaccion.configuracion(reverse("mejorar_redaccion")),
         "ticket": ticket, "empresa": empresa, "sede": sede, "grupos_equipos": grupos_equipos,
         "form": form, "equipos": equipos, "utilizados": utilizados, "retirados": retirados, "requeridos": requeridos,
         "mat_activos": mat_activos,

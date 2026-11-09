@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block titulo %}Acta de soporte · {% if ticket %}{{ ticket.radicado }}{% else %}{{ empresa.razon_social }}{% endif %}{% endblock %}
 {% block head %}<style>
   .grupo-equipos > button .flecha-grupo { transition: transform .2s; transform: rotate(180deg); }
@@ -212,6 +213,8 @@
 </div>
 {% endblock %}
 {% block scripts %}
+{{ redaccion|json_script:"redaccion-config" }}
+<script src="{% static 'js/redaccion.js' %}?v=20261109"></script>
 <script>
 (function () {
   // Las firmas (recuadros .firma-pad) las maneja static/js/firmas.js

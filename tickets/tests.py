@@ -1545,6 +1545,79 @@ class ActaRequeridosTests(ActaBase):
         self.assertIn(informe.ALCANCE, b.conclusiones)
 
 
+class AyudaRedaccionTests(ActaBase):
+    """Los campos que escribe el técnico traen guía, frases rápidas y, si hay clave, el botón «Mejorar redacción»."""
+
+    def _respuesta(self, texto, motivo="end_turn"):
+        from types import SimpleNamespace
+        return SimpleNamespace(stop_reason=motivo, content=[SimpleNamespace(type="text", text=texto)])
+
+    def test_campos_del_acta_traen_la_ayuda_y_sin_clave_no_hay_boton_de_ia(self):
+        import json
+        import os
+        from unittest import mock
+        self.client.force_login(self.agente)
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}):
+            r = self.client.get(reverse("acta_nueva", args=[self.ticket.radicado]))
+        html = r.content.decode()
+        for tipo in ("diagnostico", "resultado", "oportunidad", "equipo"):
+            self.assertIn(f'data-redaccion="{tipo}"', html)
+        self.assertIn("js/redaccion.js", html)
+        config = r.context["redaccion"]
+        self.assertEqual(config["url"], "")
+        self.assertIn("Se encontró ", config["tipos"]["diagnostico"]["frases"])
+        self.assertIn('id="redaccion-config"', html)
+        json.dumps(config)  # se puede pasar a la página
+
+    def test_con_clave_aparece_el_boton(self):
+        import os
+        from unittest import mock
+        self.client.force_login(self.agente)
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "clave-de-prueba"}):
+            r = self.client.get(reverse("acta_nueva", args=[self.ticket.radicado]))
+        self.assertEqual(r.context["redaccion"]["url"], reverse("mejorar_redaccion"))
+
+    def test_mejorar_devuelve_la_propuesta_sin_guardar_nada(self):
+        import os
+        from unittest import mock
+        self.client.force_login(self.agente)
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "clave-de-prueba"}), \
+                mock.patch("anthropic.Anthropic") as cliente:
+            crear = cliente.return_value.beta.messages.create
+            crear.return_value = self._respuesta("La cámara 3 no presentaba imagen. Se reemplazó el conector.")
+            r = self.client.post(reverse("mejorar_redaccion"),
+                                 {"texto": "camara 3 no daba imagen se cambio conector", "tipo": "diagnostico"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["texto"], "La cámara 3 no presentaba imagen. Se reemplazó el conector.")
+        kwargs = crear.call_args.kwargs
+        self.assertEqual(kwargs["model"], "claude-opus-5-5")
+        self.assertEqual(kwargs["fallbacks"], "default")
+        self.assertIn("camara 3 no daba imagen se cambio conector", kwargs["messages"][0]["content"])
+        self.assertIn("diagnóstico", kwargs["messages"][0]["content"])
+
+    def test_si_se_niega_o_no_hay_texto_avisa_sin_romper(self):
+        import os
+        from unittest import mock
+        self.client.force_login(self.agente)
+        url = reverse("mejorar_redaccion")
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "clave-de-prueba"}), \
+                mock.patch("anthropic.Anthropic") as cliente:
+            cliente.return_value.beta.messages.create.return_value = self._respuesta("", motivo="refusal")
+            r = self.client.post(url, {"texto": "algo", "tipo": "resultado"})
+            self.assertEqual(r.status_code, 400)
+            self.assertIn("error", r.json())
+            self.assertEqual(self.client.post(url, {"texto": "  ", "tipo": "resultado"}).status_code, 400)
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}):
+            self.assertIn("no está activada", self.client.post(url, {"texto": "algo"}).json()["error"])
+
+    def test_solo_el_personal_y_solo_por_post(self):
+        url = reverse("mejorar_redaccion")
+        self.client.force_login(self.cli_a)
+        self.assertNotEqual(self.client.post(url, {"texto": "algo"}).status_code, 200)
+        self.client.force_login(self.agente)
+        self.assertEqual(self.client.get(url).status_code, 405)
+
+
 class ActaSinProgramarTests(ActaBase):
     """El técnico deja constancia de un trabajo que no estaba en el cronograma (sin ticket)."""
 

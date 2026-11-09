@@ -975,6 +975,10 @@ class ActaForm(BootstrapMixin, forms.Form):
             self.initial["sistema"] = dict(ActaSoporte.SISTEMAS).get(self.initial["sistema"], self.initial["sistema"])
         for campo in ("evidencias_proceso", "evidencias_resultado"):
             self.fields[campo].widget.attrs["accept"] = "image/*,video/mp4,.pdf"
+        # Ayuda de redacción (static/js/redaccion.js): guía, frases rápidas y botón «Mejorar redacción»
+        for campo, tipo in (("diagnostico", "diagnostico"), ("observaciones", "resultado"),
+                            ("oportunidad_nota", "oportunidad")):
+            self.fields[campo].widget.attrs["data-redaccion"] = tipo
         self._aplicar_estilos()
 
     def clean_evidencias_proceso(self):
@@ -1081,6 +1085,7 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
         self.fields["equipo"].widget = ConSugerencias(_frecuentes(EquipoActa, "equipo"), attrs={"placeholder": equipo})
         self.fields["marca"].widget = ConSugerencias(_frecuentes(EquipoActa, "marca"), attrs={"placeholder": marca})
         self.fields["observaciones"].widget.attrs["placeholder"] = observaciones
+        self.fields["observaciones"].widget.attrs["data-redaccion"] = "equipo"  # ayuda de redacción
         if clase in ("utilizado", "requerido"):
             self.fields["equipo"].label = "Material o equipo"
         self.fields["fotos"].widget.attrs.update({"accept": "image/*", "capture": "environment"})
