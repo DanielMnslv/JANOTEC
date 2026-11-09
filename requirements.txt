@@ -1,5 +1,6 @@
 Django>=5.2,<5.3
-mysqlclient>=2.2
+mysqlclient>=2.2      # conector MySQL (en el equipo local)
+PyMySQL>=1.1          # conector alterno sin compilar (servidor Plesk); ver config/__init__.py
 python-dotenv>=1.0
 gunicorn>=22.0        # servidor de producción (Linux)
 openpyxl>=3.1         # importar_maestros (Excel)
