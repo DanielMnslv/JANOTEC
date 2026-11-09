@@ -17,9 +17,9 @@ class Command(BaseCommand):
         self.stdout.write(
             f"Servidor: {settings.EMAIL_HOST}:{settings.EMAIL_PORT} · SSL={settings.EMAIL_USE_SSL} · TLS={settings.EMAIL_USE_TLS}\n"
             f"Usuario: {settings.EMAIL_HOST_USER or '(vacío)'} · Remitente: {settings.DEFAULT_FROM_EMAIL}\n"
-            f"Backend: {settings.EMAIL_BACKEND}"
+            f"Backend: {settings.EMAIL_BACKEND} → {getattr(settings, 'EMAIL_BACKEND_REAL', '')} · Modo: {settings.CORREO_MODO}"
         )
-        if "console" in settings.EMAIL_BACKEND:
+        if "console" in getattr(settings, "EMAIL_BACKEND_REAL", settings.EMAIL_BACKEND):
             self.stdout.write(self.style.WARNING(
                 "EMAIL_BACKEND es de consola: el correo se imprime aquí y NO sale. "
                 "Ponga EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend en el .env."))
@@ -35,6 +35,8 @@ class Command(BaseCommand):
             conexion.close()
         except Exception as e:  # noqa: BLE001 — se muestra el motivo exacto
             raise CommandError(f"No se pudo enviar: {type(e).__name__}: {e}") from e
-        if "console" in settings.EMAIL_BACKEND:
+        if "console" in getattr(settings, "EMAIL_BACKEND_REAL", settings.EMAIL_BACKEND):
             raise CommandError("El correo NO salió: el .env sigue con el backend de consola (solo se imprime arriba).")
+        if settings.CORREO_MODO == "todo":
+            destino = settings.CORREO_CLIENTES_PRUEBA + f" (modo «todo»: iba para {destino})"
         self.stdout.write(self.style.SUCCESS(f"Enviado a {destino}. Revise la bandeja de entrada (y la de spam)."))

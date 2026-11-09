@@ -6,12 +6,17 @@ NOTIFICAR_*) se reemplaza por ese correo, y el asunto dice a quién iba. El pers
 Los correos del cliente PRUEBA no le llegan a nadie más que a quienes prueban: lo de comercial y bodega a
 CORREO_COMERCIAL_PRUEBA, y lo demás (coordinación, técnicos, dirección, cliente) a CORREO_CLIENTES_PRUEBA.
 """
+import logging
 import re
+from contextvars import ContextVar
+from email.utils import parseaddr
 
 from django.conf import settings
 from django.core.mail import get_connection
 from django.core.mail.backends.base import BaseEmailBackend
 from django.db.models import Q
+
+log = logging.getLogger(__name__)
 
 
 def correos_internos():
@@ -93,13 +98,95 @@ class RedirigirClientesBackend(BaseEmailBackend):
         return self.real.send_messages(mensajes)
 
 
+def todo_a_pruebas(mensajes):
+    """Cambia TODOS los destinatarios (clientes, personal y proveedores) por el buzón o buzones de pruebas.
+
+    El asunto dice de quién era y para quién iba, para revisar a quién le habría llegado de verdad.
+    Devuelve solo los mensajes que se pueden enviar: sin buzón de pruebas no sale ninguno.
+    """
+    pruebas = [c.strip() for c in settings.CORREO_CLIENTES_PRUEBA.replace(";", ",").split(",") if c.strip()]
+    if not pruebas:
+        log.warning("CORREO_MODO=todo sin CORREO_CLIENTES_PRUEBA: no se envió ningún correo.")
+        return []
+    for m in mensajes:
+        originales = list(dict.fromkeys(list(m.to or []) + list(m.cc or []) + list(m.bcc or [])))
+        de = parseaddr(m.from_email or settings.DEFAULT_FROM_EMAIL)[0]
+        m.to, m.cc, m.bcc = pruebas, [], []
+        m.subject = f"[PRUEBA · {'de: ' + de + ' · ' if de else ''}iba para: {', '.join(originales)}] {m.subject}"
+    return list(mensajes)
+
+
 class TodoAPruebasBackend(RedirigirClientesBackend):
     """Para simulaciones: TODO correo (también los del personal) llega solo al buzón de pruebas."""
 
     def send_messages(self, mensajes):
-        prueba = settings.CORREO_CLIENTES_PRUEBA
-        for m in mensajes:
-            originales = list(m.to or []) + list(m.cc or []) + list(m.bcc or [])
-            m.to, m.cc, m.bcc = [prueba], [], []
-            m.subject = f"[PRUEBA · iba para: {', '.join(dict.fromkeys(originales))}] {m.subject}"
+        return self.real.send_messages(todo_a_pruebas(mensajes))
+
+
+# --- Quién envía: el correo sale con el nombre de quien hizo la acción --------------------------------
+# Todos los correos salen por un solo buzón autenticado en el SMTP de Plesk (DEFAULT_FROM_EMAIL). Lo que
+# cambia es el nombre visible («Juan Daniel Guana · JANOTEC») y el «Responder a», que apunta al correo
+# corporativo de esa persona: así quien recibe ve quién se lo mandó y le responde directo a ella.
+
+_actor = ContextVar("correo_actor", default=None)
+
+
+class RemitenteMiddleware:
+    """Recuerda, mientras dura la petición, qué usuario interno está actuando (para firmar sus correos)."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        usuario = getattr(request, "user", None)
+        marca = _actor.set(usuario if usuario is not None and usuario.is_authenticated else None)
+        try:
+            return self.get_response(request)
+        finally:
+            _actor.reset(marca)
+
+
+def _es_interno(usuario):
+    """Personal JANOTEC con correo: los clientes no firman correos de la plataforma."""
+    from accounts.models import Usuario
+
+    return bool(usuario and usuario.email and (usuario.is_superuser or usuario.rol != Usuario.Rol.CLIENTE))
+
+
+def firmar(mensaje, usuario=None):
+    """Pone el nombre de quien actúa como remitente visible y su correo en «Responder a».
+
+    La dirección del remitente sigue siendo el buzón de envío (Plesk solo deja enviar desde el buzón que
+    inicia sesión). Si el mensaje ya trae otro remitente o un «Responder a», se respeta.
+    """
+    usuario = usuario or _actor.get()
+    if not _es_interno(usuario):
+        return mensaje
+    buzon = parseaddr(settings.DEFAULT_FROM_EMAIL)[1]
+    if mensaje.from_email not in (None, "", settings.DEFAULT_FROM_EMAIL) and parseaddr(mensaje.from_email)[1] != buzon:
+        return mensaje
+    nombre = usuario.get_full_name() or usuario.username
+    # Sin formataddr: Django codifica el encabezado al enviar (formataddr lo dejaría ilegible en el asunto).
+    mensaje.from_email = f'"{nombre.replace(chr(34), "")} · JANOTEC" <{buzon}>'
+    if not mensaje.reply_to:
+        mensaje.reply_to = [usuario.email]
+    return mensaje
+
+
+class JanotecBackend(RedirigirClientesBackend):
+    """El que usa la plataforma: firma cada correo con quien actúa y aplica el modo del .env (CORREO_MODO).
+
+    - real: sale a quien corresponde.
+    - clientes: lo que iba para un cliente llega al buzón de pruebas; el personal recibe normal.
+    - todo: nada sale a nadie más que al buzón de pruebas (para configurar sin que los clientes
+      ni el personal reciban correos de verdad).
+    """
+
+    def send_messages(self, mensajes):
+        mensajes = [firmar(m) for m in mensajes]
+        modo = settings.CORREO_MODO
+        if modo == "todo":
+            return self.real.send_messages(todo_a_pruebas(mensajes))
+        if modo == "clientes" and settings.CORREO_CLIENTES_PRUEBA:
+            return super().send_messages(mensajes)
         return self.real.send_messages(mensajes)

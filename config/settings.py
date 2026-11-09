@@ -7,6 +7,8 @@ desarrollo). Ver .env.example.
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -49,6 +51,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "accounts.actuar.SoloPruebaMiddleware",  # «Actuar como»: solo se guarda sobre lo de PRUEBA
+    "config.correo.RemitenteMiddleware",  # los correos salen con el nombre de quien actúa
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -151,8 +154,14 @@ NOTIFICAR_ADMINISTRATIVA_EMAIL = os.getenv("NOTIFICAR_ADMINISTRATIVA_EMAIL", "")
 # Fase de pruebas: lo que iba para un cliente llega a este correo (el personal JANOTEC recibe normal). Vacío = real.
 CORREO_CLIENTES_PRUEBA = os.getenv("CORREO_CLIENTES_PRUEBA", "").strip()
 CORREO_COMERCIAL_PRUEBA = os.getenv("CORREO_COMERCIAL_PRUEBA", "").strip()  # lo comercial y de bodega del cliente PRUEBA
-if CORREO_CLIENTES_PRUEBA:
-    EMAIL_BACKEND_REAL, EMAIL_BACKEND = EMAIL_BACKEND, "config.correo.RedirigirClientesBackend"
+# Modo del correo: «real» (sale a quien corresponde), «clientes» (lo del cliente va a CORREO_CLIENTES_PRUEBA,
+# el personal recibe normal) o «todo» (nada sale a nadie más que a CORREO_CLIENTES_PRUEBA, puede ser una lista).
+# Sin CORREO_MODO se conserva lo de antes: «clientes» si hay CORREO_CLIENTES_PRUEBA, si no «real».
+CORREO_MODO = os.getenv("CORREO_MODO", "").strip().lower() or ("clientes" if CORREO_CLIENTES_PRUEBA else "real")
+if CORREO_MODO not in ("real", "clientes", "todo"):
+    raise ImproperlyConfigured(f"CORREO_MODO={CORREO_MODO!r}: use real, clientes o todo.")
+# Siempre pasa por config.correo.JanotecBackend: firma con quien actúa y aplica el modo.
+EMAIL_BACKEND_REAL, EMAIL_BACKEND = EMAIL_BACKEND, "config.correo.JanotecBackend"
 SITIO_URL = os.getenv("SITIO_URL", "http://127.0.0.1:8000")
 
 # Prefijo del número de radicado: JNT-2026-000001
