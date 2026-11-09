@@ -143,7 +143,7 @@ class FlujoTecnicoTests(BaseFlujos):
         self.client.post(reverse("recepcionar", args=[t.radicado]))
         t.refresh_from_db()
         self.assertEqual(t.estado, E.RECEPCIONADO)
-        self.assertTrue(self.para("cliente@ganacampo.co"), "el cliente recibe «Su solicitud está en proceso»")
+        self.assertFalse(self.para("cliente@ganacampo.co"), "al cliente no le llegan los cambios de estado")
 
         # Programa con el material que va a usar: lo debe recibir bodega (la autorización se pide al validar)
         mail.outbox.clear()
@@ -205,8 +205,8 @@ class FlujoTecnicoTests(BaseFlujos):
         mail.outbox.clear()
         self.client.force_login(self.cliente)
         self.client.post(reverse("confirmar_solucion", args=[t.radicado]), {"accion": "aceptar"})
-        self.assertTrue(any("solucionada y cerrada" in s for s in self.para("cliente@ganacampo.co")),
-                        "al confirmar el cliente, le llega el correo de cierre para calificar")
+        self.assertFalse(any("solucionada y cerrada" in s for s in self.para("cliente@ganacampo.co")),
+                         "el cierre no le llega al cliente por correo")
 
     def test_4_cierre_por_el_coordinador_notifica_al_cliente(self):
         t = self.ticket(estado=E.VISITA_EJECUTADA, asignado_a=self.freyder)
@@ -214,7 +214,7 @@ class FlujoTecnicoTests(BaseFlujos):
         mail.outbox.clear()
         self.client.post(reverse("gestionar", args=[t.radicado]), {"estado": "cerrado", "prioridad": t.prioridad,
                                                                    "asignado_a": self.freyder.pk, "visibilidad": "publico"})
-        self.assertTrue(any("solucionada y cerrada" in s for s in self.para("cliente@ganacampo.co")))
+        self.assertFalse(any("solucionada y cerrada" in s for s in self.para("cliente@ganacampo.co")))
 
     def test_5_sin_correo_de_sst_el_coordinador_se_entera(self):
         """Acompañamiento SST sin correo en el Directorio (como está hoy): el coordinador recibe el aviso."""

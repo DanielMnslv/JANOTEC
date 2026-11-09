@@ -328,7 +328,7 @@ class PersonalTests(BaseTickets):
         self.assertEqual((t.estado, t.prioridad, t.asignado_a), (E.RECEPCIONADO, "alta", self.agente))
         visibles = t.seguimientos.filter(interno=False, tipo="cambio_estado")
         self.assertTrue(visibles.filter(mensaje__contains="mañana").exists())
-        self.assertTrue(any("a@x.co" in m.to for m in mail.outbox))
+        self.assertFalse(any("a@x.co" in m.to for m in mail.outbox))
         self.assertTrue(any("ag@x.co" in m.to for m in mail.outbox))  # aviso al encargado
 
     def test_nota_interna_no_notifica_al_cliente(self):
@@ -828,7 +828,7 @@ class CierreAutomaticoTests(BaseTickets):
         seg = vencido.seguimientos.filter(estado_nuevo=E.CERRADO).get()
         self.assertIsNone(seg.autor)
         self.assertIn("automáticamente", seg.mensaje)
-        self.assertTrue(any("contacto@a.co" in m.to for m in mail.outbox))
+        self.assertFalse(any("contacto@a.co" in m.to for m in mail.outbox))
 
     def test_red_de_seguridad_al_abrir_la_plataforma(self):
         t = self.resuelto_hace(4)
@@ -1014,7 +1014,7 @@ class RecepcionTests(BaseTickets):
         self.client.post(reverse("recepcionar", args=[t.radicado]))
         t.refresh_from_db()
         self.assertEqual(t.estado, E.RECEPCIONADO)
-        self.assertTrue(any("portero@a.co" in m.to for m in mail.outbox))
+        self.assertFalse(any("portero@a.co" in m.to for m in mail.outbox))
         self.assertIn(t, Ticket.objects.filter(estado__in=Ticket.ESTADOS_PROGRAMABLES))
         # El técnico y el cliente no recepcionan
         otro = self.crear_ticket(asignado_a=self.agente)
@@ -1150,7 +1150,7 @@ class EtapasEInformeTests(ActaBase):
         self.assertTrue(Adjunto.objects.filter(ticket=self.ticket, es_informe=True).exists())
         self.assertTrue(self.ticket.seguimientos.filter(interno=True, mensaje__contains="El cliente lo necesita hoy").exists())
         self.assertTrue(any("dir@x.co" in m.to and "urgencia" in m.subject for m in mail.outbox))
-        # Solo registrada, en proceso y cerrada le llegan al cliente por correo; el informe lo ve en su solicitud
+        # Los cambios de estado no le llegan al cliente por correo; el informe lo ve en su solicitud
         self.assertFalse(any("portero@a.co" in m.to for m in mail.outbox))
 
     def test_informe_a_comercial_crea_la_ficha_para_la_propuesta(self):
@@ -1485,9 +1485,9 @@ class CorreoEnFaseDePruebasTests(BaseTickets):
 
 
 class TresCorreosAlClienteTests(BaseTickets):
-    """Al cliente solo le llegan: registrada (generado), en proceso (recepcionado) y solucionada (cerrado)."""
+    """Los cambios de estado no le llegan al cliente por correo (tampoco «en proceso» ni «cerrada»)."""
 
-    def test_solo_recepcionado_y_cerrado_le_llegan(self):
+    def test_ningun_cambio_de_estado_le_llega(self):
         from . import notificaciones
         t = self.crear_ticket(contacto_email="portero@a.co", impacto="media")
         recibidos = {}
@@ -1496,9 +1496,7 @@ class TresCorreosAlClienteTests(BaseTickets):
             mail.outbox.clear()
             notificaciones.actualizacion_para_cliente(t, t.cambiar_estado(estado, self.supervisor, "Cambio"))
             recibidos[estado] = [m.subject for m in mail.outbox if "portero@a.co" in m.to]
-        self.assertEqual({e for e, asuntos in recibidos.items() if asuntos}, {E.RECEPCIONADO, E.CERRADO})
-        self.assertIn("Su solicitud está en proceso", recibidos[E.RECEPCIONADO][0])
-        self.assertIn("Su solicitud fue solucionada y cerrada", recibidos[E.CERRADO][0])
+        self.assertEqual({e for e, asuntos in recibidos.items() if asuntos}, set())
 
     def test_una_respuesta_escrita_al_cliente_si_le_llega(self):
         from . import notificaciones
@@ -1507,6 +1505,44 @@ class TresCorreosAlClienteTests(BaseTickets):
         seg = Seguimiento.objects.create(ticket=t, autor=self.supervisor, mensaje="Llevamos el repuesto el lunes")
         notificaciones.actualizacion_para_cliente(t, seg)
         self.assertTrue(any("Tenemos una respuesta" in m.subject for m in mail.outbox))
+
+
+class ActaRequeridosTests(ActaBase):
+    """El acta tiene tres listas plegables: intervenidos, utilizados y requeridos; lo requerido va al informe."""
+
+    def test_tres_listas_plegables_y_solo_se_abre_la_que_se_usa(self):
+        self.client.force_login(self.agente)
+        html = self.client.get(reverse("acta_nueva", args=[self.ticket.radicado])).content.decode()
+        for prefijo, titulo in (("equipos", "Equipos intervenidos"), ("utilizados", "Materiales y equipos utilizados"),
+                                ("requeridos", "Materiales y equipos requeridos")):
+            self.assertIn(titulo, html)
+            self.assertIn(f'data-bs-target="#grupo-{prefijo}"', html)
+            self.assertIn(f'id="grupo-{prefijo}"', html)
+            self.assertIn(f'name="{prefijo}-TOTAL_FORMS"', html)
+        self.assertNotIn('collapse show" id="grupo-requeridos"', html)  # cerradas hasta que el técnico las abra
+
+    def test_lo_requerido_queda_en_el_acta_y_pasa_al_informe(self):
+        from . import informe
+        from .models import ActaSoporte, EquipoActa
+        self.client.force_login(self.agente)
+        datos = self.datos_acta(**{
+            "requeridos-TOTAL_FORMS": "2", "requeridos-INITIAL_FORMS": "0", "requeridos-MIN_NUM_FORMS": "0",
+            "requeridos-MAX_NUM_FORMS": "30",
+            "requeridos-0-equipo": "Fuente de poder 12 V 5 A", "requeridos-0-cantidad": "2", "requeridos-0-marca": "Hikvision",
+            "requeridos-1-equipo": "Disco duro 2 TB", "requeridos-1-referencia": "WD20PURZ",
+        })
+        r = self.client.post(reverse("acta_nueva", args=[self.ticket.radicado]), datos)
+        self.assertEqual(r.status_code, 302)
+        acta = ActaSoporte.objects.get(ticket=self.ticket)
+        self.assertEqual([(e.equipo, e.cantidad) for e in acta.equipos_requeridos],
+                         [("Fuente de poder 12 V 5 A", "2"), ("Disco duro 2 TB", "")])
+        self.assertTrue(all(e.clase == EquipoActa.Clase.REQUERIDO for e in acta.equipos_requeridos))
+        self.assertContains(self.client.get(acta.get_absolute_url()), "Materiales y equipos requeridos")
+        b = informe.generar(self.ticket, self.supervisor, tipo="visita")
+        filas = b.filas_requeridas()
+        self.assertEqual([(f["cantidad"], f["descripcion"], f["referencia"], f["marca"]) for f in filas],
+                         [("2", "Fuente de poder 12 V 5 A", "", "Hikvision"), ("1", "Disco duro 2 TB", "WD20PURZ", "")])
+        self.assertIn(informe.ALCANCE, b.conclusiones)
 
 
 class ActaSinProgramarTests(ActaBase):
@@ -1570,7 +1606,9 @@ class CalificacionDeUnoADiezTests(BaseTickets):
         from .calificacion import enlace
         t = self.crear_ticket(contacto_email="portero@a.co", estado=E.VISITA_EJECUTADA)
         mail.outbox.clear()
-        notificaciones.actualizacion_para_cliente(t, t.cambiar_estado(E.CERRADO, self.supervisor, "Listo"))
+        t.cambiar_estado(E.CERRADO, self.supervisor, "Listo")
+        # El correo de cierre ya no sale solo; las estrellas siguen disponibles para un correo que las pida
+        notificaciones.enviar_al_cliente("Califique", ["portero@a.co"], "Su solicitud", ["Gracias."], calificar=t)
         correo = next(m for m in mail.outbox if "portero@a.co" in m.to)
         html = correo.alternatives[0][0]
         self.assertIn("¿Cómo califica la atención que recibió?", html)

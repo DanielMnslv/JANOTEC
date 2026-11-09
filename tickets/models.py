@@ -837,6 +837,11 @@ class ActaSoporte(models.Model):
         """Equipos que se retiraron (desmonte)."""
         return [e for e in self.equipos.all() if e.clase == EquipoActa.Clase.RETIRADO]
 
+    @property
+    def equipos_requeridos(self):
+        """Material o equipos que hacen falta para solucionar (no se tenían en la visita): van al informe."""
+        return [e for e in self.equipos.all() if e.clase == EquipoActa.Clase.REQUERIDO]
+
 
 class EquipoActa(models.Model):
     """Equipo o material de un acta: lo que se intervino o lo que se usó para dejar el servicio funcionando."""
@@ -846,6 +851,7 @@ class EquipoActa(models.Model):
         INTERVENIDO = "intervenido", "Equipo intervenido"  # del cliente: se revisó, reparó, configuró o retiró
         UTILIZADO = "utilizado", "Material o equipo utilizado"  # se instaló o gastó para que el servicio funcione
         RETIRADO = "retirado", "Equipo retirado"  # desmonte: se entrega al cliente o vuelve a bodega si es de JANOTEC
+        REQUERIDO = "requerido", "Material o equipo requerido"  # hace falta para solucionar: pasa a la tabla del informe
 
     class Trabajo(models.TextChoices):
         """Qué se le hizo a un equipo intervenido."""

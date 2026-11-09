@@ -161,22 +161,10 @@ def _datos_solicitud(ticket):
             ("Tipo de servicio", f"{ticket.get_tipo_display()} · {ticket.sistema_display}")]
 
 
-# Los únicos cambios de estado que se le avisan al cliente (además del registro, que avisa ticket_creado).
-# Las demás etapas (cronograma, autorizado, visita, informe…) las ve en «Consultar mi solicitud».
-ETAPAS_CLIENTE = {
-    "recepcionado": (
-        "Su solicitud está en proceso",
-        ["Recibimos y validamos su solicitud. Ya se encuentra en proceso de atención por parte de nuestro equipo técnico.",
-         "Le informaremos por este medio cuando quede solucionada. Mientras tanto puede consultar el avance en "
-         "cualquier momento con su número de radicado."],
-    ),
-    "cerrado": (
-        "Su solicitud fue solucionada y cerrada",
-        ["Le informamos que su solicitud fue atendida, solucionada y cerrada.",
-         "Gracias por confiar en JANOTEC. Si el inconveniente se vuelve a presentar o necesita algo más, "
-         "puede registrar una nueva solicitud o responder a este correo citando el número de radicado."],
-    ),
-}
+# Cambios de estado que se le avisan al cliente por correo: ninguno (decisión del 09/11/2026: el cliente no
+# recibe correos de cambio de estado, ni «en proceso» ni «cerrada»). Ve el avance en «Consultar mi solicitud».
+# Para volver a avisar una etapa, agréguela aquí: {"estado": ("Título", ["párrafo", …])}.
+ETAPAS_CLIENTE = {}
 
 
 def ticket_creado(ticket):
@@ -187,8 +175,7 @@ def ticket_creado(ticket):
         "Su solicitud fue registrada",
         [f"Registramos su solicitud con el número de radicado {ticket.radicado}. Con este número puede consultar "
          "el avance en cualquier momento, sin usuario ni contraseña.",
-         "Nuestro equipo técnico la revisará y le avisaremos por este medio cuando esté en proceso de atención "
-         "y cuando quede solucionada."],
+         "Nuestro equipo técnico la revisará y nos comunicaremos con usted para coordinar la atención."],
         saludo=_saludo(ticket), radicado=ticket.radicado, estado="Generado",
         datos=_datos_solicitud(ticket) + [
             ("Descripción", ticket.descripcion),
@@ -215,10 +202,9 @@ def ticket_creado(ticket):
 
 
 def actualizacion_para_cliente(ticket, seguimiento):
-    """Avisa al cliente cuando su solicitud entra en proceso (recepcionada) o se cierra.
+    """Correo al cliente solo cuando alguien del equipo le escribe una respuesta (sin cambio de estado).
 
-    Los demás cambios de estado no le llegan por correo. Una respuesta escrita para el cliente (sin cambio
-    de estado) sí le llega, porque alguien del equipo decidió escribirle.
+    Los cambios de estado no le llegan por correo, salvo los que estén en ETAPAS_CLIENTE (hoy ninguno).
     """
     if seguimiento is None or seguimiento.interno:
         return
@@ -376,6 +362,7 @@ def acta_registrada(acta):
     intervenidos = ", ".join(e.equipo + (f" ({e.get_trabajo_display().lower()})" if e.trabajo else "")
                              for e in acta.equipos_intervenidos if e.equipo)
     utilizados = ", ".join(e.equipo + (f" ({e.cantidad})" if e.cantidad else "") for e in acta.equipos_utilizados if e.equipo)
+    requeridos = ", ".join(e.equipo + (f" ({e.cantidad})" if e.cantidad else "") for e in acta.equipos_requeridos if e.equipo)
     retirados = ", ".join(e.equipo + (f" ({e.get_propiedad_display().split(':')[0].lower()})" if e.propiedad else "")
                           for e in acta.equipos_retirados if e.equipo)
     asunto = f"[Acta {acta.numero}]" + (f" [{acta.ticket.radicado}]" if acta.ticket else "") + f" Acta de servicio técnico · {acta.empresa}"
@@ -392,6 +379,7 @@ def acta_registrada(acta):
                ("Modalidad", acta.get_modalidad_display()),
                ("Diagnóstico", acta.diagnostico), ("Trabajo realizado", acta.observaciones),
                ("Equipos intervenidos", intervenidos), ("Materiales utilizados", utilizados), ("Equipos retirados", retirados),
+               ("Material o equipo requerido", requeridos),
                ("Resultado", acta.get_resultado_display()),
                ("Técnico", acta.tecnico_texto), ("Recibió", f"{acta.recibio} ({acta.cargo_recibio})" if acta.cargo_recibio else acta.recibio)],
         boton=("Ver el acta completa con fotos y firmas", f"{settings.SITIO_URL.rstrip('/')}{acta.get_absolute_url()}"),

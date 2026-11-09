@@ -261,6 +261,23 @@ def _zonas_desde_actas(borrador):
                 FotoZona.objects.create(zona=zona, archivo=f.archivo.name, nombre_original=f.nombre_original)
 
 
+def requeridos_de_actas(ticket):
+    """Los equipos y materiales «requeridos» de las actas del ticket, como líneas de la tabla del informe.
+
+    Formato de cada línea: «cantidad equipo | referencia | marca» (lo que lee InformeBorrador._fila).
+    """
+    lineas = []
+    for a in actas_del_ticket(ticket):
+        for e in a.equipos.all():
+            if e.clase != EquipoActa.Clase.REQUERIDO or not e.equipo.strip():
+                continue
+            linea = f"{(e.cantidad or '1').strip()} {e.equipo.strip()}"
+            if e.referencia or e.marca:
+                linea += f" | {e.referencia.strip()} | {e.marca.strip()}"
+            lineas.append(linea)
+    return lineas
+
+
 def generar(ticket, autor, borrador=None, tipo=None):
     """Crea (o vuelve a redactar) el borrador. El de visita exige acta; el de estudio no.
 
@@ -268,8 +285,13 @@ def generar(ticket, autor, borrador=None, tipo=None):
     """
     tipo = tipo or (borrador.tipo if borrador else tipo_sugerido(ticket))
     datos = textos_estudio(ticket) if tipo == InformeBorrador.Tipo.ESTUDIO else textos(ticket)
-    # Una visita que ya tiene equipos o servicios requeridos también dice qué se propone y su alcance
-    if borrador is not None and (borrador.suministros.strip() or borrador.servicios.strip()) and ALCANCE not in datos["conclusiones"]:
+    # Lo que el técnico anotó como «requerido» en el acta llena la tabla de equipos y materiales requeridos
+    if not datos.get("suministros"):
+        datos["suministros"] = "\n".join(requeridos_de_actas(ticket))
+    # Un informe con equipos o servicios requeridos también dice qué se propone y su alcance
+    con_requeridos = datos["suministros"].strip() or (borrador is not None and (borrador.suministros.strip()
+                                                                                or borrador.servicios.strip()))
+    if con_requeridos and ALCANCE not in datos["conclusiones"]:
         datos["conclusiones"] += "\n" + ALCANCE
     if borrador is None:
         borrador = InformeBorrador.objects.create(ticket=ticket, creado_por=autor, tipo=tipo, **datos)
@@ -406,16 +428,22 @@ def firmante(borrador):
 
 
 def _bloque_firma(usuario, ancho):
-    """Firma centrada: imagen de la firma (si la subió en su usuario), la línea, el nombre y el cargo."""
+    """Firma centrada al final del informe.
+
+    Si el coordinador subió su firma digital autorizada (campo «firma escaneada» de su usuario), va TAL CUAL:
+    la imagen completa (firma, línea, nombre y cargo), centrada y sin agregarle texto. Si no la ha subido, se
+    escribe en texto: espacio para firmar, la línea, el nombre y el cargo.
+    """
     from comercial.pdf import _firma_usuario
 
+    imagen = _firma_usuario(usuario, ancho * 0.5, 110)
+    if imagen:
+        imagen.hAlign = "CENTER"
+        return imagen
     nombre = (usuario.get_full_name() or usuario.username) if usuario else "Coordinación del área técnica"
     cargo = (usuario.cargo if usuario else "") or "Coordinador TIC"
     centrado = ParagraphStyle("firma", parent=E_TEXTO, alignment=1, spaceBefore=0, spaceAfter=0, leading=13)
-    imagen = _firma_usuario(usuario, ancho * 0.4, 48)
-    if imagen:
-        imagen.hAlign = "CENTER"
-    filas = [[imagen or Spacer(1, 40)], ["_" * 40], [Paragraph(f"<b>{_esc(nombre)}</b>", centrado)],
+    filas = [[Spacer(1, 40)], ["_" * 40], [Paragraph(f"<b>{_esc(nombre)}</b>", centrado)],
              [Paragraph(_esc(cargo), centrado)], [Paragraph("JANOTEC S.A.S.", centrado)]]
     tabla = Table(filas, colWidths=[ancho * 0.6], hAlign="CENTER")
     tabla.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),

@@ -1,5 +1,10 @@
 {% extends "base.html" %}
 {% block titulo %}Acta de soporte · {% if ticket %}{{ ticket.radicado }}{% else %}{{ empresa.razon_social }}{% endif %}{% endblock %}
+{% block head %}<style>
+  .grupo-equipos > button .flecha-grupo { transition: transform .2s; transform: rotate(180deg); }
+  .grupo-equipos > button.collapsed .flecha-grupo { transform: none; }
+  .grupo-equipos > button:not(.collapsed) { background: var(--bs-tertiary-bg); }
+</style>{% endblock %}
 {% block contenido %}
 {% if ticket %}<a href="{{ ticket.get_absolute_url }}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ ticket.radicado }}</a>
 {% else %}<a href="{% url 'acta_sin_programar' %}?empresa={{ empresa.pk }}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Cambiar cliente o sede</a>{% endif %}
@@ -8,7 +13,7 @@
 {% else %}<p class="text-muted-jn mb-4"><span class="badge text-bg-warning me-1">Trabajo no programado</span> Deje constancia del trabajo que el cliente pidió y se resolvió en el momento. El acta queda en el historial de la sede y se envía copia a los correos indicados.</p>{% endif %}
 
 <form method="post" enctype="multipart/form-data" novalidate id="form-acta">{% csrf_token %}
-  {% if form.errors or equipos.total_error_count or utilizados.total_error_count or retirados.total_error_count %}
+  {% if form.errors or equipos.total_error_count or utilizados.total_error_count or retirados.total_error_count or requeridos.total_error_count %}
     <div class="alert alert-warning"><i class="bi bi-exclamation-circle"></i> Revise los campos marcados.
       {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
       {% for e in equipos.non_form_errors %}<div>{{ e }}</div>{% endfor %}
@@ -48,24 +53,34 @@
 
         <section class="paso-form">
           <h2 class="h6 paso-titulo"><span class="paso-num">3</span> Relación de equipos y materiales</h2>
-          <h3 class="h6 mt-3 mb-1"><i class="bi bi-wrench-adjustable"></i> Equipos intervenidos</h3>
-          <p class="small text-muted-jn mb-2">Los equipos que revisó, reparó, configuró o retiró. Ej.: cámara IP bala, DVR, panel de alarma. Si lo desmontó, en «¿Qué se hizo?» elija <b>Se retiró</b> e indique de quién es.</p>
-          {{ equipos.management_form }}
-          <div id="lista-equipos">
-            {% for f in equipos %}{% include "tickets/_equipo_acta.html" %}{% endfor %}
+          <p class="small text-muted-jn mb-2">Toque la lista que necesite para abrirla; las demás quedan cerradas.</p>
+          {# Tres listas plegables: el técnico abre solo la que necesita #}
+          <div class="equipos-acta-grupos">
+          {% for clave, fs, titulo, icono, ayuda in grupos_equipos %}
+            <div class="border rounded mb-2 grupo-equipos" data-prefijo="{{ fs.prefix }}">
+              <button type="button" class="btn w-100 text-start d-flex align-items-center gap-2 py-3 px-3{% if not fs.abierto %} collapsed{% endif %}"
+                      data-bs-toggle="collapse" data-bs-target="#grupo-{{ fs.prefix }}" aria-expanded="{% if fs.abierto %}true{% else %}false{% endif %}" aria-controls="grupo-{{ fs.prefix }}">
+                <span class="badge rounded-pill text-bg-secondary">{{ forloop.counter }}</span>
+                <i class="bi {{ icono }}"></i> <span class="fw-semibold">{{ titulo }}</span>
+                <span class="badge text-bg-primary ms-auto contador-equipos" hidden>0</span>
+                <i class="bi bi-chevron-down ms-2 flecha-grupo"></i>
+              </button>
+              <div class="collapse{% if fs.abierto %} show{% endif %}" id="grupo-{{ fs.prefix }}">
+                <div class="px-3 pb-3">
+                  <p class="small text-muted-jn mb-2">{{ ayuda|safe }}</p>
+                  {% if clave == "utilizado" %}{% include "inventario/_acta_materiales.html" %}{% endif %}
+                  {{ fs.management_form }}
+                  {% for e in fs.non_form_errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                  <div id="lista-{{ fs.prefix }}"{% if clave == "utilizado" %} class="mt-3"{% endif %}>
+                    {% for f in fs %}{% include "tickets/_equipo_acta.html" %}{% endfor %}
+                  </div>
+                  <template id="plantilla-{{ fs.prefix }}">{% with f=fs.empty_form %}{% include "tickets/_equipo_acta.html" %}{% endwith %}</template>
+                  <button type="button" class="btn btn-outline-primary btn-sm agregar-fila" data-prefijo="{{ fs.prefix }}"><i class="bi bi-plus-lg"></i> {{ fs.boton }}</button>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
           </div>
-          <template id="plantilla-equipos">{% with f=equipos.empty_form %}{% include "tickets/_equipo_acta.html" %}{% endwith %}</template>
-          <button type="button" class="btn btn-outline-primary btn-sm agregar-fila" data-prefijo="equipos"><i class="bi bi-plus-lg"></i> Agregar equipo intervenido</button>
-
-          <h3 class="h6 mt-4 mb-1"><i class="bi bi-box-seam"></i> Materiales y equipos utilizados</h3>
-          <p class="small text-muted-jn mb-2">Lo que usó para que el servicio quedara corregido o funcionando. Ej.: router Ruijie, conectores, cable, fuente.</p>
-          {% include "inventario/_acta_materiales.html" %}
-          {{ utilizados.management_form }}
-          <div id="lista-utilizados" class="mt-3">
-            {% for f in utilizados %}{% include "tickets/_equipo_acta.html" %}{% endfor %}
-          </div>
-          <template id="plantilla-utilizados">{% with f=utilizados.empty_form %}{% include "tickets/_equipo_acta.html" %}{% endwith %}</template>
-          <button type="button" class="btn btn-outline-primary btn-sm agregar-fila" data-prefijo="utilizados"><i class="bi bi-plus-lg"></i> Agregar material o equipo que no está en el inventario</button>
         </section>
 
         <section class="paso-form">
@@ -212,6 +227,17 @@
     });
   });
 
+  // --- Contador en el encabezado de cada lista plegable -----------------------
+  function contar() {
+    document.querySelectorAll('.grupo-equipos').forEach(function (g) {
+      const n = [...g.querySelectorAll('input[name$="-equipo"]')].filter(function (c) { return c.value.trim(); }).length;
+      const b = g.querySelector('.contador-equipos');
+      b.textContent = n; b.hidden = !n;
+    });
+  }
+  document.addEventListener('input', function (ev) { if (ev.target.name && ev.target.name.endsWith('-equipo')) contar(); });
+  contar();
+
   // --- Ubicación de la visita (si el técnico lo permite) ---------------------
   const estado = document.getElementById('estado-gps');
   if (navigator.geolocation) {
@@ -258,7 +284,7 @@
       fila(dl, 'Modalidad', modalidad ? modalidad.closest('.form-check').textContent.trim() : 'Sin elegir');
       const resultado = formActa.querySelector('input[name=resultado]:checked');
       fila(dl, 'Resultado', resultado ? resultado.closest('.form-check').textContent.trim() : 'Sin elegir');
-      const intervenidos = nombres('equipos'), utilizados = nombres('utilizados');
+      const intervenidos = nombres('equipos'), utilizados = nombres('utilizados'), requeridos = nombres('requeridos');
       const inventario = [...formActa.querySelectorAll('input[name=usar_activo]:checked')].length
         + [...formActa.querySelectorAll('input[name^=usar_insumo_]')].filter(function (c) { return parseFloat(c.value) > 0; }).length;
       fila(dl, 'Equipos intervenidos', intervenidos.length ? intervenidos.join(', ') : 'Ninguno');
@@ -267,6 +293,7 @@
       if (retirados) fila(dl, 'Equipos retirados', retirados + ' (de JANOTEC: quedan a su nombre hasta entregarlos en bodega)');
       fila(dl, 'Materiales y equipos utilizados', (utilizados.length ? utilizados.join(', ') : 'Ninguno')
         + (inventario ? ' · ' + inventario + ' del inventario (se descuentan)' : ''));
+      fila(dl, 'Materiales y equipos requeridos', requeridos.length ? requeridos.join(', ') + ' (van a la tabla del informe)' : 'Ninguno');
       const copia = formActa.querySelector('[name=copia_correo]');
       fila(dl, 'Se envía a', copia && copia.value.trim() ? copia.value.trim() : 'Solo al cliente');
       const resuelto = formActa.querySelector('[name=marcar_resuelto]');

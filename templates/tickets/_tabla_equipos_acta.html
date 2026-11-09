@@ -3,7 +3,7 @@
   <div class="card-header"><i class="bi {{ icono }}"></i> {{ titulo }}</div>
   <div class="table-responsive">
     <table class="table table-tickets mb-0">
-      <thead><tr><th>{% if lista.0.clase == 'utilizado' %}Material o equipo{% else %}Equipo{% endif %}</th><th>Marca</th><th>Referencia</th><th>Serial</th><th class="text-end">Cant.</th><th>Observaciones</th></tr></thead>
+      <thead><tr><th>{% if lista.0.clase == 'utilizado' or lista.0.clase == 'requerido' %}Material o equipo{% else %}Equipo{% endif %}</th><th>Marca</th><th>Referencia</th><th>Serial</th><th class="text-end">Cant.</th><th>Observaciones</th></tr></thead>
       {% for e in lista %}
         <tr><td>{{ e.equipo|default:"—" }}{% if e.trabajo %} <span class="badge text-bg-light border">{{ e.get_trabajo_display }}</span>{% endif %}{% if e.propiedad %}<div class="small {% if e.propiedad == 'janotec' %}text-primary{% else %}text-muted-jn{% endif %}">{{ e.get_propiedad_display }}{% if e.placa %} · placa {{ e.placa }}{% endif %}</div>{% endif %}</td><td class="small">{{ e.marca }}</td><td class="small">{{ e.referencia }}</td><td class="small radicado">{{ e.serial }}</td><td class="text-end">{{ e.cantidad }}</td><td class="small">{{ e.observaciones }}</td></tr>
         {% if e.fotos.all %}<tr><td colspan="6" class="border-0 pt-0"><div class="d-flex flex-wrap gap-2 fotos-equipo">{% for foto in e.fotos.all %}<a href="{% url 'archivo_acta' 'foto' foto.pk %}" target="_blank" rel="noopener"><img src="{% url 'archivo_acta' 'foto' foto.pk %}" alt="Foto de {{ e.equipo }}" loading="lazy"></a>{% endfor %}</div></td></tr>{% endif %}

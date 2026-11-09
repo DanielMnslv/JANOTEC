@@ -229,3 +229,27 @@ class InformesCoordinacionTests(Base):
         self.assertEqual(tabla.hAlign, "CENTER")
         nombre, contenido = informe.pdf(b)
         self.assertTrue(contenido.startswith(b"%PDF"))
+
+    def test_con_firma_digital_va_la_imagen_tal_cual(self):
+        import shutil
+        import tempfile
+        from io import BytesIO
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import override_settings
+        from PIL import Image
+        from reportlab.platypus import Image as ImagenPDF
+
+        from tickets import informe
+
+        carpeta = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, carpeta, ignore_errors=True)
+        png = BytesIO()
+        Image.new("RGBA", (400, 200), (255, 255, 255, 0)).save(png, "PNG")
+        with override_settings(MEDIA_ROOT=carpeta):
+            self.coord.firma = SimpleUploadedFile("firma.png", png.getvalue(), content_type="image/png")
+            self.coord.save()
+            bloque = informe._bloque_firma(self.coord, 400)
+        self.assertIsInstance(bloque, ImagenPDF)  # la imagen completa, sin texto agregado
+        self.assertEqual(bloque.hAlign, "CENTER")
+        self.assertAlmostEqual(bloque.drawWidth / bloque.drawHeight, 2, places=2)  # sin deformarla

@@ -1059,7 +1059,8 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
     # Ejemplos que orientan al técnico según la lista
     EJEMPLOS = {"intervenido": ("Ej.: Cámara IP bala", "Ej.: Hikvision", "Qué se le hizo: revisión, ajuste, cambio de conector…"),
                 "utilizado": ("Ej.: Router Ruijie", "Ej.: Ruijie", "Para qué se usó o dónde quedó instalado"),
-                "retirado": ("Ej.: Panel de alarma", "Ej.: Honeywell", "Estado en que se retiró: funciona, dañado, batería mala…")}
+                "retirado": ("Ej.: Panel de alarma", "Ej.: Honeywell", "Estado en que se retiró: funciona, dañado, batería mala…"),
+                "requerido": ("Ej.: Fuente de poder 12 V 5 A", "Ej.: Hikvision", "Para qué se necesita o dónde va: zona, punto, cámara…")}
 
     def __init__(self, *args, clase="intervenido", **kwargs):
         super().__init__(*args, **kwargs)
@@ -1068,9 +1069,11 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
         self.clase = clase
         if clase != "intervenido":
             del self.fields["accion"]  # solo un equipo intervenido puede haberse retirado
-        if clase == "utilizado":
+        if clase in ("utilizado", "requerido"):
             del self.fields["propiedad"]
             del self.fields["placa"]
+            if clase == "requerido":  # aún no existe: no tiene serial
+                del self.fields["serial"]
         else:
             self.fields["placa"].widget.attrs["placeholder"] = "Ej.: CAM-BAL-2MP002 (si es de JANOTEC)"
 
@@ -1078,7 +1081,7 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
         self.fields["equipo"].widget = ConSugerencias(_frecuentes(EquipoActa, "equipo"), attrs={"placeholder": equipo})
         self.fields["marca"].widget = ConSugerencias(_frecuentes(EquipoActa, "marca"), attrs={"placeholder": marca})
         self.fields["observaciones"].widget.attrs["placeholder"] = observaciones
-        if clase == "utilizado":
+        if clase in ("utilizado", "requerido"):
             self.fields["equipo"].label = "Material o equipo"
         self.fields["fotos"].widget.attrs.update({"accept": "image/*", "capture": "environment"})
         self.fields["fotos"].help_text = "Puede tomar la foto con la cámara del celular."
