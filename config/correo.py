@@ -14,6 +14,7 @@ from email.utils import parseaddr
 from django.conf import settings
 from django.core.mail import get_connection
 from django.core.mail.backends.base import BaseEmailBackend
+from django.core.mail.backends import smtp as smtp_backend
 from django.db.models import Q
 
 log = logging.getLogger(__name__)
@@ -195,3 +196,33 @@ class JanotecBackend(RedirigirClientesBackend):
         if modo == "clientes" and settings.CORREO_CLIENTES_PRUEBA:
             return super().send_messages(mensajes)
         return self.real.send_messages(mensajes)
+
+
+# --- Conexión al correo de Plesk desde el mismo servidor --------------------------------------------
+# La plataforma y el correo viven en el mismo servidor. Desde adentro, «janotec.app» puede apuntar a otra
+# máquina, así que se conecta a 127.0.0.1, pero el certificado se valida con el nombre para el que está
+# hecho (EMAIL_CERTIFICADO_NOMBRE=janotec.app). La conexión sigue cifrada y verificada.
+
+def _con_nombre(base, nombre):
+    """Clase de conexión SMTP que valida el certificado con «nombre» en vez de con la dirección usada."""
+
+    class Conexion(base):
+        def _get_socket(self, host, port, timeout):
+            self._host = nombre  # SMTP_SSL envuelve el socket validando contra self._host
+            return super()._get_socket(host, port, timeout)
+
+        def starttls(self, *args, **kwargs):
+            self._host = nombre  # STARTTLS (puerto 587) también valida contra self._host
+            return super().starttls(*args, **kwargs)
+
+    return Conexion
+
+
+class SMTPServidorLocalBackend(smtp_backend.EmailBackend):
+    """SMTP normal; si hay EMAIL_CERTIFICADO_NOMBRE, valida el certificado con ese nombre."""
+
+    @property
+    def connection_class(self):
+        base = super().connection_class
+        nombre = getattr(settings, "EMAIL_CERTIFICADO_NOMBRE", "")
+        return _con_nombre(base, nombre) if nombre else base

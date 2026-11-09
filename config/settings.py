@@ -146,6 +146,10 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
 EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", False)  # Hostinger: puerto 465 con SSL (y EMAIL_USE_TLS=False)
 EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "20"))
+# Correo en el mismo servidor (Plesk): EMAIL_HOST=127.0.0.1 y aquí el nombre del certificado (p. ej. janotec.app).
+EMAIL_CERTIFICADO_NOMBRE = os.getenv("EMAIL_CERTIFICADO_NOMBRE", "").strip()
+if EMAIL_CERTIFICADO_NOMBRE and EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend":
+    EMAIL_BACKEND = "config.correo.SMTPServidorLocalBackend"
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Soporte JANOTEC <soporte@janotec.com.co>")
 NOTIFICAR_SOPORTE_EMAIL = os.getenv("NOTIFICAR_SOPORTE_EMAIL", "")  # buzón del área
 NOTIFICAR_COMERCIAL_EMAIL = os.getenv("NOTIFICAR_COMERCIAL_EMAIL", "")  # oportunidades detectadas en campo

@@ -90,3 +90,28 @@ class CorreoModoTests(TestCase):
         RemitenteMiddleware(lambda r: visto.setdefault("actor", _actor.get()))(Peticion())
         self.assertEqual(visto["actor"], self.coordinador)
         self.assertIsNone(_actor.get())
+
+
+class SMTPServidorLocalTests(TestCase):
+    """Conectar a 127.0.0.1 validando el certificado con el nombre janotec.app."""
+
+    def _validado_con(self, **ajustes):
+        import smtplib
+        from unittest import mock
+
+        from config.correo import SMTPServidorLocalBackend
+
+        contexto = mock.Mock()
+        with override_settings(EMAIL_USE_SSL=True, EMAIL_USE_TLS=False, **ajustes), \
+                mock.patch.object(smtplib.SMTP, "_get_socket", return_value=object()):
+            clase = SMTPServidorLocalBackend().connection_class
+            conexion = clase(context=contexto)
+            conexion._host = "127.0.0.1"  # lo pone connect() antes de abrir el socket
+            conexion._get_socket("127.0.0.1", 465, 5)
+        return contexto.wrap_socket.call_args.kwargs["server_hostname"]
+
+    def test_valida_el_certificado_con_el_nombre_configurado(self):
+        self.assertEqual(self._validado_con(EMAIL_CERTIFICADO_NOMBRE="janotec.app"), "janotec.app")
+
+    def test_sin_nombre_valida_con_la_direccion_de_siempre(self):
+        self.assertEqual(self._validado_con(EMAIL_CERTIFICADO_NOMBRE=""), "127.0.0.1")
