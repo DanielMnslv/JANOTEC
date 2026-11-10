@@ -43,3 +43,17 @@ def siguiente_paso_comercial(ficha, usuario):
     """El siguiente paso del requerimiento comercial (ver ``comercial.pasos.siguiente``)."""
     from comercial import pasos
     return pasos.siguiente(ficha, usuario)
+
+
+@register.inclusion_tag("tickets/_devolucion.html", takes_context=True)
+def devolucion_ticket(context, ticket):
+    """Recuadro «Devolver al área anterior» y avisos de devoluciones pendientes (ver ``tickets.devoluciones``)."""
+    from tickets import devoluciones
+
+    request = context.get("request")
+    usuario = getattr(request, "user", None)
+    if not ticket or not usuario or not usuario.is_authenticated or not usuario.es_interno:
+        return {"mostrar": False}
+    pendientes = [(d, devoluciones.INFO[d.tramo], devoluciones.puede_resolver(usuario, d)) for d in devoluciones.pendientes(ticket)]
+    return {"mostrar": True, "ticket": ticket, "pendientes": pendientes, "opciones": devoluciones.opciones(ticket, usuario),
+            "volver": request.get_full_path(), "csrf_token": context.get("csrf_token")}

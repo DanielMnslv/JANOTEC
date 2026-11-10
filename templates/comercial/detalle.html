@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "base.html" %}{% load tickets_extras %}
 {% block titulo %}{{ ticket.radicado }} · comercial{% endblock %}
 {% block contenido %}
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 no-imprimir">
@@ -52,6 +52,7 @@
 </div></div>
 
 {% include "comercial/_pasos_comercial.html" %}
+{% devolucion_ticket ticket %}
 
 {% if en_comercial and ficha.etapa == 'aprobada' %}
 <div class="card border-success mb-4 no-imprimir"><div class="card-body">

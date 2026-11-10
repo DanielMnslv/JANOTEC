@@ -56,6 +56,8 @@ def registrar_informe(ficha, autor, datos, archivos=(), con_visita=False):
         if ficha.etapa == F.Etapa.GESTION:
             ficha.etapa = F.Etapa.ELABORANDO  # con el informe, administrativa ya puede armar la propuesta
             ficha.save(update_fields=["etapa", "actualizado"])
+            from tickets.devoluciones import T as tramo, cerrar_por_reenvio
+            cerrar_por_reenvio(t, tramo.A_REQUERIMIENTO, autor, "Comercial completó el requerimiento y su informe.")
     return informe
 
 
@@ -109,6 +111,8 @@ def solicitar_levantamiento(ficha, autor, nota, jornada=""):
                                      + (f"\n{nota}" if nota else ""))
         _seguimiento(t, autor, f"Asignado al área técnica para levantamiento ({t.get_jornada_display() or 'sin jornada'}). "
                                f"Qué revisar: {nota}", interno=True)
+        from tickets.devoluciones import T as tramo, cerrar_por_reenvio
+        cerrar_por_reenvio(t, tramo.A_COMERCIAL, autor, f"Comercial completó los datos y volvió a pedir el levantamiento. {nota}".strip())
     # Al cliente no le llega correo por los traspasos entre áreas: lo ve al consultar su solicitud
     notif._enviar(
         f"[{t.radicado}] Levantamiento técnico solicitado por comercial · {t.empresa}",
@@ -142,6 +146,8 @@ def devolver_a_comercial(ficha, autor, resultado, servicios="", materiales=None)
                 materiales=resultado if materiales is None else materiales.strip(),
                 elaborado_por=(tecnico if hubo_visita else None) or autor)
         _seguimiento(t, autor, f"Resultado del levantamiento técnico:\n{resultado}", interno=True)
+        from tickets.devoluciones import T as tramo, cerrar_por_reenvio
+        cerrar_por_reenvio(t, tramo.A_TECNICA, autor, "El área técnica completó el informe y lo volvió a enviar.")
         seg = _seguimiento(t, autor, "Terminamos la visita técnica. Estamos preparando su propuesta económica.")
     # Al cliente no le llega correo por los traspasos entre áreas: lo ve al consultar su solicitud
     notif._enviar(f"[{t.radicado}] Levantamiento listo · {t.empresa}",

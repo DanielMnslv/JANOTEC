@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "base.html" %}{% load tickets_extras %}
 {% block titulo %}Cotizador · {{ ticket.radicado }}{% endblock %}
 {% block contenido %}
 <a href="{% url 'comercial:detalle' ticket.radicado %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ ticket.radicado }}</a>
@@ -11,6 +11,7 @@
   </div>
   <a class="btn btn-sm btn-outline-secondary" href="{% url 'comercial:catalogo' %}" target="_blank" rel="noopener"><i class="bi bi-tags"></i> Catálogo de precios</a>
 </div>
+{% devolucion_ticket ticket %}
 
 {% if cotizacion.en_revision %}
   <div class="alert alert-info">

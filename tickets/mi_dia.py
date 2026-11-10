@@ -22,9 +22,9 @@ E = Ticket.Estado
 
 
 # --- Piezas ------------------------------------------------------------------------------
-def _item(titulo, detalle="", url="", boton="Abrir", urgente=False):
+def _item(titulo, detalle="", url="", boton="Abrir", urgente=False, ticket=None):
     """Un pendiente: qué es, un detalle corto y el botón del siguiente paso."""
-    return {"titulo": titulo, "detalle": detalle, "url": url, "boton": boton, "urgente": urgente}
+    return {"titulo": titulo, "detalle": detalle, "url": url, "boton": boton, "urgente": urgente, "ticket": ticket}
 
 
 def _grupo(clave, titulo, icono, items, ayuda="", ver_todo=""):
@@ -85,12 +85,12 @@ def por_aprobar(usuario):
             "ticket__empresa").order_by("actualizado"):
         items.append(_item(f"Informe {i.ticket.radicado} · {_cliente(i.ticket)}",
                            f"{i.get_tipo_display().split(' (')[0]}. Enviado {_hace(i.actualizado)}.",
-                           reverse("informe_borrador", args=[i.ticket.radicado]), "Revisar informe", _dias(i.actualizado) >= 2))
+                           reverse("informe_borrador", args=[i.ticket.radicado]), "Revisar informe", _dias(i.actualizado) >= 2, ticket=i.ticket))
     for c in f.tickets(Cotizacion.objects.filter(en_revision=True), "ficha__ticket__").select_related(
             "ficha__ticket__empresa").order_by("actualizado"):
         t = c.ficha.ticket
-        items.append(_item(f"Propuesta {t.radicado} · {_cliente(t)}", t.asunto[:120],
-                           reverse("comercial:cotizador", args=[t.radicado]), "Revisar propuesta", c.ficha.prioritaria))
+        items.append(_item(f"Propuesta {t.radicado} · {_cliente(t)}", "En revisión de dirección.",
+                           reverse("comercial:cotizador", args=[t.radicado]), "Revisar propuesta", c.ficha.prioritaria, ticket=t))
     for o in f.ordenes(OrdenCompra.objects.filter(estado=OrdenCompra.Estado.REVISION)).select_related("proveedor").order_by("pk"):
         items.append(_item(f"Orden de compra {o.numero} · {o.proveedor or 'sin proveedor'}",
                            f"{o.get_forma_pago_display().split(' (')[0]}.", reverse("inventario:orden", args=[o.pk]),
@@ -101,7 +101,7 @@ def por_aprobar(usuario):
         if autorizadas.filter(solicitud=s, ronda=s.ronda).exists():
             continue  # ya autorizó dirección o el coordinador; falta la firma de bodega
         items.append(_item(f"Salida de material {s.numero} · {s.ticket.radicado}", f"{_cliente(s.ticket)}. Esperando {_hace(s.actualizado)}.",
-                           reverse("inventario:solicitud", args=[s.pk]), "Autorizar salida", _dias(s.actualizado) >= 2))
+                           reverse("inventario:solicitud", args=[s.pk]), "Autorizar salida", _dias(s.actualizado) >= 2, ticket=s.ticket))
     return _grupo("por_aprobar", "Por aprobar", "bi-patch-check", items,
                   "Lo que espera su firma. Abra cada uno, revíselo y apruébelo o devuélvalo con sus observaciones.")
 
@@ -114,14 +114,14 @@ def coordinacion(usuario):
     f = _Filtro(usuario)
     tecnicos = f.tickets(Ticket.objects.filter(area=Ticket.Area.TECNICA)).select_related("empresa")
     grupos = []
-    items = [_item(f"{t.radicado} · {_cliente(t)}", f"{t.asunto[:110]} · radicado {_hace(t.creado)}.",
-                   reverse("recepcionar", args=[t.radicado]), "Recepcionar", t.prioridad in ("alta", "critica") or _dias(t.creado) >= 1)
+    items = [_item(f"{t.radicado} · {_cliente(t)}", f"Radicado {_hace(t.creado)}.",
+                   reverse("recepcionar", args=[t.radicado]), "Recepcionar", t.prioridad in ("alta", "critica") or _dias(t.creado) >= 1, ticket=t)
              for t in tecnicos.filter(estado=E.GENERADO).order_by("creado")]
     grupos.append(_grupo("recepcionar", "Por recepcionar", "bi-inbox", items,
                          "Tickets nuevos: asigne técnico, prioridad e impacto.", reverse("panel") + "?estado=generado"))
     items = [_item(f"{t.radicado} · {_cliente(t)}", f"{t.get_estado_display()} {_hace(t.actualizado)}"
                    f"{' · ' + str(t.asignado_a) if t.asignado_a_id else ' · sin técnico'}.",
-                   reverse("cronograma:semana"), "Programar visita", _dias(t.actualizado) >= 3)
+                   reverse("cronograma:semana"), "Programar visita", _dias(t.actualizado) >= 3, ticket=t)
              for t in tecnicos.filter(estado__in=Ticket.ESTADOS_PROGRAMABLES).select_related("asignado_a").order_by("actualizado")]
     grupos.append(_grupo("programar", "Por programar", "bi-calendar-plus", items,
                          "Recepcionados o pendientes de nueva visita: póngalos en el cronograma."))
@@ -138,15 +138,15 @@ def coordinacion(usuario):
         url = reverse("cronograma:semana") + f"?d={a.fecha:%Y-%m-%d}"
         if a.autorizacion == A.SIN_ENVIAR and a.fecha <= hoy + timedelta(days=2):
             items.append(_item(f"{a.ticket.radicado} · visita del {cuando}", "Sin autorización enviada al cliente.", url,
-                               "Enviar autorización", True))
+                               "Enviar autorización", True, ticket=a.ticket))
         elif a.autorizacion == A.ENVIADA and a.autorizacion_enviada and a.autorizacion_enviada < ahora - timedelta(hours=48):
             items.append(_item(f"{a.ticket.radicado} · visita del {cuando}",
                                f"El cliente no responde desde el {timezone.localtime(a.autorizacion_enviada):%d/%m}. Conviene llamarlo.",
-                               url, "Ver visita"))
+                               url, "Ver visita", ticket=a.ticket))
         elif a.autorizacion == A.RECHAZADA:
             items.append(_item(f"{a.ticket.radicado} · visita del {cuando}",
                                f"El cliente la rechazó: {a.motivo_rechazo or 'sin motivo'}. Reprográmela o aplácela.", url,
-                               "Reprogramar", True))
+                               "Reprogramar", True, ticket=a.ticket))
     grupos.append(_grupo("autorizaciones", "Autorizaciones del cliente", "bi-envelope-exclamation", items,
                          "Visitas próximas sin autorización enviada, sin respuesta en 48 horas o rechazadas."))
     if not usuario.es_direccion:  # dirección ya las ve en «Por aprobar»
@@ -171,20 +171,20 @@ def _informes_coordinacion(usuario):
         titulo = f"{t.radicado} · {_cliente(t)}"
         url = reverse("informe_borrador", args=[t.radicado])
         if borrador is None:
-            items.append(_item(titulo, f"Acta lista: falta generar el borrador del informe. {t.asunto[:80]}",
-                               _ficha(t), "Generar borrador", _dias(t.actualizado) >= 2))
+            items.append(_item(titulo, "Acta lista: falta generar el borrador del informe.",
+                               _ficha(t), "Generar borrador", _dias(t.actualizado) >= 2, ticket=t))
         elif borrador.aprobado:
             quien = borrador.aprobado_por.get_full_name() if borrador.aprobado_por else "dirección"
             items.append(_item(titulo, f"Aprobado por {quien} {_hace(borrador.aprobado_en)}: ya puede entregarlo.",
-                               _ficha(t), "Entregar informe", True))
+                               _ficha(t), "Entregar informe", True, ticket=t))
         elif borrador.en_revision:
-            items.append(_item(titulo, f"En revisión de dirección desde {_hace(borrador.actualizado)}.", url, "Ver informe"))
+            items.append(_item(titulo, f"En revisión de dirección desde {_hace(borrador.actualizado)}.", url, "Ver informe", ticket=t))
         else:
             devuelto = t.seguimientos.filter(mensaje__startswith="Devolvió el informe técnico para corregir").filter(
                 creado__gte=borrador.actualizado).exists()
             items.append(_item(titulo, ("Dirección lo devolvió con observaciones: corríjalo y envíelo de nuevo."
                                         if devuelto else "Borrador listo: revíselo y envíelo a dirección para aprobar."),
-                               url, "Revisar y enviar a dirección", devuelto or _dias(borrador.actualizado) >= 2))
+                               url, "Revisar y enviar a dirección", devuelto or _dias(borrador.actualizado) >= 2, ticket=t))
     return items
 
 
@@ -203,7 +203,7 @@ def _visitas_sin_acta(usuario, tecnico=None):
             continue
         quien = ", ".join(str(u) for u in a.encargados.all()) or "sin técnico"
         items.append(_item(f"{a.ticket.radicado} · {_cliente(a.ticket)}", f"Visita del {a.fecha:%d/%m} · {quien}.",
-                           reverse("acta_nueva", args=[a.ticket.radicado]), "Hacer el acta", True))
+                           reverse("acta_nueva", args=[a.ticket.radicado]), "Hacer el acta", True, ticket=a.ticket))
     return items
 
 
@@ -222,16 +222,16 @@ def tecnico(usuario):
         titulo = f"{dia} {a.hora_inicio:%H:%M} · {a.ticket.radicado if a.ticket_id else a.cliente}"
         detalle = f"{a.cliente}{' · ' + a.sede if a.sede else ''} · {a.actividad[:90]}"
         if a.ticket_id:
-            items.append(_item(titulo, detalle, _ficha(a.ticket), "Ver ticket", a.fecha == hoy))
+            items.append(_item(titulo, detalle, _ficha(a.ticket), "Ver ticket", a.fecha == hoy, ticket=a.ticket))
         else:
-            items.append(_item(titulo, detalle, reverse("cronograma:semana") + f"?d={a.fecha:%Y-%m-%d}", "Ver cronograma", a.fecha == hoy))
+            items.append(_item(titulo, detalle, reverse("cronograma:semana") + f"?d={a.fecha:%Y-%m-%d}", "Ver cronograma", a.fecha == hoy, ticket=a.ticket))
     grupos = [_grupo("visitas", "Mis visitas de la semana", "bi-geo-alt", items,
                      "Lo que tiene programado desde hoy hasta dentro de 6 días.", reverse("cronograma:semana")),
               _grupo("actas", "Acta por hacer", "bi-clipboard-check", _visitas_sin_acta(usuario, tecnico=usuario),
                      "Visitas que ya hizo y aún no tienen acta.")]
     actas = ActaEntrega.objects.filter(tecnico=usuario, recibido_en__isnull=True).select_related("solicitud__ticket")
     items = [_item(f"{a.numero} · {a.solicitud.ticket.radicado}", f"Bodega le entregó material {_hace(a.creado)}.",
-                   reverse("inventario:mi_material"), "Confirmar recibido", True) for a in actas]
+                   reverse("inventario:mi_material"), "Confirmar recibido", True, ticket=a.solicitud.ticket) for a in actas]
     grupos.append(_grupo("material", "Material por recibir", "bi-box-seam", items,
                          "Confirme en la plataforma que recibió el material que le entregó bodega."))
     return grupos
@@ -248,7 +248,7 @@ def comercial(usuario):
     mias = Q(comercial=usuario) | Q(comercial__isnull=True)
     fichas = f.tickets(F.objects.filter(mias), "ticket__").select_related("ticket__empresa")
     items = [_item(f"{v.ficha.ticket.radicado} · {_cliente(v.ficha.ticket)}", f"Propuesta v{v.numero} aprobada por dirección para que usted la entregue.",
-                   reverse("comercial:detalle", args=[v.ficha.ticket.radicado]), "Registrar entrega", True)
+                   reverse("comercial:detalle", args=[v.ficha.ticket.radicado]), "Registrar entrega", True, ticket=v.ficha.ticket)
              for v in V.objects.filter(ficha__in=fichas, por_comercial=True, entregada_cliente__isnull=True, estado=V.Estado.ENVIADA)
              .select_related("ficha__ticket__empresa")]
     grupos = [_grupo("entregar", "Propuestas por entregar", "bi-hand-index", items,
@@ -257,11 +257,11 @@ def comercial(usuario):
     for fi in fichas.filter(etapa__in=[F.Etapa.GESTION, F.Etapa.LEVANTAMIENTO], ticket__area=Ticket.Area.COMERCIAL).order_by("actualizado"):
         if not fi.comercial_id:
             items.append(_item(f"{fi.ticket.radicado} · {_cliente(fi.ticket)}", "Nadie del área comercial lo ha tomado.",
-                               reverse("comercial:detalle", args=[fi.ticket.radicado]), "Tomarlo", True))
+                               reverse("comercial:detalle", args=[fi.ticket.radicado]), "Tomarlo", True, ticket=fi.ticket))
         elif fi.actualizado < ahora - timedelta(days=5):
             items.append(_item(f"{fi.ticket.radicado} · {_cliente(fi.ticket)}",
                                f"{_hace(fi.actualizado).capitalize()} sin movimiento en «{fi.get_etapa_display()}».",
-                               reverse("comercial:detalle", args=[fi.ticket.radicado]), "Darle movimiento", True))
+                               reverse("comercial:detalle", args=[fi.ticket.radicado]), "Darle movimiento", True, ticket=fi.ticket))
     grupos.append(_grupo("mover", "Requerimientos por mover", "bi-arrow-repeat", items,
                          "Sin asesor o con más de 5 días quietos.", reverse("comercial:bandeja")))
     items = []
@@ -269,7 +269,7 @@ def comercial(usuario):
         v = fi.versiones.order_by("-numero").first()
         if v and v.estado == V.Estado.ENVIADA and not v.por_entregar and v.enviada < ahora - timedelta(days=3):
             items.append(_item(f"{fi.ticket.radicado} · {_cliente(fi.ticket)}", f"Propuesta v{v.numero} enviada {_hace(v.enviada)} sin respuesta.",
-                               reverse("comercial:detalle", args=[fi.ticket.radicado]), "Registrar respuesta", _dias(v.enviada) >= 8))
+                               reverse("comercial:detalle", args=[fi.ticket.radicado]), "Registrar respuesta", _dias(v.enviada) >= 8, ticket=fi.ticket))
     grupos.append(_grupo("respuestas", "Esperando respuesta del cliente", "bi-telephone-outbound", items,
                          "Propuestas con más de 3 días sin respuesta: llame al cliente y registre lo que diga."))
     return grupos
@@ -287,7 +287,7 @@ def administrativa(usuario):
 
     def fila(fi, detalle, boton):
         return _item(f"{fi.ticket.radicado} · {_cliente(fi.ticket)}", detalle,
-                     reverse("comercial:cotizador", args=[fi.ticket.radicado]), boton, fi.prioritaria)
+                     reverse("comercial:cotizador", args=[fi.ticket.radicado]), boton, fi.prioritaria, ticket=fi.ticket)
 
     grupos = [
         _grupo("devueltas", "Devueltas por dirección", "bi-arrow-return-left",
@@ -335,7 +335,7 @@ def bodega(usuario):
             t = x["ticket"]
             url = x["solicitudes"][0].get_absolute_url() if x["solicitudes"] else _ficha(t)
             items.append(_item(f"{t.radicado} · {_cliente(t)}", f"{x['sigue']} · {x['items']} ítems · {_hace(timezone.now() - timedelta(days=x['dias']))}.",
-                               url, boton, x["atrasado"]))
+                               url, boton, x["atrasado"], ticket=t))
         grupos.append(_grupo(clave, titulo, icono, items, ver_todo=reverse("inventario:bandeja")))
     return grupos
 
@@ -398,9 +398,31 @@ def tiene_mi_dia(usuario):
     return bool(usuario.is_authenticated and areas_de(usuario))
 
 
+def devueltos(usuario):
+    """Tickets que otra área le devolvió al área del usuario porque falta algo por añadir, corregir o solucionar."""
+    from . import devoluciones
+
+    f = _Filtro(usuario)
+    items = []
+    for d in devoluciones.para_corregir(usuario, lambda qs: f.tickets(qs, "ticket__")):
+        t, info = d.ticket, devoluciones.INFO[d.tramo]
+        url = (reverse("inventario:solicitud", args=[d.solicitud_id_material]) if d.tramo == "a_lista" and d.solicitud_id_material
+               else t.get_absolute_url())
+        quien = (d.autor.get_full_name() or d.autor.username) if d.autor else info["de"]
+        items.append(_item(f"{t.radicado} · {_cliente(t)}", f"Devuelto por {quien} ({info['de']}) {_hace(d.creada)}: {d.motivo[:160]}",
+                           url, "Corregir", True, ticket=t))
+    return _grupo("devueltos", "Devueltos a su área", "bi-arrow-return-left", items,
+                  "Otra área se lo devolvió porque falta algo. Corríjalo y envíelo de vuelta.")
+
+
 def pendientes(usuario):
-    """Las áreas del usuario con sus grupos ya calculados: [{"nombre", "grupos"}]."""
-    return [{"nombre": nombre, "grupos": calcular()} for nombre, calcular in areas_de(usuario)]
+    """Las áreas del usuario con sus grupos ya calculados: [{"nombre", "grupos"}]. Si otra área le devolvió
+    tickets, «Devueltos a su área» va de primero."""
+    areas = [{"nombre": nombre, "grupos": calcular()} for nombre, calcular in areas_de(usuario)]
+    grupo = devueltos(usuario) if areas else None
+    if grupo and grupo["items"]:
+        areas[0]["grupos"].insert(0, grupo)
+    return areas
 
 
 def total_por_aprobar(usuario):

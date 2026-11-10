@@ -37,6 +37,8 @@
       <li class="list-group-item d-flex flex-wrap flex-md-nowrap justify-content-between align-items-center gap-2 {% if i.urgente %}urgente{% endif %}">
         <div class="me-auto">
           <div class="fw-semibold">{% if i.urgente %}<i class="bi bi-exclamation-circle-fill text-danger" title="Urgente o atrasado"></i> {% endif %}{{ i.titulo }}</div>
+          {% if i.ticket %}{% with t=i.ticket %}<div class="mi-dia-solicitud" title="{{ t.descripcion }}">{{ t.asunto|truncatechars:110 }}</div>
+          <div class="small text-muted-jn"><i class="bi {{ t.icono_tipo }}"></i> {{ t.get_tipo_display }}{% if t.sistema_display %} · {{ t.sistema_display }}{% endif %}</div>{% endwith %}{% endif %}
           {% if i.detalle %}<div class="small text-muted-jn">{{ i.detalle }}</div>{% endif %}
         </div>
         {% if i.url %}<a class="btn btn-sm {% if i.urgente %}btn-accent{% else %}btn-outline-primary{% endif %} text-nowrap" href="{{ i.url }}">{{ i.boton }} <i class="bi bi-chevron-right"></i></a>{% endif %}

@@ -6,6 +6,7 @@ Las actas firmadas y sus equipos y firmas solo se consultan: un documento firmad
 from django.contrib import admin
 
 from .models import (
+    Devolucion,
     ActaSoporte, Adjunto, Categoria, ContadorRadicado, EquipoActa, FirmaActa, OportunidadComercial, Seguimiento, Ticket,
     TipoFalla,
 )
@@ -123,3 +124,12 @@ class OportunidadComercialAdmin(admin.ModelAdmin):
 class ContadorAdmin(admin.ModelAdmin):
     """Último consecutivo de radicado usado por año (JNT-AAAA-NNNNNN)."""
     list_display = ("anio", "ultimo")
+
+
+@admin.register(Devolucion)
+class DevolucionAdmin(admin.ModelAdmin):
+    """Devoluciones del ticket al área anterior (falta algo por añadir, corregir o solucionar)."""
+    list_display = ("ticket", "tramo", "autor", "creada", "resuelta", "resuelta_por")
+    list_filter = ("tramo",)
+    search_fields = ("ticket__radicado", "motivo", "nota_resuelta")
+    raw_id_fields = ("ticket", "autor", "asignado_previo", "resuelta_por")

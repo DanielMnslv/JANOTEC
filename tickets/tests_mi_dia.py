@@ -81,6 +81,14 @@ class MiDiaTests(Base):
         self.assertIn("Programar visita", html)
         self.assertNotIn("Orden de compra", html)
 
+    def test_cada_pendiente_trae_el_contexto_corto_de_la_solicitud(self):
+        """Como en recepción: además del ticket y la empresa, el asunto, el tipo y el sistema."""
+        self.ticket(asunto="Agregar nuevamente el NVR a la central de monitoreo para poder visualizar las cámaras",
+                    tipo=Ticket.Tipo.SOPORTE)
+        html = self.ver(self.coord)
+        self.assertIn("Agregar nuevamente el NVR a la central de monitoreo", html)
+        self.assertIn('<i class="bi bi-tools"></i> Servicio técnico · Mantenimiento CCTV IP', html)
+
     def test_visita_pasada_sin_acta_le_aparece_al_tecnico_y_al_coordinador(self):
         t = self.ticket(estado=Ticket.Estado.EN_CRONOGRAMA, asignado_a=self.tecnico)
         a = Actividad.objects.create(ticket=t, fecha=timezone.localdate() - timedelta(days=2), hora_inicio=time(8), hora_fin=time(12),

@@ -943,6 +943,64 @@ def desvincular_acta(request, radicado, numero):
     return redirect(reverse("ticket_detalle", args=[ticket.radicado]) + "#actas")
 
 
+def _volver(request, ticket):
+    """Regresa a la página desde donde se hizo la acción (ticket, ficha comercial o solicitud), si es del sitio."""
+    destino = request.POST.get("volver", "")
+    if destino and url_has_allowed_host_and_scheme(destino, allowed_hosts={request.get_host()}):
+        return redirect(destino)
+    return redirect(ticket)
+
+
+def _ticket_para_devolucion(usuario, radicado):
+    """El ticket si el usuario lo ve; bodega no ve los tickets sino sus solicitudes de material, así que también
+    los que tienen material pedido."""
+    try:
+        return obtener_ticket(usuario, radicado)
+    except Http404:
+        if not usuario.es_bodega:
+            raise
+    return get_object_or_404(Ticket.objects.filter(solicitudes_material__isnull=False).distinct(), radicado=radicado)
+
+
+@login_required
+@require_POST
+def devolver_ticket(request, radicado):
+    """Devolver el ticket al área anterior porque falta algo por añadir, corregir o solucionar (motivo obligatorio)."""
+    from . import devoluciones
+
+    if not request.user.es_interno:
+        raise PermissionDenied
+    ticket = _ticket_para_devolucion(request.user, radicado)
+    try:
+        dev = devoluciones.devolver(ticket, request.user, request.POST.get("tramo", ""), request.POST.get("motivo", ""))
+    except ValidationError as e:
+        messages.error(request, " ".join(e.messages))
+        return _volver(request, ticket)
+    messages.success(request, f"{ticket.radicado} se devolvió {devoluciones.INFO[dev.tramo]['a']} con el motivo. "
+                              "Le avisamos por correo; cuando lo corrijan vuelve a usted.")
+    # Ya no está en su área (puede que ni lo vea): vuelve a su «Mi día»
+    return redirect("mi_dia") if agenda.tiene_mi_dia(request.user) else redirect("inicio")
+
+
+@login_required
+@require_POST
+def resolver_devolucion(request, pk):
+    """«Listo, corregido»: el ticket vuelve al área que lo devolvió, al punto exacto donde estaba."""
+    from . import devoluciones
+    from .models import Devolucion
+
+    dev = get_object_or_404(Devolucion.objects.select_related("ticket"), pk=pk)
+    _ticket_para_devolucion(request.user, dev.ticket.radicado)  # que lo pueda ver
+    try:
+        devoluciones.resolver(dev, request.user, request.POST.get("nota", ""))
+    except ValidationError as e:
+        messages.error(request, " ".join(e.messages))
+        return _volver(request, dev.ticket)
+    messages.success(request, f"Listo: {dev.ticket.radicado} volvió a {devoluciones.INFO[dev.tramo]['de'].lower()} "
+                              "y le avisamos a quien lo devolvió.")
+    return _volver(request, dev.ticket)
+
+
 @login_required
 @personal_requerido
 @require_POST

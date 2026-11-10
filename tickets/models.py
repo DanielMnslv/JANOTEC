@@ -538,6 +538,10 @@ class Ticket(models.Model):
             if nuevo != self.Estado.VISITA_EJECUTADA:
                 self.fecha_resolucion = None
         self.save()
+        if anterior == self.Estado.EN_INVENTARIO:
+            # Si técnica lo había devuelto a bodega por material, al salir de inventario queda corregido
+            Devolucion.objects.filter(ticket=self, tramo=Devolucion.Tramo.A_BODEGA, resuelta__isnull=True).update(
+                resuelta=ahora, resuelta_por=autor, nota_resuelta=mensaje or "Salió de inventario.")
         return Seguimiento.objects.create(
             ticket=self,
             autor=autor,
@@ -1250,3 +1254,51 @@ class PasoSaltado(models.Model):
 
     def __str__(self):
         return f"{self.ticket.radicado} · {self.paso}"
+
+
+class Devolucion(models.Model):
+    """El área que recibió el ticket lo devuelve a la anterior porque falta algo por añadir, corregir o solucionar.
+
+    Guarda cómo estaba el ticket en el área que lo devolvió (estado, área, etapa de la ficha y responsable) para que,
+    cuando el área anterior lo corrija, vuelva exactamente al punto donde se devolvió. La lógica está en
+    tickets/devoluciones.py; aquí solo el registro.
+    """
+
+    class Tramo(models.TextChoices):
+        """Entre qué áreas va la devolución (de quien la hace → a quien le toca corregir)."""
+        A_TECNICA = "a_tecnica", "Comercial / administrativa → área técnica (informe o levantamiento)"
+        A_COMERCIAL = "a_comercial", "Área técnica → comercial (faltan datos para el levantamiento)"
+        A_REQUERIMIENTO = "a_requerimiento", "Administrativa → comercial (requerimiento incompleto)"
+        A_LISTA = "a_lista", "Bodega → lista de materiales de la propuesta"
+        A_BODEGA = "a_bodega", "Área técnica → bodega (falta material para la instalación)"
+
+    ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="devoluciones")
+    tramo = models.CharField(max_length=20, choices=Tramo.choices)
+    motivo = models.TextField("qué falta o qué hay que corregir")
+    autor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="+")
+    creada = models.DateTimeField(auto_now_add=True)
+    # Cómo estaba en el área que lo devolvió (para regresarlo igual cuando se corrija)
+    estado_previo = models.CharField(max_length=20, blank=True)
+    area_previa = models.CharField(max_length=20, blank=True)
+    etapa_previa = models.CharField(max_length=20, blank=True)
+    asignado_previo = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name="+")
+    solicitud_id_material = models.PositiveIntegerField(null=True, blank=True,
+                                                        help_text="Solicitud de material devuelta (tramo bodega → lista).")
+    resuelta = models.DateTimeField(null=True, blank=True)
+    resuelta_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="+")
+    nota_resuelta = models.TextField("qué se corrigió", blank=True)
+
+    class Meta:
+        ordering = ["-creada", "-id"]
+        verbose_name = "devolución entre áreas"
+        verbose_name_plural = "devoluciones entre áreas"
+
+    def __str__(self):
+        return f"{self.ticket.radicado} · {self.get_tramo_display()}"
+
+    @property
+    def pendiente(self):
+        """True mientras el área anterior no lo haya corregido."""
+        return self.resuelta is None

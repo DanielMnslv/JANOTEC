@@ -1,0 +1,49 @@
+{% if mostrar %}
+{% for d, info, puede in pendientes %}
+<div class="alert alert-danger border-danger-subtle mb-3" role="alert">
+  <div class="fw-semibold"><i class="bi bi-arrow-return-left"></i> Devuelto {{ info.a }}</div>
+  <div class="small mt-1"><strong>{{ d.autor.get_full_name|default:d.autor.username|default:"—" }}</strong> ({{ info.de }}) · {{ d.creada|date:"d/m/Y h:i a" }}</div>
+  <div class="mt-1" style="white-space: pre-line">{{ d.motivo }}</div>
+  <div class="small text-body-secondary mt-1">{{ info.corregir }}</div>
+  {% if d.tramo == 'a_lista' and d.solicitud_id_material %}
+    <a class="btn btn-sm btn-outline-danger mt-2" href="{% url 'inventario:solicitud' d.solicitud_id_material %}"><i class="bi bi-pencil-square"></i> Corregir la lista de material</a>
+  {% endif %}
+  {% if puede %}
+  <form method="post" action="{% url 'resolver_devolucion' d.pk %}" class="mt-2">
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+    <input type="hidden" name="volver" value="{{ volver }}">
+    <label class="form-label small fw-medium mb-1" for="nota-{{ d.pk }}">¿Qué se corrigió?</label>
+    <textarea class="form-control form-control-sm mb-2" id="nota-{{ d.pk }}" name="nota" rows="2" required minlength="5"
+              placeholder="Ej.: se agregaron las medidas del cableado y las fotos del rack"></textarea>
+    <button class="btn btn-sm btn-danger"><i class="bi bi-check2-circle"></i> Listo, corregido: devolver a {{ info.de|lower }}</button>
+  </form>
+  {% endif %}
+</div>
+{% endfor %}
+{% if opciones %}
+<div class="mb-3">
+  <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="collapse" data-bs-target="#devolver-{{ ticket.pk }}" aria-expanded="false">
+    <i class="bi bi-arrow-return-left"></i> Devolver al área anterior
+  </button>
+  <div class="collapse" id="devolver-{{ ticket.pk }}">
+    <form method="post" action="{% url 'devolver_ticket' ticket.radicado %}" class="card card-body mt-2 border-danger-subtle"
+          onsubmit="return confirm('¿Devolver el ticket con este motivo? Le llegará un aviso al área que debe corregirlo.');">
+      <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+      <input type="hidden" name="volver" value="{{ volver }}">
+      <div class="small text-body-secondary mb-2">Úselo cuando falta algo por añadir, corregir o solucionar en el paso anterior. Al cliente no le llega nada.</div>
+      {% for tramo, info in opciones %}
+      <div class="form-check mb-1">
+        <input class="form-check-input" type="radio" name="tramo" id="tramo-{{ tramo }}" value="{{ tramo }}" {% if forloop.first %}checked{% endif %} required>
+        <label class="form-check-label" for="tramo-{{ tramo }}"><strong>{{ info.boton }}</strong>
+          <span class="d-block small text-body-secondary">{{ info.ayuda }}</span></label>
+      </div>
+      {% endfor %}
+      <label class="form-label fw-medium mt-2" for="motivo-{{ ticket.pk }}">¿Qué falta o qué hay que corregir? <span class="text-danger">*</span></label>
+      <textarea class="form-control mb-2" id="motivo-{{ ticket.pk }}" name="motivo" rows="3" required minlength="10"
+                placeholder="Ej.: el informe no trae las medidas del cableado ni las fotos del rack"></textarea>
+      <div><button class="btn btn-danger btn-sm"><i class="bi bi-arrow-return-left"></i> Devolver</button></div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endif %}

@@ -293,6 +293,8 @@ def enviar_a_bodega(solicitud, autor, texto):
     solicitud.estado, solicitud.motivo_devolucion = S.VALIDACION, ""
     solicitud.save()
     _nota(solicitud, autor, "enviada a validación de bodega.")
+    from tickets.devoluciones import T as tramo, cerrar_por_reenvio
+    cerrar_por_reenvio(solicitud.ticket, tramo.A_LISTA, autor, "Lista de material corregida y enviada otra vez a bodega.")
     _avisar(solicitud, "Material por validar", [f"{autor.get_full_name() or autor.username} envió la solicitud.", *_resumen(solicitud)],
             _correos([R.BODEGA]))
     return solicitud

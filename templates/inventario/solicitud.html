@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% load inventario_extras %}
+{% extends "base.html" %}{% load inventario_extras %}{% load tickets_extras %}
 {% block titulo %}{{ s.numero }}{% endblock %}
 {% block contenido %}
 <a href="{% url 'inventario:bandeja' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Tickets en bodega</a>
@@ -17,6 +17,7 @@
 </div>
 
 {% if s.motivo_devolucion and s.estado != 'cancelada' %}<div class="alert alert-warning small"><i class="bi bi-arrow-return-left"></i> <strong>Devuelta:</strong> {{ s.motivo_devolucion }}</div>{% endif %}
+{% devolucion_ticket s.ticket %}
 {% if s.estado == 'cancelada' %}<div class="alert alert-dark small"><i class="bi bi-x-circle"></i> Cancelada: {{ s.motivo_devolucion }}</div>{% endif %}
 {% if s.estado == 'propuesta' %}<div class="alert alert-warning small"><i class="bi bi-briefcase"></i> El material está <strong>a cargo del cliente</strong>: el ticket pasó al área comercial para enviarle la propuesta. Cuando el cliente la apruebe, la solicitud sigue sola. No se entrega nada antes.</div>{% endif %}
 {% if s.estado == 'compra' %}<div class="alert alert-danger small"><i class="bi bi-cart-x"></i> <strong>Solicitud de compra:</strong> no hay existencias suficientes. Cuando bodega registre la compra en «Registrar compra», la solicitud pasa sola a firmas.</div>{% endif %}
