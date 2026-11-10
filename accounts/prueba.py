@@ -146,6 +146,11 @@ def objeto_es_de_prueba(nombre_vista, kwargs, datos):
         o = OrdenCompra.objects.filter(pk=pk).select_related("proveedor", "ticket__empresa").first()
         if o is not None and not (es_nombre_prueba(o.proveedor.razon_social) and ticket_ok(o.ticket)):
             return False
+    if pk and nombre_vista == "resolver_devolucion":
+        from tickets.models import Devolucion
+        d = Devolucion.objects.filter(pk=pk).select_related("ticket__empresa").first()
+        if d is not None and not ticket_ok(d.ticket):
+            return False
     if pk and nombre_vista.startswith("cronograma:"):
         from cronograma.models import Actividad
         a = Actividad.objects.filter(pk=pk).select_related("ticket__empresa").first()

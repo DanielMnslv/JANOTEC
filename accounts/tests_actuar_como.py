@@ -161,6 +161,18 @@ class SeguridadTests(BaseActuar):
         self.client.post(reverse("comercial:nuevo"), {"empresa": real.pk, "asunto": "No debe quedar", "contacto_nombre": "X",
                                                       "contacto_telefono": "300", "servicios": ["cctv"], "sin_visita": "on"})
         self.assertFalse(Ticket.objects.filter(asunto="No debe quedar").exists())
+        # Ni da por corregida una devolución de un ticket real, ni cierra sin propuesta un ticket real
+        from tickets.models import Devolucion
+        dev = Devolucion.objects.create(ticket=t_real, tramo=Devolucion.Tramo.A_COMERCIAL, motivo="Falta la dirección",
+                                        autor=self.admin, estado_previo=t_real.estado, area_previa=t_real.area)
+        self.como("prueba.comercial")
+        self.client.post(reverse("resolver_devolucion", args=[dev.pk]), {"nota": "Listo"})
+        dev.refresh_from_db()
+        self.assertIsNone(dev.resuelta)
+        self.como("prueba.coordinador")
+        self.client.post(reverse("finalizar_sin_propuesta", args=[t_real.radicado]), {"motivo": "No debe cerrarse nunca"})
+        t_real.refresh_from_db()
+        self.assertTrue(t_real.abierto)
         # Al volver a su usuario, el superusuario trabaja normal
         self.client.post(reverse("volver_a_mi_usuario"))
         self.client.post(reverse("recepcionar", args=[t_real.radicado]))
