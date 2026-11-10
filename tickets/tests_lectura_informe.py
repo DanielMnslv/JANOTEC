@@ -3,7 +3,7 @@ import zipfile
 from io import BytesIO
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import SimpleTestCase
+from django.test import TestCase
 from django.urls import reverse
 
 from tickets import lectura_informe as lectura
@@ -35,7 +35,7 @@ INFORME_WORD = docx(
 )
 
 
-class LeerTablaTests(SimpleTestCase):
+class LeerTablaTests(TestCase):
     def test_word_trae_equipos_y_mano_de_obra(self):
         filas = lectura.leer(BytesIO(INFORME_WORD), "Informe.docx")
         self.assertEqual(len(filas), 3)
@@ -53,6 +53,28 @@ class LeerTablaTests(SimpleTestCase):
                          ["Kit Solar IP All in One / Cámara Bala ColorVu", "Cable UTP cat 6", "Mano de obra: instalación y configuración"])
         self.assertEqual(filas[1]["cantidad"], "120 m")
         self.assertTrue(filas[2]["servicio"])
+
+    def test_pdf_generado_por_la_plataforma(self):
+        """La tabla del PDF tal como la arma el informe: celdas de varias líneas, centradas en vertical."""
+        from reportlab.lib.pagesizes import letter
+        from reportlab.platypus import Paragraph, SimpleDocTemplate
+
+        from tickets import informe as inf
+        filas = [{"cantidad": "5", "descripcion": "Kit Solar IP All in One / Cámara Bala ColorVu 4 MP con panel solar y "
+                  "batería integrada", "referencia": "DS-2XS2T47G1-LDH/4G/C18S40", "marca": "HIKVISION"},
+                 {"cantidad": "120 m", "descripcion": "Cable UTP cat 6", "referencia": "", "marca": ""},
+                 {"cantidad": "1", "descripcion": "Dos días 2 técnicos para la instalación de las cámaras", "servicio": True}]
+        buf = BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=letter)
+        doc.build([Paragraph("INTRODUCCIÓN", inf.E_TITULO), Paragraph("Texto.", inf.E_TEXTO),
+                   *inf._tabla_equipos("TABLA DE EQUIPOS Y MATERIALES REQUERIDOS", filas, doc.width),
+                   Paragraph("JUSTIFICACIÓN", inf.E_TITULO), Paragraph("1 2 no es de la tabla", inf.E_TEXTO)])
+        leidas = lectura.leer(BytesIO(buf.getvalue()), "Informe.PDF")
+        self.assertEqual(leidas[0], {"cantidad": "5", "descripcion": filas[0]["descripcion"],
+                                     "referencia": "DS-2XS2T47G1-LDH/4G/C18S40", "marca": "HIKVISION", "servicio": False})
+        self.assertEqual((leidas[1]["cantidad"], leidas[1]["descripcion"], leidas[1]["referencia"]), ("120 m", "Cable UTP cat 6", ""))
+        self.assertEqual((leidas[2]["descripcion"], leidas[2]["servicio"]), (filas[2]["descripcion"], True))
+        self.assertEqual(len(leidas), 3)
 
     def test_formatos_no_soportados(self):
         with self.assertRaises(lectura.LecturaNoDisponible):

@@ -6,3 +6,4 @@ gunicorn>=22.0        # servidor de producción (Linux)
 openpyxl>=3.1         # importar_maestros (Excel)
 reportlab>=4.0         # PDF de la ficha de requerimiento
 anthropic>=2.0         # botón «Mejorar redacción» del acta (opcional: sin ANTHROPIC_API_KEY no se usa)
+pypdf>=5.0            # leer la tabla de equipos y materiales de un informe subido en PDF
