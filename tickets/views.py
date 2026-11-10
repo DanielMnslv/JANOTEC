@@ -1856,7 +1856,8 @@ def foto_zona(request, pk):
 @login_required
 @personal_requerido
 def informe_borrador_pdf(request, radicado):
-    """PDF del borrador (con marca de agua) o el definitivo si ya se aprobó."""
+    """PDF del informe: con marca de agua mientras es borrador; en limpio desde que coordinación lo envía a dirección
+    (dirección revisa el documento como quedaría, y lo corrige o lo aprueba); el archivo definitivo si ya se aprobó."""
     from . import informe as inf
 
     ticket = obtener_ticket(request.user, radicado)
@@ -1869,7 +1870,7 @@ def informe_borrador_pdf(request, radicado):
                                 filename=f"Informe_tecnico_{ticket.radicado}.pdf", content_type="application/pdf")
         except FileNotFoundError:
             pass
-    nombre, contenido = inf.pdf(borrador, definitivo=False)
+    nombre, contenido = inf.pdf(borrador, definitivo=borrador.en_revision)
     respuesta = HttpResponse(contenido, content_type="application/pdf")
     respuesta["Content-Disposition"] = f'inline; filename="{nombre}"'
     return respuesta

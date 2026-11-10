@@ -452,7 +452,7 @@ def _bloque_firma(usuario, ancho):
 
 
 def pdf(borrador, definitivo=False):
-    """(nombre, bytes). Si no es el definitivo lleva la marca de agua BORRADOR."""
+    """(nombre, bytes). Sin ``definitivo`` lleva la marca de agua BORRADOR (en revisión de dirección ya sale en limpio)."""
     t = borrador.ticket
     actas = actas_del_ticket(t)
     buf = BytesIO()

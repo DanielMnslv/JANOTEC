@@ -9,7 +9,7 @@
   </div>
   <div class="d-flex gap-2 align-items-center">
     {% if borrador.aprobado %}<span class="badge text-bg-success">Aprobado · pasado a limpio</span>{% elif borrador.en_revision %}<span class="badge text-bg-info">En revisión de dirección</span>{% else %}<span class="badge text-bg-warning">Borrador</span>{% endif %}
-    <a class="btn btn-outline-primary btn-sm" href="{% url 'informe_borrador_pdf' ticket.radicado %}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> {% if borrador.aprobado %}Ver informe aprobado{% else %}Ver PDF borrador{% endif %}</a>
+    <a class="btn btn-outline-primary btn-sm" href="{% url 'informe_borrador_pdf' ticket.radicado %}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> {% if borrador.aprobado %}Ver informe aprobado{% elif borrador.en_revision %}Ver informe en limpio{% else %}Ver PDF borrador{% endif %}</a>
   </div>
 </div>
 
@@ -24,7 +24,7 @@
   <div class="alert alert-info small mb-3">
     <i class="bi bi-info-circle"></i> La plataforma redactó este borrador con los datos del acta. El <b>anexo de fotos</b> sale del acta en el PDF; aquí se corrige el texto y se diligencia la tabla de lo que se propone (si el informe es solo informativo, la tabla no sale).
     {% if borrador.en_revision %}
-      {% if puede_aprobar %}Coordinación lo envió para su aprobación: corríjalo si hace falta y oprima <b>Aprobar y pasar a limpio</b>, o devuélvalo con lo que hay que corregir.{% else %}Está en revisión de dirección: dirección lo aprueba o lo devuelve con observaciones.{% endif %}
+      {% if puede_aprobar %}Coordinación lo envió para su aprobación (oprima «Ver informe en limpio» para verlo como quedará): añada, modifique o corrija lo que considere y oprima <b>Aprobar y pasar a limpio</b>, o devuélvalo con lo que hay que corregir.{% else %}Está en revisión de dirección: dirección lo aprueba o lo devuelve con observaciones.{% endif %}
     {% elif puede_aprobar %}Cuando quede bien, oprima <b>Aprobar y pasar a limpio</b>.
     {% elif puede_enviar %}Cuando quede bien, oprima <b>Enviar a dirección</b>: dirección lo revisa y lo aprueba.
     {% else %}Coordinación lo revisa y lo envía a dirección, que lo aprueba.{% endif %}

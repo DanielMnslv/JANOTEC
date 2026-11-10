@@ -1989,6 +1989,10 @@ class InformeBorradorTests(BaseTickets):
         b.refresh_from_db()
         self.assertTrue(b.en_revision)
         self.assertEqual([m.to for m in mail.outbox], [["dir@x.co"]])
+        self.assertIn("/informe/borrador.pdf", mail.outbox[0].body)
+        # Dirección revisa el informe en limpio, sin la marca BORRADOR
+        r = self.client.get(reverse("informe_borrador_pdf", args=[self.ticket.radicado]))
+        self.assertNotIn("BORRADOR", r["Content-Disposition"])
         self.client.post(self.url, {**datos, "introduccion": "Cambio de coordinación", "accion": "guardar"})
         b.refresh_from_db()
         self.assertEqual(b.introduccion, "Texto corregido")

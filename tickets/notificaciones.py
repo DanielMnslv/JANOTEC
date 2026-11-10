@@ -249,8 +249,10 @@ def informe_para_aprobar(borrador, autor):
         "\n".join([f"{autor.get_full_name() or autor.username} envió el {borrador.get_tipo_display().split(' (')[0].lower()} "
                     "para su revisión y aprobación.", "",
                     f"Empresa: {ticket.empresa}" + (f" · Sede: {ticket.sede}" if ticket.sede else ""), "",
-                    "Puede corregirlo, aprobarlo (queda como informe oficial) o devolverlo con lo que hay que corregir.",
-                    "", f"Revisar: {_enlace(ticket).rsplit('/', 1)[0]}/informe/borrador/"]),
+                    "Puede añadir, modificar o corregir lo que considere, aprobarlo (queda como informe oficial) o "
+                    "devolverlo a coordinación con lo que hay que corregir.", "",
+                    f"Ver el informe en limpio (PDF): {_enlace(ticket).rsplit('/', 1)[0]}/informe/borrador.pdf",
+                    f"Revisar, corregir y aprobar: {_enlace(ticket).rsplit('/', 1)[0]}/informe/borrador/"]),
         list(direccion),
     )
 
