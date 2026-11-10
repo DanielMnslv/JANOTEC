@@ -113,6 +113,8 @@ AUTH_PASSWORD_VALIDATORS = [
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "inicio"
 LOGOUT_REDIRECT_URL = "login"
+# Enlaces para crear o recuperar la contraseña: válidos 7 días y de un solo uso (invitar_cambio_clave)
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 24 * 7
 
 LANGUAGE_CODE = "es-co"
 TIME_ZONE = "America/Bogota"
