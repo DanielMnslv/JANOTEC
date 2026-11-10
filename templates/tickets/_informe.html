@@ -5,17 +5,57 @@
     {% include "tickets/_borrador_informe.html" %}
     <p class="small text-muted-jn">{% if borrador.aprobado %}Escriba las conclusiones para el cliente (opcional) y elija a quién se entrega.{% else %}Adjunte el informe técnico de la visita y escriba las conclusiones. Luego elija a quién se entrega.{% endif %}</p>
     <form method="post" action="{% url 'entregar_informe' ticket.radicado %}" enctype="multipart/form-data">{% csrf_token %}
-      <input type="file" name="informe" class="form-control mb-2" accept=".pdf,.doc,.docx,image/*" multiple>
+      <input type="file" name="informe" id="inf-archivo" class="form-control mb-2" accept=".pdf,.doc,.docx,image/*" multiple>
       <textarea name="nota" class="form-control mb-3" rows="3" placeholder="Conclusiones del informe (las ve el cliente)"></textarea>
       <details class="mb-3" {% if ticket.ficha or borrador.es_estudio %}open{% endif %}>
         <summary class="small fw-semibold">Si pasa a comercial: lo que se va a cotizar</summary>
-        <div class="row g-2 mt-1">
-          <div class="col-md-6"><label class="form-label small" for="inf-servicios">Servicios a cotizar (uno por línea)</label>
-            <textarea name="servicios" id="inf-servicios" class="form-control" rows="4" placeholder="1 Desmonte del sistema de alarma PACOM&#10;1 Inventario y registro fotográfico">{% if borrador.aprobado and borrador.es_estudio %}{{ borrador.servicios }}{% endif %}</textarea>
-            <div class="form-text">Se cotizan; no pasan por bodega.</div></div>
-          <div class="col-md-6"><label class="form-label small" for="inf-materiales">Materiales y equipos a suministrar (uno por línea, con cantidad)</label>
-            <textarea name="materiales" id="inf-materiales" class="form-control" rows="4" placeholder="3 Cámara bala IP 4 MP&#10;80 m Cable UTP cat 6">{% if borrador.aprobado and borrador.es_estudio %}{{ borrador.materiales_para_comercial }}{% endif %}</textarea>
-            <div class="form-text">Lo que bodega alista si el cliente aprueba. Vacío si solo hay servicios.</div></div>
+        <div class="mt-2">
+          {% if filas_requeridas %}
+            {# Ya están en el informe: no se escriben otra vez, pasan tal cual a comercial #}
+            <div class="small mb-2"><i class="bi bi-check2-circle text-success"></i> Pasa a comercial <b>la tabla del informe técnico</b>, tal cual; no hay que escribirla otra vez.
+              {% if not borrador.aprobado %}Si hay que cambiar algo, <a href="{% url 'informe_borrador' ticket.radicado %}">corríjalo en el informe</a>.{% endif %}</div>
+            <div class="table-responsive"><table class="table table-sm table-bordered align-middle small mb-0">
+              <thead class="table-light"><tr><th>NUM</th><th>CANT</th><th>DESCRIPCIÓN</th><th>REFERENCIA</th><th>MARCA</th></tr></thead>
+              <tbody>{% for f in filas_requeridas %}<tr><td class="text-center">{{ forloop.counter }}</td><td>{{ f.cantidad }}</td><td>{{ f.descripcion }}</td>
+                {% if f.servicio %}<td colspan="2" class="text-center text-muted-jn">Mano de obra</td>{% else %}<td>{{ f.referencia|default:"—" }}</td><td>{{ f.marca|default:"—" }}</td>{% endif %}</tr>{% endfor %}</tbody>
+            </table></div>
+          {% else %}
+            <div class="small text-muted-jn mb-2" id="lectura-informe"><i class="bi bi-magic"></i> Si sube arriba el informe en Word (.docx) o PDF, la tabla se llena sola con sus equipos y materiales; solo revísela.</div>
+            {% include "tickets/_tabla_requeridos.html" %}
+            <div class="form-text mt-n2">Los equipos y materiales los alista bodega si el cliente aprueba; la mano de obra se cotiza y no pasa por bodega.</div>
+            <script>
+            (function () {
+              const entrada = document.getElementById('inf-archivo'), aviso = document.getElementById('lectura-informe');
+              const cuerpo = document.getElementById('filas-requeridas'), total = document.getElementById('filas-total');
+              entrada.addEventListener('change', function () {
+                const archivos = Array.from(entrada.files).filter(f => /\.(docx|pdf)$/i.test(f.name));
+                if (!archivos.length) return;
+                const datos = new FormData();
+                archivos.forEach(f => datos.append('informe', f));
+                datos.append('csrfmiddlewaretoken', entrada.form.querySelector('[name=csrfmiddlewaretoken]').value);
+                aviso.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Leyendo la tabla de equipos y materiales del informe…';
+                fetch('{% url "leer_materiales_informe" ticket.radicado %}', {method: 'POST', body: datos})
+                  .then(r => r.json()).then(function (res) {
+                    if (res.filas.length) {
+                      cuerpo.innerHTML = ''; total.value = 0;
+                      res.filas.forEach(function (f) {
+                        const i = total.value;
+                        cuerpo.insertAdjacentHTML('beforeend', document.getElementById(f.servicio ? 'fila-servicio' : 'fila-equipo').innerHTML.replaceAll('__i__', i));
+                        total.value = Number(i) + 1;
+                        ['cantidad', 'descripcion', 'referencia', 'marca'].forEach(function (c) {
+                          const campo = cuerpo.querySelector('[name="fila-' + i + '-' + c + '"]');
+                          if (campo) campo.value = f[c] || '';
+                        });
+                      });
+                      entrada.closest('form').querySelector('details').open = true;
+                    }
+                    aviso.className = 'small mb-2 ' + (res.filas.length ? 'text-success' : 'text-warning-emphasis');
+                    aviso.textContent = res.mensaje;
+                  }).catch(function () { aviso.textContent = 'No se pudo leer el archivo: escriba la tabla.'; });
+              });
+            })();
+            </script>
+          {% endif %}
         </div>
       </details>
       {% if not borrador.aprobado and not user.es_direccion %}

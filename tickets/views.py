@@ -410,6 +410,8 @@ def ticket_detalle(request, radicado):
 
         contexto["borrador"] = inf.vigente(ticket)
         contexto["tipo_sugerido"] = inf.tipo_sugerido(ticket)
+        # «Si pasa a comercial»: la misma tabla de equipos y materiales del informe, ya llena con sus filas
+        contexto["filas_requeridas"] = _filas_para_editar(contexto["borrador"]) if contexto["borrador"] else []
     if contexto["es_levantamiento"]:
         from comercial.forms import InformeForm
         b = contexto.get("borrador")
@@ -1608,10 +1610,17 @@ def entregar_informe(request, radicado):
                                        subido_por=request.user, es_informe=True)
         if destino == "comercial":
             from comercial import servicios as com
-            servicios_txt = request.POST.get("servicios", "").strip()
-            materiales_txt = request.POST.get("materiales", "").strip()
-            if aprobado and aprobado.es_estudio and not servicios_txt and not materiales_txt:
-                servicios_txt, materiales_txt = aprobado.servicios.strip(), aprobado.materiales_para_comercial()
+            if borrador and borrador.filas_requeridas():
+                # Lo que se cotiza ya está en la tabla del informe: pasa tal cual, sin escribirlo otra vez
+                servicios_txt, materiales_txt = borrador.servicios.strip(), borrador.materiales_para_comercial()
+            else:
+                # Sin tabla en el informe: la de «Si pasa a comercial» (escrita o leída del archivo subido)
+                suministros, servicios_txt, imagenes = _tabla_requeridos(request)
+                servicios_txt = servicios_txt or request.POST.get("servicios", "").strip()
+                materiales_txt = (InformeBorrador(suministros=suministros).materiales_para_comercial()
+                                  or request.POST.get("materiales", "").strip())
+                if borrador:
+                    _guardar_tabla_en_informe(borrador, suministros, servicios_txt, imagenes)
             if not servicios_txt and not materiales_txt:
                 transaction.set_rollback(True)
                 messages.error(request, "Para pasar a comercial escriba los servicios a cotizar, los materiales y equipos a "
@@ -1627,6 +1636,50 @@ def entregar_informe(request, radicado):
             notificaciones.actualizacion_para_cliente(ticket, seg_estado)
             messages.success(request, "Informe entregado: el cliente lo ve al consultar su solicitud.")
     return redirect(ticket)
+
+
+@login_required
+@personal_requerido
+@require_POST
+def leer_materiales_informe(request, radicado):
+    """Lee la tabla de equipos y materiales del informe subido (Word o PDF) para llenar «Si pasa a comercial».
+
+    Responde JSON {filas, mensaje}; no guarda nada: la persona revisa la tabla antes de pasarla a comercial."""
+    from django.http import JsonResponse
+
+    from . import lectura_informe
+
+    ticket = obtener_ticket(request.user, radicado)
+    if not _puede_entregar_informe(request.user, ticket):
+        raise PermissionDenied
+    for archivo in request.FILES.getlist("informe"):
+        if archivo.size > settings.ADJUNTO_MAX_MB * 1024 * 1024:
+            continue
+        try:
+            filas = lectura_informe.leer(archivo, archivo.name)
+        except lectura_informe.LecturaNoDisponible as e:
+            return JsonResponse({"filas": [], "mensaje": str(e)})
+        if filas:
+            return JsonResponse({"filas": filas, "mensaje": f"Se trajeron {len(filas)} fila(s) de «{archivo.name}». "
+                                                            "Revíselas antes de pasar a comercial."})
+    return JsonResponse({"filas": [], "mensaje": "No se encontró la tabla de equipos y materiales en el archivo: "
+                                                 "escríbala en la tabla."})
+
+
+def _guardar_tabla_en_informe(borrador, suministros, servicios, imagenes):
+    """Lo ajustado en «Si pasa a comercial» queda también en la tabla del informe, para que ambos digan lo mismo.
+
+    Solo si el informe aún no está aprobado (el aprobado ya es un documento oficial y no se toca)."""
+    from .models import ImagenEquipoInforme
+
+    if borrador.aprobado:
+        return
+    borrador.suministros, borrador.servicios = suministros, servicios
+    borrador.save(update_fields=["suministros", "servicios", "actualizado"])
+    for descripcion, archivo in imagenes.items():
+        if os.path.splitext(archivo.name)[1].lower() in (".jpg", ".jpeg", ".png", ".webp"):
+            borrador.imagenes_equipos.filter(descripcion=descripcion).delete()
+            ImagenEquipoInforme.objects.create(borrador=borrador, descripcion=descripcion[:300], archivo=archivo)
 
 
 def _borrador_o_404(ticket):

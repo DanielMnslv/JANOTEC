@@ -2078,7 +2078,10 @@ class InformeBorradorTests(BaseTickets):
         self.client.post(self.url, {**datos, "accion": "aprobar"})
         b.refresh_from_db()
         self.assertTrue(b.aprobado)
-        self.assertContains(self.client.get(self.ticket.get_absolute_url()), "Cámara IP 4 MP bala Hikvision")
+        detalle = self.client.get(self.ticket.get_absolute_url())
+        self.assertContains(detalle, "la tabla del informe técnico</b>, tal cual")
+        self.assertContains(detalle, "<td>Cámara IP 4 MP bala</td>")
+        self.assertNotContains(detalle, 'name="filas-total"')  # no se pide escribirla otra vez
         # Pasa a comercial sin escribir de nuevo los equipos: van solos los del estudio
         self.client.post(reverse("entregar_informe", args=[self.ticket.radicado]), {"destino": "comercial"})
         informe = self.ticket.ficha.informe
