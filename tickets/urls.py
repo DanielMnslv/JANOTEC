@@ -46,6 +46,7 @@ urlpatterns = [
     path("ticket/<str:radicado>/etapas/", views.guardar_etapas, name="guardar_etapas"),
     path("ticket/<str:radicado>/aplazar/", views.aplazar, name="aplazar"),
     path("ticket/<str:radicado>/omitir-paso/", views.omitir_paso, name="omitir_paso"),
+    path("ticket/<str:radicado>/finalizar/", views.finalizar_sin_propuesta, name="finalizar_sin_propuesta"),
     path("ticket/<str:radicado>/informe/", views.entregar_informe, name="entregar_informe"),
     path("ticket/<str:radicado>/informe/borrador/", views.informe_borrador, name="informe_borrador"),
     path("ticket/<str:radicado>/informe/borrador.pdf", views.informe_borrador_pdf, name="informe_borrador_pdf"),

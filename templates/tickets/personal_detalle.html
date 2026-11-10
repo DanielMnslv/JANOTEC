@@ -115,6 +115,19 @@
           </div>
         </form>
       </div>
+      {% if puede_finalizar %}
+      <details class="card-body border-top" id="cerrar-finalizar">
+        <summary class="fw-semibold"><i class="bi bi-check2-all text-success"></i> Cerrar y finalizar (el área técnica se encargó de todo, sin propuesta)</summary>
+        <form method="post" action="{% url 'finalizar_sin_propuesta' ticket.radicado %}" class="mt-2"
+              onsubmit="return confirm('¿Cerrar y finalizar {{ ticket.radicado }} sin propuesta?{% if ficha %} La ficha comercial queda cancelada.{% endif %}')">{% csrf_token %}
+          <p class="small text-muted-jn mb-2">Úselo cuando no hace falta propuesta: el ticket queda <b>Cerrado</b> en el área técnica{% if ficha and ficha.etapa != "aprobada" and ficha.etapa != "instalacion" %}, la ficha comercial ({{ ficha.get_etapa_display }}) se cancela{% endif %} y lo que estuviera devuelto se da por resuelto.</p>
+          <label class="form-label small" for="motivo-finalizar">¿Qué hizo el área técnica o por qué no se necesita propuesta? Queda como nota interna.</label>
+          <textarea class="form-control form-control-sm mb-2" id="motivo-finalizar" name="motivo" rows="2" minlength="10" required placeholder="Ej.: se reemplazó la fuente con material de bodega; no requiere cotización"></textarea>
+          <div class="form-check small mb-2"><input class="form-check-input" type="checkbox" name="avisar_cliente" value="1" id="avisar-finalizar" checked><label class="form-check-label" for="avisar-finalizar">El cliente ve el cierre en el historial de su solicitud</label></div>
+          <button class="btn btn-success btn-sm"><i class="bi bi-check2-all"></i> Cerrar y finalizar</button>
+        </form>
+      </details>
+      {% endif %}
     </div>
 
     {% if user.es_supervisor and ticket.abierto %}{% include "tickets/_etapas_editor.html" %}{% endif %}

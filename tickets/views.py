@@ -402,6 +402,7 @@ def ticket_detalle(request, radicado):
                 "visitas_previas": reincidencia.visitas_previas(ticket) if request.user.es_personal else [],
                 "puede_informe": ticket.estado == E.INFORME and _puede_entregar_informe(request.user, ticket),
                 "pasos_tecnica": pasos.calcular(ticket) if request.user.es_personal else None,
+                "puede_finalizar": cierre.puede_finalizar(request.user, ticket),
                 "acta_bloqueada": not pasos.puede_hacer_visita(ticket)
                 and _puede_diligenciar_acta(request.user, ticket, ignorar_pasos=True)}
     if contexto["puede_informe"] or contexto["es_levantamiento"] and _puede_entregar_informe(request.user, ticket):
@@ -736,6 +737,28 @@ def gestionar(request, radicado):
                                       "descontarlo en el acta de servicio o devolverlo a bodega indicando este ticket.")
     if traspaso and not tickets_visibles(request.user).filter(pk=ticket.pk).exists():
         return redirect("panel")  # pasó al área comercial: el coordinador técnico ya no lo ve en su área
+    return redirect(ticket)
+
+
+@login_required
+@require_POST
+def finalizar_sin_propuesta(request, radicado):
+    """Coordinación técnica cierra y finaliza el ticket sin propuesta: el área técnica se encargó de todo."""
+    ticket = obtener_ticket(request.user, radicado)
+    if not cierre.puede_finalizar(request.user, ticket):
+        raise PermissionDenied
+    motivo = " ".join(request.POST.get("motivo", "").split())
+    if len(motivo) < cierre.MINIMO_MOTIVO:
+        messages.error(request, f"Escriba qué hizo el área técnica o por qué no hace falta propuesta (mínimo "
+                                f"{cierre.MINIMO_MOTIVO} caracteres): queda en el historial.")
+        return redirect(f"{ticket.get_absolute_url()}#cerrar-finalizar")
+    cierre.finalizar_sin_propuesta(ticket, request.user, motivo, avisar_cliente=bool(request.POST.get("avisar_cliente")))
+    messages.success(request, f"{ticket.radicado} quedó cerrado y finalizado por el área técnica, sin propuesta.")
+    from inventario.solicitudes import resumen_pendiente
+    pendiente = resumen_pendiente(ticket)
+    if pendiente:
+        messages.warning(request, f"Atención: quedó material sin cuadrar en {ticket.radicado}: {pendiente}. El técnico debe "
+                                  "descontarlo en el acta de servicio o devolverlo a bodega indicando este ticket.")
     return redirect(ticket)
 
 
