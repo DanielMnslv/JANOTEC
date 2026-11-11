@@ -397,18 +397,27 @@ def _resumen_propuesta(cotizacion, codigo, linea_servicio):
         if con_descuento:
             fila.append(_p(f"{linea.descuento.normalize():f}%" if linea.descuento else "—", centro))
         filas_d.append(fila + [_p(_pesos(linea.calculo()["base"]), derecha)])
-    anchos = [84, None, 36, 54] + ([34] if con_descuento else []) + [62]
+    anchos = [84, None, 40, 70] + ([34] if con_descuento else []) + [66]
     anchos[1] = ANCHO - sum(a for a in anchos if a)
-    desglose = Table(filas_d, colWidths=anchos, repeatRows=1)
-    desglose.setStyle(TableStyle(malla + [("BACKGROUND", (0, 0), (-1, 0), GRIS_TITULO)]))
+    # Los totales van en la MISMA tabla del desglose: la etiqueta ocupa de «Cant.» a la columna antes de «Total» y el
+    # valor queda justo bajo «Total», así las columnas y los bordes coinciden (antes era otra tabla y quedaba corrida).
+    ultima_linea = len(filas_d) - 1
     pie_filas = [("TOTAL (sin IVA):", tot["base"]), ("IVA:", tot["iva"]), ("TOTAL (IVA incluido):", tot["total"])]
     if tot["descuento"]:
         pie_filas.insert(0, ("Descuento:", tot["descuento"]))
-    pie = [[_p(e, derecha_b), _p(_pesos(v), derecha_b)] for e, v in pie_filas[:-1]]
-    pie.append([_p(pie_filas[-1][0], titulo_d), _p(_pesos(pie_filas[-1][1]), titulo_d)])
-    totales = Table(pie, colWidths=[100, 62], hAlign="RIGHT")
-    totales.setStyle(TableStyle(malla + [("BACKGROUND", (0, 0), (-1, -2), gris), ("BACKGROUND", (0, -1), (-1, -1), OLIVA)]))
-    historia += [_barra("DESGLOSE DE EQUIPOS COTIZADOS", ANCHO), desglose, totales, Spacer(1, 3 * mm)]
+    vacias = len(anchos) - 4  # columnas que ocupa la etiqueta además de la primera
+    for i, (etiqueta, valor) in enumerate(pie_filas):
+        estilo = titulo_d if i == len(pie_filas) - 1 else derecha_b
+        filas_d.append(["", "", _p(etiqueta, estilo)] + [""] * vacias + [_p(_pesos(valor), estilo)])
+    primera_total = ultima_linea + 1
+    estilo_desglose = [s for s in malla if s[0] != "GRID"] + [
+        ("GRID", (0, 0), (-1, ultima_linea), 0.5, GRIS), ("GRID", (2, primera_total), (-1, -1), 0.5, GRIS),
+        ("BACKGROUND", (0, 0), (-1, 0), GRIS_TITULO),
+        ("BACKGROUND", (2, primera_total), (-1, -2), gris), ("BACKGROUND", (2, -1), (-1, -1), OLIVA)]
+    estilo_desglose += [("SPAN", (2, r), (-2, r)) for r in range(primera_total, len(filas_d))]
+    desglose = Table(filas_d, colWidths=anchos, repeatRows=1)
+    desglose.setStyle(TableStyle(estilo_desglose))
+    historia += [_barra("DESGLOSE DE EQUIPOS COTIZADOS", ANCHO), desglose, Spacer(1, 3 * mm)]
 
     persona = cotizacion.elaborada_por or ficha.comercial  # quien la armó en administrativa (antes, el asesor)
     elaboro = (persona.get_full_name() or persona.username) if persona else ""

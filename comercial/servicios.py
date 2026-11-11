@@ -264,9 +264,38 @@ def solicitar_cambios(ficha, autor, cambios):
                   _correos_propuesta(ficha))
 
 
-def registrar_respuesta(ficha, autor, aprobada, motivo=""):
-    """El cliente (o el asesor en su nombre) aprueba o no la propuesta."""
+class PlazoRequerido(ValueError):
+    """La propuesta es de alquiler y se aprobó sin elegir uno de sus plazos."""
+
+
+def plazo_elegido(version, plazo):
+    """Valida el plazo que eligió el cliente: (meses, canon) si la versión es de alquiler, (None, None) si es venta.
+
+    Lanza PlazoRequerido si es alquiler y el plazo no es uno de los ofrecidos."""
+    opciones = version.opciones_alquiler() if version else []
+    if not opciones:
+        return None, None
+    try:
+        meses = int(plazo)
+    except (TypeError, ValueError):
+        meses = None
+    fila = next((f for f in opciones if f["plazo"] == meses), None)
+    if fila is None:
+        raise PlazoRequerido("La propuesta es de alquiler: elija el plazo (" +
+                             ", ".join(f"{f['plazo']}" for f in opciones) + " meses).")
+    return fila["plazo"], fila["canon"]
+
+
+def registrar_respuesta(ficha, autor, aprobada, motivo="", plazo=None):
+    """El cliente (o el asesor en su nombre) aprueba o no la propuesta.
+
+    Si es de alquiler o híbrido, al aprobar se exige el plazo que eligió (12, 24, 36…) y queda con su canon mensual;
+    lanza PlazoRequerido si falta o no es uno de los ofrecidos."""
     t = ficha.ticket
+    version_previa = ficha.version_actual
+    meses = canon = None
+    if aprobada and version_previa and version_previa.estado == PropuestaVersion.Estado.ENVIADA:
+        meses, canon = plazo_elegido(version_previa, plazo)
     with transaction.atomic():
         ficha.etapa = F.Etapa.APROBADA if aprobada else F.Etapa.RECHAZADA
         ficha.fecha_respuesta = timezone.now()
@@ -278,12 +307,14 @@ def registrar_respuesta(ficha, autor, aprobada, motivo=""):
             version.estado = PropuestaVersion.Estado.APROBADA if aprobada else PropuestaVersion.Estado.RECHAZADA
             version.motivo = "" if aprobada else ficha.motivo_rechazo
             version.respondida = ficha.fecha_respuesta
-            version.save(update_fields=["estado", "motivo", "respondida"])
+            version.plazo_meses, version.canon_mensual = meses, canon
+            version.save(update_fields=["estado", "motivo", "respondida", "plazo_meses", "canon_mensual"])
             if aprobada and version.valor:
                 ficha.valor_propuesta = version.valor
                 ficha.save(update_fields=["valor_propuesta"])
         if aprobada:
-            seg = _seguimiento(t, autor, "Propuesta aprobada. Estamos alistando los materiales y equipos para la instalación.")
+            eleccion = f" en alquiler a {version.plazo_texto}" if version and version.plazo_meses else ""
+            seg = _seguimiento(t, autor, f"Propuesta aprobada{eleccion}. Estamos alistando los materiales y equipos para la instalación.")
         else:
             seg = _seguimiento(t, autor, f"La propuesta no fue aprobada: {ficha.motivo_rechazo}")
             t.cambiar_estado(T.Estado.CERRADO, autor, "Solicitud comercial cerrada sin aprobación.")
@@ -308,6 +339,12 @@ def _acciones_propuesta(version):
     if version is None:
         return []
     from .respuesta import enlace
+    opciones = version.opciones_alquiler()
+    if opciones:  # alquiler: un botón por plazo, así el clic ya dice cuántos meses eligió
+        aprobar = [(f"Apruebo a {f['plazo']} meses (${f['canon']:,.0f}/mes)".replace(",", "."),
+                    f"{enlace(version, 'aprobar')}&plazo={f['plazo']}", "aprobar") for f in opciones]
+        return aprobar + [("La apruebo con cambios", enlace(version, "cambios"), "cambios"),
+                          ("No la apruebo", enlace(version, "rechazar"), "rechazar")]
     return [("Apruebo la propuesta", enlace(version, "aprobar"), "aprobar"),
             ("La apruebo con cambios", enlace(version, "cambios"), "cambios"),
             ("No la apruebo", enlace(version, "rechazar"), "rechazar")]

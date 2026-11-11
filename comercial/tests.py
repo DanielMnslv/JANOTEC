@@ -722,7 +722,10 @@ class CotizadorTests(BaseComercial):
         cot.save()
         desglose = [f for f in _resumen_propuesta(cot, "PE-1-V1", "Control de acceso") if getattr(f, "_cellvalues", None) and f._ncols >= 5][0]
         self.assertEqual(desglose._cellvalues[1][0].text, "EQUIPOS")
-        self.assertEqual(desglose._cellvalues[-1][0].text, "MANO DE OBRA")
+        categorias = [fila[0].text for fila in desglose._cellvalues[1:] if hasattr(fila[0], "text")]
+        self.assertEqual(categorias[-1], "MANO DE OBRA")
+        # Los totales van en la misma tabla, debajo de la columna «Total», para que queden alineados
+        self.assertTrue(all(fila[0] == "" for fila in desglose._cellvalues[-3:]))
         _, contenido = propuesta_pdf(cot, "PE-1-V1", 1)
         self.assertEqual(contenido.count(b"/Type /Page") - contenido.count(b"/Type /Pages"), 3)
 
@@ -1010,3 +1013,67 @@ class PasoAPasoComercialTests(BaseComercial):
         etapas = [v for v, _ in self.client.get(reverse("comercial:detalle", args=[t.radicado])).context["form_gestion"].fields["etapa"].choices]
         self.assertIn("aprobada", etapas)
         self.assertNotIn("gestion", etapas)
+
+
+class PlazoAlquilerTests(BaseComercial):
+    """En alquiler el cliente aprueba eligiendo el plazo (12, 24 o 36 meses) y queda guardado con su canon."""
+
+    lineas = CotizadorTests.lineas
+
+    def enviar_alquiler(self):
+        t = self.crear()
+        self.client.post(reverse("comercial:informe", args=[t.radicado]), {"necesidad": "Cámaras", "servicios": "CCTV"})
+        url = reverse("comercial:cotizador", args=[t.radicado])
+        mail.outbox.clear()
+        self.client.post(url, {**self.lineas([("Sistema de videovigilancia", "1", "1000000", "0")]), "modalidad": "alquiler",
+                               "margen": "10", **URGENTE, "accion": "enviar"})
+        t.refresh_from_db()
+        self.assertEqual(t.ficha.etapa, "enviada")
+        return t
+
+    def test_aprueba_desde_el_correo_con_el_plazo(self):
+        import re
+        from urllib.parse import urlparse
+        t = self.enviar_alquiler()
+        correo = next(m for m in mail.outbox if "leidy@a.co" in m.to)
+        html = correo.alternatives[0][0].replace("&amp;", "&")
+        botones = re.findall(r'href="(https?://[^"]+/propuesta/[^"?]+/\?r=aprobar&plazo=(\d+))"', html)
+        self.assertEqual([p for _, p in botones], ["12", "24", "36"])
+        self.assertIn("Apruebo a 24 meses", html)
+        ruta = urlparse(dict((p, u) for u, p in botones)["24"]).path
+        # Sin plazo no aprueba: muestra las opciones
+        pagina = self.client.get(ruta, {"r": "aprobar"})
+        self.assertNotContains(pagina, 'id="aprobar-ya"')
+        self.assertContains(pagina, "¿a cuántos meses el alquiler?")
+        self.assertContains(self.client.post(ruta, {"accion": "aprobar"}), "Elija el plazo del alquiler")
+        self.assertContains(self.client.post(ruta, {"accion": "aprobar", "plazo": "18"}), "Elija el plazo del alquiler")
+        t.ficha.refresh_from_db()
+        self.assertEqual(t.ficha.etapa, "enviada")
+        # El botón de 24 meses trae el plazo y se registra con él
+        self.assertContains(self.client.get(ruta, {"r": "aprobar", "plazo": "24"}), 'name="plazo" value="24"')
+        self.client.post(ruta, {"accion": "aprobar", "plazo": "24"})
+        t.ficha.refresh_from_db()
+        v = t.ficha.version_actual
+        canon = next(f["canon"] for f in t.ficha.cotizaciones.get().canones()["filas"] if f["plazo"] == 24)
+        self.assertEqual((t.ficha.etapa, v.plazo_meses, v.canon_mensual), ("instalacion", 24, round(canon, 2)))
+        self.assertContains(self.client.get(ruta), "en alquiler a 24 meses")
+        self.assertTrue(t.seguimientos.filter(mensaje__contains="en alquiler a 24 meses").exists())
+
+    def test_comercial_registra_la_aprobacion_con_el_plazo(self):
+        t = self.enviar_alquiler()
+        url = reverse("comercial:gestionar", args=[t.radicado])
+        from .forms import GestionComercialForm
+        form = GestionComercialForm({"etapa": "aprobada", "visibilidad": "interno"}, ficha=t.ficha, usuario=self.asesor)
+        self.assertIn("plazo", form.errors)
+        self.client.post(url, {"etapa": "aprobada", "visibilidad": "interno"})
+        t.ficha.refresh_from_db()
+        self.assertEqual(t.ficha.etapa, "enviada")
+        self.client.post(url, {"etapa": "aprobada", "visibilidad": "interno", "plazo": "36"})
+        t.ficha.refresh_from_db()
+        self.assertEqual(t.ficha.version_actual.plazo_meses, 36)
+        self.assertContains(self.client.get(reverse("comercial:detalle", args=[t.radicado])), "Alquiler a 36 meses")
+
+    def test_el_pdf_de_totales_sale(self):
+        t = self.enviar_alquiler()
+        r = self.client.get(reverse("comercial:cotizacion_pdf", args=[t.radicado]))
+        self.assertEqual(r["Content-Type"], "application/pdf")

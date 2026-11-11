@@ -56,7 +56,7 @@
 
 {% if en_comercial and ficha.etapa == 'aprobada' %}
 <div class="card border-success mb-4 no-imprimir"><div class="card-body">
-  <h2 class="h5"><i class="bi bi-check2-circle text-success"></i> Propuesta aprobada</h2>
+  <h2 class="h5"><i class="bi bi-check2-circle text-success"></i> Propuesta aprobada{% with va=ficha.version_actual %}{% if va.plazo_meses %} <span class="badge text-bg-success fw-normal">Alquiler a {{ va.plazo_texto }}</span>{% endif %}{% endwith %}</h2>
   <ol class="small mb-3 ps-3">
     <li class="{% if material_pendiente %}fw-semibold{% else %}text-success{% endif %}">Bodega revisa el material aprobado
       {% if material_pendiente %}· <a href="{{ material_pendiente.get_absolute_url }}">{{ material_pendiente.numero }}</a> <span class="badge text-bg-{{ material_pendiente.color_estado }}">{{ material_pendiente.get_estado_display }}</span>
@@ -171,6 +171,8 @@
             {% if form_gestion.propuesta %}<div class="col-md-4"><label class="form-label small mb-1">Valor propuesta (antes de IVA)</label>{{ form_gestion.valor_propuesta }}</div>
             <div class="col-md-6"><label class="form-label small mb-1">Propuesta (PDF)</label>{{ form_gestion.propuesta }}</div>{% endif %}
             <div class="col-md-6"><label class="form-label small mb-1">Motivo (si no se aprobó)</label>{{ form_gestion.motivo_rechazo }}</div>
+            {% if form_gestion.plazo %}<div class="col-md-6"><label class="form-label small mb-1" for="{{ form_gestion.plazo.id_for_label }}">Plazo de alquiler aprobado <span class="text-muted-jn">(etapa «Propuesta aprobada»)</span></label>{{ form_gestion.plazo }}
+              {% for e in form_gestion.plazo.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>{% endif %}
             <div class="col-12"><label class="form-label small mb-1">Cambios que pidió el cliente <span class="text-muted-jn">(etapa «Ajustando propuesta»)</span></label>{{ form_gestion.cambios }}</div>
           </div>
           <div class="mt-2 form-check-inline-list">{% for r in form_gestion.visibilidad %}<div class="form-check form-check-inline">{{ r.tag }}<label class="form-check-label" for="{{ r.id_for_label }}">{{ r.choice_label }}</label></div>{% endfor %}</div>
@@ -226,6 +228,7 @@
             <span class="badge text-bg-{{ v.color }}">{{ v.get_estado_display }}</span>
           </div>
           <div class="text-muted-jn">{{ v.enviada|date:"d/m/Y h:i a" }}{% if v.valor %} · ${{ v.valor|floatformat:"0g" }}{% endif %}</div>
+          {% if v.plazo_meses %}<div class="fw-semibold text-success"><i class="bi bi-calendar2-check"></i> Alquiler a {{ v.plazo_texto }}</div>{% endif %}
           {% if v.archivo %}<a href="{% url 'descargar_adjunto' v.archivo.pk %}"><i class="bi bi-file-earmark-pdf text-danger"></i> {{ v.archivo.nombre_original }}</a>{% endif %}
           {% if v.por_entregar %}
             <div class="mt-2 p-2 rounded border border-warning"><i class="bi bi-person-walking"></i> <b>Por entregar al cliente</b> por medio de comercial{% if ficha.comercial %} ({{ ficha.comercial }}){% endif %}.

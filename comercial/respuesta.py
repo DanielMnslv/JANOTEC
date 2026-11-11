@@ -4,6 +4,9 @@
 antivirus del correo, que abren los enlaces sin ejecutar la página, no aprueban por el cliente. «Con cambios» y
 «No la apruebo» abren la página con esa opción marcada para que el cliente escriba y confirme. El enlace es de una versión:
 si ya se respondió o llegó una versión nueva, la página lo dice y no deja responder la anterior.
+
+En alquiler o híbrido el cliente elige el plazo (12, 24, 36… meses): el correo trae un botón «Apruebo» por plazo y
+el clic queda registrado con ese plazo; si abre la página sin plazo, se le muestran las opciones para elegir.
 """
 from django.conf import settings
 from django.contrib import messages
@@ -45,6 +48,9 @@ def respuesta(request, firma):
     error = ""
     accion = request.POST.get("accion") if request.method == "POST" else request.GET.get("r")
     accion = accion if accion in ACCIONES else ""
+    opciones = version.opciones_alquiler()
+    plazo = request.POST.get("plazo") if request.method == "POST" else request.GET.get("plazo")
+    plazo_valido = not opciones or any(str(f["plazo"]) == str(plazo) for f in opciones)
     if request.method == "POST" and vigente:
         texto = request.POST.get("texto", "").strip()
         if accion == "cambios" and len(texto) < 5:
@@ -52,7 +58,13 @@ def respuesta(request, firma):
         elif accion:
             t = ficha.ticket
             if accion == "aprobar":
-                servicios.registrar_respuesta(ficha, None, True)
+                try:
+                    servicios.registrar_respuesta(ficha, None, True, plazo=plazo)
+                except servicios.PlazoRequerido:
+                    error = "Elija el plazo del alquiler que aprueba."
+                    return render(request, "comercial/respuesta.html", {
+                        "version": version, "ficha": ficha, "ticket": t, "vigente": vigente, "accion": accion,
+                        "error": error, "actual": actual, "opciones": opciones, "plazo": plazo})
             elif accion == "rechazar":
                 servicios.registrar_respuesta(ficha, None, False, texto)
             else:
@@ -64,5 +76,7 @@ def respuesta(request, firma):
     version.refresh_from_db()
     return render(request, "comercial/respuesta.html", {
         "version": version, "ficha": ficha, "ticket": ficha.ticket, "vigente": vigente, "accion": accion, "error": error,
-        "actual": actual, "aprobar_ya": request.method == "GET" and vigente and accion == "aprobar",
+        "actual": actual, "opciones": opciones, "plazo": plazo,
+        # «Apruebo» se registra solo con el clic; en alquiler, solo si el botón ya trae un plazo válido
+        "aprobar_ya": request.method == "GET" and vigente and accion == "aprobar" and plazo_valido and bool(plazo or not opciones),
     })

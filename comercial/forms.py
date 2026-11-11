@@ -326,6 +326,7 @@ class GestionComercialForm(BootstrapMixin, forms.Form):
                                          max_digits=14, decimal_places=0)
     propuesta = forms.FileField(label="Propuesta económica (PDF)", required=False)
     motivo_rechazo = forms.CharField(label="Motivo (si no se aprobó)", required=False, max_length=300)
+    plazo = forms.TypedChoiceField(label="Plazo de alquiler que aprobó el cliente", required=False, coerce=int, empty_value=None)
     cambios = forms.CharField(label="Cambios que pidió el cliente", required=False, widget=forms.Textarea(attrs={
         "rows": 2, "placeholder": "Ej.: prefiere cámaras Hikvision en lugar de Dahua; quitar el disco de 4 TB"}))
     mensaje = forms.CharField(label="Mensaje", required=False, widget=forms.Textarea(attrs={"rows": 3}))
@@ -359,6 +360,13 @@ class GestionComercialForm(BootstrapMixin, forms.Form):
             Q(rol__in=[Usuario.Rol.COMERCIAL, Usuario.Rol.DIRECCION]) | Q(tambien_comercial=True), is_active=True)
         if ficha is not None and not self.is_bound:
             self.initial.update(etapa=ficha.etapa, comercial=ficha.comercial_id, valor_propuesta=ficha.valor_propuesta)
+        # Alquiler o híbrido: al registrar «Aprobada» hay que decir el plazo que eligió el cliente
+        self.opciones_alquiler = ficha.version_actual.opciones_alquiler() if ficha is not None and ficha.version_actual else []
+        if self.opciones_alquiler:
+            self.fields["plazo"].choices = [("", "— Elija el plazo —")] + [
+                (f["plazo"], f"{f['plazo']} meses · canon ${f['canon']:,.0f} con IVA".replace(",", ".")) for f in self.opciones_alquiler]
+        else:
+            del self.fields["plazo"]
         self._aplicar_estilos()
 
     def clean_propuesta(self):
@@ -384,6 +392,8 @@ class GestionComercialForm(BootstrapMixin, forms.Form):
                 self.add_error("etapa", "Los cambios se registran sobre una propuesta enviada.")
             elif not (datos.get("cambios") or "").strip():
                 self.add_error("cambios", "Escriba los cambios que pidió el cliente.")
+        if cambia and etapa == F.Etapa.APROBADA and self.opciones_alquiler and not datos.get("plazo"):
+            self.add_error("plazo", "La propuesta es de alquiler: elija a cuántos meses la aprobó el cliente.")
         if etapa == F.Etapa.RECHAZADA and not datos.get("motivo_rechazo") and not (ficha and ficha.motivo_rechazo):
             self.add_error("motivo_rechazo", "Indique por qué no se aprobó (sirve para mejorar las próximas).")
         return datos

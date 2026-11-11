@@ -278,6 +278,10 @@ class PropuestaVersion(models.Model):
     entregada_cliente = models.DateField("entregada al cliente", null=True, blank=True)
     entregada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                       related_name="+", verbose_name="entregada por")
+    # Alquiler o híbrido: el plazo que eligió el cliente al aprobar (12, 24, 36…) y el canon mensual de ese plazo
+    plazo_meses = models.PositiveSmallIntegerField("plazo de alquiler elegido (meses)", null=True, blank=True)
+    canon_mensual = models.DecimalField("canon mensual del plazo elegido (con IVA)", max_digits=14, decimal_places=2,
+                                        null=True, blank=True)
 
     class Meta:
         ordering = ["numero"]
@@ -297,6 +301,22 @@ class PropuestaVersion(models.Model):
     def por_entregar(self):
         """Aprobada para entrega por comercial y el asesor aún no la ha entregado al cliente."""
         return self.por_comercial and not self.entregada_cliente and self.estado == self.Estado.ENVIADA
+
+    def opciones_alquiler(self):
+        """Si la versión es de alquiler o híbrido: los plazos que puede elegir el cliente, [{plazo, canon, …}].
+        Vacío si es venta (o si la versión no se armó en el cotizador)."""
+        cotizacion = getattr(self, "cotizacion", None)
+        if cotizacion is None or not cotizacion.es_alquiler:
+            return []
+        return cotizacion.canones()["filas"]
+
+    @property
+    def plazo_texto(self):
+        """«24 meses · canon $1.234.567 con IVA», o vacío si no es alquiler o aún no lo eligió."""
+        if not self.plazo_meses:
+            return ""
+        canon = f" · canon ${self.canon_mensual:,.0f} con IVA".replace(",", ".") if self.canon_mensual else ""
+        return f"{self.plazo_meses} meses{canon}"
 
 
 def ruta_archivo(instancia, nombre):

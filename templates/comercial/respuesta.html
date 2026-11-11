@@ -17,15 +17,15 @@
     </dl>
 
     {% if version.estado == 'aprobada' %}
-      <div class="alert alert-success mb-0"><i class="bi bi-check2-circle"></i> <b>¡Gracias! Aprobó esta propuesta.</b> Su asesor coordinará con el área técnica la instalación.</div>
+      <div class="alert alert-success mb-0"><i class="bi bi-check2-circle"></i> <b>¡Gracias! Aprobó esta propuesta{% if version.plazo_meses %} en alquiler a {{ version.plazo_texto }}{% endif %}.</b> Su asesor coordinará con el área técnica la instalación.</div>
     {% elif version.estado == 'rechazada' %}
       <div class="alert alert-secondary mb-0"><i class="bi bi-x-circle"></i> Registramos que no aprueba esta propuesta{% if version.motivo %}: «{{ version.motivo }}»{% endif %}. Gracias por avisarnos.</div>
     {% elif version.estado == 'cambios' %}
       <div class="alert alert-info mb-0"><i class="bi bi-pencil-square"></i> Recibimos los cambios que pidió: «{{ version.cambios }}». Su asesor le enviará una nueva versión.</div>
     {% elif aprobar_ya %}
       <form method="post" id="aprobar-ya" class="text-center py-3">{% csrf_token %}
-        <input type="hidden" name="accion" value="aprobar">
-        <p class="mb-0"><span class="spinner-border spinner-border-sm text-secondary"></span> Registrando su aprobación…</p>
+        <input type="hidden" name="accion" value="aprobar">{% if plazo %}<input type="hidden" name="plazo" value="{{ plazo }}">{% endif %}
+        <p class="mb-0"><span class="spinner-border spinner-border-sm text-secondary"></span> Registrando su aprobación{% if plazo %} a {{ plazo }} meses{% endif %}…</p>
         <noscript><button class="btn btn-accent mt-2">Confirmar que apruebo la propuesta</button></noscript>
       </form>
       <script>document.getElementById('aprobar-ya').submit();</script>
@@ -40,6 +40,15 @@
           <label class="btn btn-outline-primary text-start {% if accion == 'cambios' %}active{% endif %}"><input class="form-check-input me-2" type="radio" name="accion" value="cambios" {% if accion == 'cambios' %}checked{% endif %}> <b>La apruebo, pero con cambios</b> <span class="small">(otra marca, otro alcance…)</span></label>
           <label class="btn btn-outline-danger text-start {% if accion == 'rechazar' %}active{% endif %}"><input class="form-check-input me-2" type="radio" name="accion" value="rechazar" {% if accion == 'rechazar' %}checked{% endif %}> <b>No la apruebo</b></label>
         </div>
+        {% if opciones %}
+        <fieldset class="border rounded p-2 mb-3" id="plazos">
+          <legend class="float-none w-auto px-1 small fw-semibold mb-0">Si la aprueba: ¿a cuántos meses el alquiler?</legend>
+          {% for f in opciones %}
+          <div class="form-check"><input class="form-check-input" type="radio" name="plazo" value="{{ f.plazo }}" id="plazo-{{ f.plazo }}" {% if plazo|stringformat:"s" == f.plazo|stringformat:"s" %}checked{% endif %}>
+            <label class="form-check-label" for="plazo-{{ f.plazo }}"><b>{{ f.plazo }} meses</b> · canon de ${{ f.canon|floatformat:"0g" }} al mes con IVA</label></div>
+          {% endfor %}
+        </fieldset>
+        {% endif %}
         <label class="form-label small" for="texto" id="etiqueta-texto">Comentario (opcional)</label>
         <textarea class="form-control mb-3" name="texto" id="texto" rows="3" maxlength="2000" placeholder="Ej.: prefiero cámaras marca Hikvision, que es la que siempre hemos usado"></textarea>
         <button class="btn btn-accent w-100"><i class="bi bi-send"></i> Enviar mi respuesta</button>
@@ -52,6 +61,8 @@
             const elegido = document.querySelector('input[name=accion]:checked');
             document.querySelectorAll('input[name=accion]').forEach(function (r) { r.closest('label').classList.toggle('active', r.checked); });
             etiqueta.textContent = textos[elegido ? elegido.value : 'aprobar'];
+            const plazos = document.getElementById('plazos');  // el plazo solo aplica al aprobar
+            if (plazos) plazos.hidden = !!elegido && elegido.value !== 'aprobar';
           }
           document.querySelectorAll('input[name=accion]').forEach(function (r) { r.addEventListener('change', actualizar); });
           actualizar();

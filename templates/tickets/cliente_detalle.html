@@ -41,11 +41,27 @@
     {% else %}{% for a in ticket.adjuntos.all %}{% if a.es_propuesta %}<a class="btn btn-outline-primary" href="{% url 'descargar_adjunto' a.pk %}"><i class="bi bi-download"></i> {{ a.nombre_original }}</a>{% endif %}{% endfor %}{% endif %}
   </div>
   {% endwith %}
+  {% with ops=ficha.version_actual.opciones_alquiler %}
   <div class="d-flex flex-wrap gap-2">
+    {% if ops %}{# alquiler: al aprobar, el cliente elige a cuántos meses #}
+    <button class="btn btn-success" data-bs-toggle="collapse" data-bs-target="#aprobar-propuesta"><i class="bi bi-hand-thumbs-up"></i> Aprobar propuesta</button>
+    {% else %}
     <form method="post" action="{% url 'comercial:responder' ticket.radicado %}" onsubmit="return confirm('¿Aprobar la propuesta? Coordinaremos la instalación.')">{% csrf_token %}<input type="hidden" name="accion" value="aprobar"><button class="btn btn-success"><i class="bi bi-hand-thumbs-up"></i> Aprobar propuesta</button></form>
+    {% endif %}
     <button class="btn btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#cambios-propuesta"><i class="bi bi-pencil-square"></i> Pedir cambios</button>
     <button class="btn btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#rechazar-propuesta">No la apruebo</button>
   </div>
+  {% if ops %}
+  <form id="aprobar-propuesta" class="collapse mt-3" method="post" action="{% url 'comercial:responder' ticket.radicado %}"
+        onsubmit="return confirm('¿Aprobar la propuesta con el plazo elegido? Coordinaremos la instalación.')">{% csrf_token %}
+    <input type="hidden" name="accion" value="aprobar">
+    <div class="small fw-semibold mb-1">¿A cuántos meses aprueba el alquiler?</div>
+    {% for f in ops %}<div class="form-check"><input class="form-check-input" type="radio" name="plazo" value="{{ f.plazo }}" id="cli-plazo-{{ f.plazo }}" required>
+      <label class="form-check-label" for="cli-plazo-{{ f.plazo }}"><b>{{ f.plazo }} meses</b> · canon de ${{ f.canon|floatformat:"0g" }} al mes con IVA</label></div>{% endfor %}
+    <button class="btn btn-success btn-sm mt-2">Aprobar con este plazo</button>
+  </form>
+  {% endif %}
+  {% endwith %}
   <form id="cambios-propuesta" class="collapse mt-3" method="post" action="{% url 'comercial:responder' ticket.radicado %}">{% csrf_token %}
     <input type="hidden" name="accion" value="cambios">
     <label class="form-label small" for="cambios-texto">¿Qué le gustaría cambiar?</label>

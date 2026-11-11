@@ -348,7 +348,8 @@ def gestionar(request, radicado):
             ficha.motivo_rechazo = d["motivo_rechazo"]
         ficha.save()
         if d["etapa"] != etapa_previa and d["etapa"] in (F.Etapa.APROBADA, F.Etapa.RECHAZADA):
-            servicios.registrar_respuesta(ficha, request.user, d["etapa"] == F.Etapa.APROBADA, d.get("motivo_rechazo", ""))
+            servicios.registrar_respuesta(ficha, request.user, d["etapa"] == F.Etapa.APROBADA, d.get("motivo_rechazo", ""),
+                                          plazo=d.get("plazo"))
         elif d["etapa"] != etapa_previa and d["etapa"] == F.Etapa.AJUSTES:
             servicios.solicitar_cambios(ficha, request.user, d["cambios"])
         elif d["etapa"] != etapa_previa:
@@ -529,7 +530,12 @@ def responder(request, radicado):
         servicios.solicitar_cambios(ficha, request.user, cambios)
         messages.success(request, "Recibimos los cambios. Su asesor le enviará una nueva versión de la propuesta.")
         return redirect(ticket)
-    servicios.registrar_respuesta(ficha, request.user, accion == "aprobar", request.POST.get("motivo", "").strip())
+    try:
+        servicios.registrar_respuesta(ficha, request.user, accion == "aprobar", request.POST.get("motivo", "").strip(),
+                                      plazo=request.POST.get("plazo"))
+    except servicios.PlazoRequerido as e:
+        messages.error(request, str(e))
+        return redirect(ticket)
     if accion == "aprobar":
         messages.success(request, "¡Gracias! Aprobó la propuesta. Su asesor coordinará la instalación con el área técnica.")
     else:
