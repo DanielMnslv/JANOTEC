@@ -63,15 +63,42 @@
       <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center"><span><i class="bi bi-list-check"></i> Ítems</span>
           <button type="button" class="btn btn-sm btn-light border" id="agregar-linea"><i class="bi bi-plus-lg"></i> Agregar ítem</button></div>
-        <div class="table-responsive">
-          <table class="table table-sm align-middle mb-0 small" id="tabla-lineas">
-            <thead><tr><th style="min-width:260px">Descripción</th><th style="width:130px">Categoría</th><th style="width:85px">Cant.</th><th style="width:130px">Costo unitario</th>
-              <th style="width:80px">Desc. %</th><th style="width:70px">IVA %</th><th class="text-end" style="width:120px">Total antes IVA</th><th></th></tr></thead>
-            <tbody>
-              {% for f in lineas %}{% include "comercial/_linea_cotizacion.html" %}{% endfor %}
-            </tbody>
-          </table>
-        </div>
+        {# Cada ítem es un bloque que cabe en el ancho: nada de barra horizontal para llegar al costo o al IVA #}
+        <style>
+          #tabla-lineas, #tabla-lineas tbody { display: block; width: 100%; counter-reset: item; }
+          .items-ancho { container-type: inline-size; }
+          #tabla-lineas tr.linea { display: grid; gap: .35rem .5rem; padding: .65rem .75rem; border-bottom: 1px solid var(--bs-border-color);
+            grid-template-columns: 1.6rem 1.15fr .8fr 1.25fr .7fr .7fr 1.1fr;
+            grid-template-areas: "num desc desc desc desc desc quitar"
+                                 ".   prov prov marca marca ref ref"
+                                 ".   cat cant valor descu iva total"; }
+          #tabla-lineas input[type=number] { -moz-appearance: textfield; appearance: textfield; text-align: right; }
+          #tabla-lineas input[type=number]::-webkit-inner-spin-button, #tabla-lineas input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+          @container (max-width: 620px) {  /* columna angosta: los números en dos renglones de a tres */
+            #tabla-lineas tr.linea { grid-template-columns: 1.6rem 1fr 1fr 1fr;
+              grid-template-areas: "num desc desc quitar" ". prov prov prov" ". marca ref ref" ". cat cant valor" ". descu iva total"; }
+          }
+          #tabla-lineas tr.linea:nth-child(even) { background: var(--bs-tertiary-bg); }
+          #tabla-lineas td { display: block; border: 0; padding: 0; background: transparent; min-width: 0; }
+          #tabla-lineas .et { display: block; font-size: .72rem; color: var(--bs-secondary-color); margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          #tabla-lineas td .form-control, #tabla-lineas td .form-select, #tabla-lineas td select, #tabla-lineas td input:not([type=checkbox]) { width: 100%; min-width: 0; }
+          #tabla-lineas .c-num { grid-area: num; align-self: end; padding-bottom: .35rem; font-weight: 600; color: var(--bs-secondary-color); }
+          #tabla-lineas .c-num::after { counter-increment: item; content: counter(item) "."; }
+          #tabla-lineas .c-desc { grid-area: desc; } #tabla-lineas .c-quitar { grid-area: quitar; align-self: end; padding-bottom: .35rem; }
+          #tabla-lineas .c-prov { grid-area: prov; } #tabla-lineas .c-marca { grid-area: marca; } #tabla-lineas .c-ref { grid-area: ref; }
+          #tabla-lineas .c-cat { grid-area: cat; } #tabla-lineas .c-cant { grid-area: cant; } #tabla-lineas .c-valor { grid-area: valor; }
+          #tabla-lineas .c-descu { grid-area: descu; } #tabla-lineas .c-iva { grid-area: iva; }
+          #tabla-lineas .c-total { grid-area: total; } #tabla-lineas .c-total .subtotal { padding-top: .3rem; }
+          @media (max-width: 575.98px) {  /* celular: un campo por renglón, de a dos los números */
+            #tabla-lineas tr.linea { grid-template-columns: 1.5rem 1fr 1fr;
+              grid-template-areas: "num desc desc" ". prov prov" ". marca ref" ". cat cant" ". valor descu" ". iva total" ". quitar quitar"; }
+          }
+        </style>
+        <div class="items-ancho"><table class="table table-sm align-middle mb-0 small" id="tabla-lineas">
+          <tbody>
+            {% for f in lineas %}{% include "comercial/_linea_cotizacion.html" %}{% endfor %}
+          </tbody>
+        </table></div>
         <template id="plantilla-linea">{% with f=lineas.empty_form %}{% include "comercial/_linea_cotizacion.html" %}{% endwith %}</template>
         {% if lineas.non_form_errors %}<div class="card-body text-danger small">{{ lineas.non_form_errors }}</div>{% endif %}
         {% if not lineas.forms %}<div class="card-body small text-muted-jn" id="sin-lineas">Agregue ítems del catálogo o tráigalos del informe.</div>{% endif %}

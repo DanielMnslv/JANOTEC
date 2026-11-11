@@ -411,9 +411,9 @@ class LineaCotizacionForm(BootstrapMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self._aplicar_estilos()
         self.fields["categoria"].choices = [("", "Automática")] + list(self.fields["categoria"].choices)[1:]
-        self.fields["categoria"].widget.attrs["class"] = "categoria"
+        self.fields["categoria"].widget.attrs["class"] = "categoria form-select"
         self.fields["proveedor"].empty_label = "Proveedor…"
-        self.fields["proveedor"].widget.attrs["class"] = "proveedor"
+        self.fields["proveedor"].widget.attrs["class"] = "proveedor form-select"
         self.fields["proveedor"].queryset = self.fields["proveedor"].queryset.order_by("razon_social")
         for campo in self.fields.values():
             campo.widget.attrs["class"] = (campo.widget.attrs.get("class", "") + " form-control-sm").strip()

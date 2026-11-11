@@ -1,12 +1,20 @@
+{% comment %}
+Un ítem del cotizador como bloque compacto (sin barra horizontal): arriba la descripción; luego proveedor, marca y
+referencia (para la orden de compra, no salen en el PDF del cliente); abajo categoría, cantidad, costo, descuento,
+IVA y el total. Cada campo lleva su etiqueta, porque la tabla no muestra encabezados.
+{% endcomment %}
 <tr class="linea">
-  <td>{{ f.id }}{{ f.descripcion }}{% for e in f.descripcion.errors %}<div class="text-danger">{{ e }}</div>{% endfor %}
-    <div class="d-flex gap-1 mt-1" title="Para la orden de compra: no sale en el PDF del cliente">{{ f.proveedor }}{{ f.marca }}{{ f.referencia }}</div></td>
-  <td>{{ f.categoria }}</td>
-  <td>{{ f.cantidad }}</td>
-  <td>{{ f.valor_unitario }}{% for e in f.valor_unitario.errors %}<div class="text-danger">{{ e }}</div>{% endfor %}
+  <td class="c-num"></td>
+  <td class="c-desc"><label class="et" for="{{ f.descripcion.id_for_label }}">Descripción</label>{{ f.id }}{{ f.descripcion }}{% for e in f.descripcion.errors %}<div class="text-danger">{{ e }}</div>{% endfor %}</td>
+  <td class="c-quitar text-end">{% if f.DELETE %}<label class="small text-muted-jn text-nowrap" title="Quitar este ítem">{{ f.DELETE }} <i class="bi bi-trash"></i></label>{% endif %}</td>
+  <td class="c-prov"><label class="et" for="{{ f.proveedor.id_for_label }}">Proveedor (para la orden de compra)</label>{{ f.proveedor }}</td>
+  <td class="c-marca"><label class="et" for="{{ f.marca.id_for_label }}">Marca</label>{{ f.marca }}</td>
+  <td class="c-ref"><label class="et" for="{{ f.referencia.id_for_label }}">Referencia</label>{{ f.referencia }}</td>
+  <td class="c-cat"><label class="et" for="{{ f.categoria.id_for_label }}">Categoría</label>{{ f.categoria }}</td>
+  <td class="c-cant"><label class="et" for="{{ f.cantidad.id_for_label }}">Cant.</label>{{ f.cantidad }}</td>
+  <td class="c-valor"><label class="et" for="{{ f.valor_unitario.id_for_label }}">Costo unitario</label>{{ f.valor_unitario }}{% for e in f.valor_unitario.errors %}<div class="text-danger">{{ e }}</div>{% endfor %}
     <div class="aviso-catalogo small text-danger mt-1" hidden><span></span> <button type="button" class="btn btn-link btn-sm p-0 align-baseline usar-catalogo">Usar</button></div></td>
-  <td>{{ f.descuento }}</td>
-  <td>{{ f.iva }}</td>
-  <td class="text-end subtotal">—</td>
-  <td class="text-center">{% if f.DELETE %}<label class="small text-muted-jn" title="Quitar este ítem">{{ f.DELETE }} <i class="bi bi-trash"></i></label>{% endif %}</td>
+  <td class="c-descu"><label class="et" for="{{ f.descuento.id_for_label }}">Desc. %</label>{{ f.descuento }}</td>
+  <td class="c-iva"><label class="et" for="{{ f.iva.id_for_label }}">IVA %</label>{{ f.iva }}</td>
+  <td class="c-total text-end"><span class="et">Total antes IVA</span><div class="subtotal fw-semibold">—</div></td>
 </tr>
