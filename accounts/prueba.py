@@ -43,7 +43,7 @@ USUARIOS = [
     ("prueba.direccion", "Dirección", "direccion", {},
      "Hace de Miguel: aprueba o devuelve informes, propuestas y órdenes de compra; firma la salida de material."),
     ("prueba.financiera", "Financiera", "financiera", {},
-     "Paga las órdenes de compra (anticipado o crédito) y valida la factura contra la orden."),
+     "Paga las órdenes de compra (de contado o con anticipo y su saldo) y valida la factura contra la orden."),
 ]
 OPCIONES = ("tambien_comercial", "tambien_administrativo", "tambien_financiera", "tambien_tecnico", "revisa_compras")
 

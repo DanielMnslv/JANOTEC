@@ -158,7 +158,7 @@ class FiltrosYSiguientePasoTests(Base):
         self.client.force_login(self.miguel)
         html = self.client.get(reverse("inventario:ordenes")).content.decode()
         self.assertIn('Abiertas <span class="n">1</span>', html)
-        self.assertIn("Pago anticipado", html)
+        self.assertIn("Pago de contado", html)
 
     def test_bandeja_comercial_con_etiquetas(self):
         self.client.force_login(self.comercial)

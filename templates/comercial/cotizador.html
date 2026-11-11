@@ -51,7 +51,8 @@
           <div class="col-md-5">{% include "tickets/_campo.html" with campo=form.modalidad %}</div>
           <div class="col-md-4">{% include "tickets/_campo.html" with campo=form.margen %}</div>
           <div class="col-md-3">{% include "tickets/_campo.html" with campo=form.consecutivo %}
-            {% if not form.consecutivo.field.disabled %}<div class="form-text">Vacío: el siguiente del año ({{ siguiente }}).</div>{% endif %}</div>
+            {% if not form.consecutivo.field.disabled %}<div class="form-text">Vacío: el siguiente del año ({{ siguiente }}).
+              <a href="{% url 'comercial:propuestas' %}#consecutivo" target="_blank" rel="noopener">Sincronizar con el de Excel</a></div>{% endif %}</div>
           <div class="col-md-3 solo-alquiler">{% include "tickets/_campo.html" with campo=form.tasa_mensual %}</div>
           <div class="col-md-3 solo-alquiler">{% include "tickets/_campo.html" with campo=form.recargo_alquiler %}</div>
           <div class="col-md-3 solo-alquiler">{% include "tickets/_campo.html" with campo=form.plazos %}</div>

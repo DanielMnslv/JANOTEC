@@ -340,7 +340,7 @@ def responder_autorizacion(actividad, aceptada, motivo="", correo="", nombre="")
         f"[Cronograma] El cliente {resultado} la visita · {actividad.cliente} · {actividad.fecha:%d/%m/%Y}",
         "\n".join([f"{actividad.cliente} · {actividad.sede}", f"Visita: {cuando(actividad)}",
                    f"Respuesta: {resultado}" + (f" — {motivo}" if motivo else ""),
-                   f"{'Autorizó' if aceptada else 'Rechazó'}: {quien or 'no indicó quién'}",
+                   f"{'Autorizó' if aceptada else 'Rechazó'}: {quien or 'desde el botón del correo'}",
                    f"Correos notificados: {', '.join(actividad.correos)}", "",
                    f"Ver cronograma: {settings.SITIO_URL.rstrip('/')}{reverse('cronograma:semana')}?d={actividad.fecha:%Y-%m-%d}"]),
         destinos,

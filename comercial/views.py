@@ -135,8 +135,18 @@ def propuestas(request):
     base = (FichaComercial.objects.filter(ticket__in=tickets_visibles(request.user))
             .select_related("ticket", "ticket__empresa", "ticket__sede", "comercial").order_by("fecha_max_propuesta", "creado"))
     grupos = clasificar_propuestas(base)
+    from . import cotizador as coti
+    if request.method == "POST" and request.POST.get("accion") == "consecutivo":
+        try:
+            siguiente = coti.sincronizar_consecutivo(int(request.POST.get("ultimo") or ""), request.user)
+            messages.success(request, f"Consecutivo sincronizado: la próxima propuesta sale con el {siguiente:03d}.")
+        except ValueError:
+            messages.error(request, "Escriba el último consecutivo que usaron fuera de la plataforma (un número del 0 al 998).")
+        return redirect(f"{request.path}#consecutivo")
     return render(request, "comercial/propuestas.html", {
         **grupos, "enviadas": list(base.filter(etapa=F.Etapa.ENVIADA)), "es_direccion": request.user.es_direccion,
+        "anio": timezone.localdate().year, "ultimo_externo": coti.ultimo_externo(),
+        "siguiente": f"{coti.siguiente_consecutivo():03d}",
     })
 
 

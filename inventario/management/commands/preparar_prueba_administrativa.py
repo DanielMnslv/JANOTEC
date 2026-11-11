@@ -10,7 +10,7 @@ Por cada persona (Yuri y Tatiana) crea, con el cliente PRUEBA:
     4. Cotizar con proveedores ....... informe con elementos que no están en el catálogo (en rojo)
     5. Validar y comprar lo que falta  propuesta aprobada: material por validar, faltan la terminal y el botón
     6. Entregar al técnico ........... material validado y con las firmas: listo para entregar
-    Orden devuelta (proveedor «PRUEBA PROVEEDOR <NOMBRE>»): dirección pidió 4 cajas a crédito 30 días
+    Orden devuelta (proveedor «PRUEBA PROVEEDOR <NOMBRE>»): dirección pidió 4 cajas con anticipo del 50 %
     Orden pagada (mismo proveedor): aprobada y pagada por financiera, para enviar al proveedor y recibir
 
 También completa lo que falte del entorno PRUEBA (cliente, sede, catálogo, productos con stock, equipos, proveedores
@@ -334,7 +334,7 @@ class Command(BaseCommand):
                                               notas=f"PRUEBA {nombre} · orden devuelta por dirección")
         LineaOrdenCompra.objects.create(orden=devuelta, descripcion=CAJA, cantidad=2, valor_unitario=Decimal("8291.25"))
         self._a_direccion(devuelta, persona)  # la persona la pasó a dirección
-        financiera.devolver(devuelta, self.autor, "PRUEBA pida 4 cajas en lugar de 2 y cámbiela a crédito a 30 días")
+        financiera.devolver(devuelta, self.autor, "PRUEBA pida 4 cajas en lugar de 2 y cámbiela a anticipo del 50 %")
         pagada = OrdenCompra.objects.create(proveedor=proveedor, creado_por=persona, fecha_estimada=llega,
                                             notas=f"PRUEBA {nombre} · orden aprobada y pagada")
         LineaOrdenCompra.objects.create(orden=pagada, descripcion=C["PRUEBA Cable con POCO stock"], cantidad=10,

@@ -1,5 +1,21 @@
 {% extends "base.html" %}{% load tickets_extras %}
-{% block titulo %}Área administrativa · Propuestas{% endblock %}
+{% block titulo %}Área administrativa · Propuestas
+{# El consecutivo PE-AAAA-MM-NNN sigue al de Excel: se anota el último número que se usó antes de la plataforma #}
+<div class="card mb-4" id="consecutivo">
+  <div class="card-header"><i class="bi bi-123"></i> Consecutivo de las propuestas {{ anio }}</div>
+  <div class="card-body">
+    <p class="small mb-2">La próxima propuesta sale con el <b>{{ siguiente }}</b> (PE-{{ anio }}-MM-{{ siguiente }}).
+      Si en Excel ya van más adelante, escriba el último número que usaron allá: la plataforma sigue desde el siguiente
+      y no deja repetir ninguno de esos.</p>
+    <form method="post" class="d-flex flex-wrap align-items-end gap-2">{% csrf_token %}
+      <input type="hidden" name="accion" value="consecutivo">
+      <div><label class="form-label small mb-1" for="ultimo">Último consecutivo usado fuera de la plataforma en {{ anio }}</label>
+        <input type="number" class="form-control" style="max-width:12rem" name="ultimo" id="ultimo" min="0" max="998" required value="{{ ultimo_externo }}"></div>
+      <button class="btn btn-outline-primary"><i class="bi bi-arrow-repeat"></i> Sincronizar</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
 {% block contenido %}
 {# Módulo del área administrativa: las propuestas por armar, corregir, aprobar y entregar. Comercial tiene su propia bandeja. #}
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
@@ -57,5 +73,21 @@
 <div class="card mb-4" id="enviadas">
   <div class="card-header"><i class="bi bi-send-check"></i> Enviadas: el área comercial les hace seguimiento</div>
   {% include "comercial/_lista_propuestas.html" with fichas=enviadas vacio="No hay propuestas esperando respuesta." %}
+</div>
+
+{# El consecutivo PE-AAAA-MM-NNN sigue al de Excel: se anota el último número que se usó antes de la plataforma #}
+<div class="card mb-4" id="consecutivo">
+  <div class="card-header"><i class="bi bi-123"></i> Consecutivo de las propuestas {{ anio }}</div>
+  <div class="card-body">
+    <p class="small mb-2">La próxima propuesta sale con el <b>{{ siguiente }}</b> (PE-{{ anio }}-MM-{{ siguiente }}).
+      Si en Excel ya van más adelante, escriba el último número que usaron allá: la plataforma sigue desde el siguiente
+      y no deja repetir ninguno de esos.</p>
+    <form method="post" class="d-flex flex-wrap align-items-end gap-2">{% csrf_token %}
+      <input type="hidden" name="accion" value="consecutivo">
+      <div><label class="form-label small mb-1" for="ultimo">Último consecutivo usado fuera de la plataforma en {{ anio }}</label>
+        <input type="number" class="form-control" style="max-width:12rem" name="ultimo" id="ultimo" min="0" max="998" required value="{{ ultimo_externo }}"></div>
+      <button class="btn btn-outline-primary"><i class="bi bi-arrow-repeat"></i> Sincronizar</button>
+    </form>
+  </div>
 </div>
 {% endblock %}

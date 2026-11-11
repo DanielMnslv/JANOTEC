@@ -85,7 +85,7 @@
   <div class="card-footer text-end"><button class="btn btn-primary"><i class="bi bi-cart-plus"></i> Ingresar a bodega</button></div>
 </form>
 {% endwith %}
-<datalist id="lista-insumos">{% for i in insumos %}<option value="{{ i.codigo }} · {{ i.descripcion }}">{% endfor %}</datalist>
+<datalist id="lista-insumos">{% for i in insumos %}<option value="{{ i.codigo }}">{{ i.descripcion }}</option>{% endfor %}</datalist>
 {% endif %}
 <script>
   // «Ingreso sin factura»: oculta los datos de compra y pide de dónde sale

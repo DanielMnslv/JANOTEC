@@ -8,14 +8,14 @@
 </div>
 
 <div class="row g-3 mb-4">
-  <div class="col-6 col-md"><a class="kpi {% if anticipadas %}alerta{% endif %}" href="#anticipadas"><div class="valor">{{ anticipadas|length }}</div><div class="etiqueta">Por pagar (anticipado)</div></a></div>
-  <div class="col-6 col-md"><a class="kpi {% if credito %}aviso{% endif %}" href="#credito"><div class="valor">{{ credito|length }}</div><div class="etiqueta">A crédito por pagar</div></a></div>
+  <div class="col-6 col-md"><a class="kpi {% if por_pagar %}alerta{% endif %}" href="#por-pagar"><div class="valor">{{ por_pagar|length }}</div><div class="etiqueta">Por pagar (contado o anticipo)</div></a></div>
+  <div class="col-6 col-md"><a class="kpi {% if saldos %}aviso{% endif %}" href="#saldos"><div class="valor">{{ saldos|length }}</div><div class="etiqueta">Saldos de anticipos</div></a></div>
   <div class="col-6 col-md"><a class="kpi" href="#sin-factura"><div class="valor">{{ sin_factura|length }}</div><div class="etiqueta">Esperando factura</div></a></div>
   <div class="col-6 col-md"><a class="kpi {% if con_diferencia %}alerta{% endif %}" href="#diferencia"><div class="valor">{{ con_diferencia|length }}</div><div class="etiqueta">Facturas con diferencia</div></a></div>
 </div>
 
-{% include "inventario/_lista_financiera.html" with ordenes=anticipadas id="anticipadas" titulo="Por pagar: pago anticipado (el proveedor despacha con el soporte)" icono="bi-cash-coin" borde="border-danger" vacio="No hay órdenes por pagar." %}
-{% include "inventario/_lista_financiera.html" with ordenes=credito id="credito" titulo="A crédito: pagar antes del vencimiento" icono="bi-calendar-check" borde="border-warning" vacio="No hay órdenes a crédito pendientes de pago." vence=True %}
+{% include "inventario/_lista_financiera.html" with ordenes=por_pagar id="por-pagar" titulo="Por pagar: de contado o el anticipo (el proveedor despacha con el soporte)" icono="bi-cash-coin" borde="border-danger" vacio="No hay órdenes por pagar." pago=True %}
+{% include "inventario/_lista_financiera.html" with ordenes=saldos id="saldos" titulo="Saldos de anticipos: se pagan cuando llega el pedido" icono="bi-hourglass-split" borde="border-warning" vacio="No hay saldos de anticipos pendientes." pago=True %}
 {% include "inventario/_lista_financiera.html" with ordenes=con_diferencia id="diferencia" titulo="Facturas que no cuadran con la orden" icono="bi-exclamation-triangle" borde="border-danger" vacio="Todas las facturas registradas cuadran." diferencia=True %}
 {% include "inventario/_lista_financiera.html" with ordenes=sin_factura id="sin-factura" titulo="Esperando la factura del proveedor" icono="bi-receipt" borde="" vacio="No hay compras esperando factura." %}
 {% include "inventario/_lista_financiera.html" with ordenes=cerradas id="cerradas" titulo="Cerradas recientemente (recibidas, pagadas y facturadas)" icono="bi-check2-all" borde="border-success" vacio="Aún no hay compras cerradas." %}

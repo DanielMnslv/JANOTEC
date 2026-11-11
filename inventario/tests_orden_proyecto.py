@@ -190,7 +190,7 @@ class PropuestaYOrdenRealesTests(BaseComercial):
         orden = OrdenCompra.objects.get(proveedor=self.soluctein)
         linea = orden.lineas.get()
         self.assertTrue(linea.es_servicio)
-        orden.fecha_estimada, orden.forma_pago, orden.dias_credito = timezone.localdate(), "credito", 30
+        orden.fecha_estimada, orden.forma_pago, orden.porcentaje_anticipo = timezone.localdate(), "anticipo", 50
         orden.save()
         # Alejandra la envía: pasa primero por la revisión de Yuri
         from . import financiera
@@ -209,7 +209,12 @@ class PropuestaYOrdenRealesTests(BaseComercial):
         self.assertEqual((orden.estado, orden.revisada_por), (OrdenCompra.Estado.REVISION, self.yuri))
         financiera.aprobar(orden, self.director)
         orden.refresh_from_db()
-        self.assertEqual(orden.estado, OrdenCompra.Estado.LISTA)
+        self.assertEqual(orden.estado, OrdenCompra.Estado.POR_PAGAR)  # el anticipo del 50 % antes del servicio
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        financiera.registrar_pago(orden, self.director, timezone.localdate(), orden.valor_por_pagar, "Transferencia",
+                                  SimpleUploadedFile("anticipo.pdf", b"%PDF-1.4 x", content_type="application/pdf"))
+        orden.refresh_from_db()
+        self.assertEqual((orden.estado, orden.saldo_pendiente), (OrdenCompra.Estado.LISTA, True))
         # No se «recibe» en bodega: se confirma que SOLUCTEIN prestó el servicio
         self.client.force_login(self.bodega)
         self.assertNotContains(self.client.get(orden.get_absolute_url()), "Llegó: recibir")

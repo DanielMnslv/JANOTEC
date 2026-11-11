@@ -311,6 +311,20 @@ class PropuestaVersion(models.Model):
         return cotizacion.canones()["filas"]
 
     @property
+    def valor_con_iva(self):
+        """Total de la propuesta con IVA incluido (del cotizador), o None si se envió un PDF hecho por fuera."""
+        cotizacion = getattr(self, "cotizacion", None)
+        return cotizacion.totales()["total"] if cotizacion is not None else None
+
+    @property
+    def valor_texto(self):
+        """«$1.234.567 IVA incluido» para el cliente; si la propuesta no salió del cotizador, el valor antes de IVA."""
+        con_iva = self.valor_con_iva
+        if con_iva:
+            return f"${con_iva:,.0f} IVA incluido".replace(",", ".")
+        return f"${self.valor:,.0f} antes de IVA".replace(",", ".") if self.valor else ""
+
+    @property
     def plazo_texto(self):
         """«24 meses · canon $1.234.567 con IVA», o vacío si no es alquiler o aún no lo eligió."""
         if not self.plazo_meses:
@@ -335,6 +349,26 @@ def ruta_imagen_catalogo(instancia, nombre):
     import uuid
 
     return f"comercial/catalogo/{uuid.uuid4().hex}{os.path.splitext(nombre)[1].lower()}"
+
+
+class ConsecutivoPropuesta(models.Model):
+    """Dónde va el consecutivo de las propuestas (el NNN de PE-AAAA-MM-NNN) en un año.
+
+    Antes de la plataforma las propuestas se numeraban en Excel: aquí se anota el último número que se usó por fuera,
+    y la plataforma sigue desde ahí (el siguiente es el mayor entre ese y los de la plataforma, más uno).
+    """
+    anio = models.PositiveSmallIntegerField("año", unique=True)
+    ultimo_externo = models.PositiveSmallIntegerField(
+        "último consecutivo usado fuera de la plataforma", default=0, validators=[MaxValueValidator(999)])
+    actualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "consecutivo de propuestas"
+        verbose_name_plural = "consecutivos de propuestas"
+
+    def __str__(self):
+        return f"{self.anio}: último externo {self.ultimo_externo:03d}"
 
 
 class ItemCatalogo(models.Model):

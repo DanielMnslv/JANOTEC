@@ -342,29 +342,27 @@ def bodega(usuario):
 
 # --- Financiera ----------------------------------------------------------------------------
 def financiera(usuario):
-    """Órdenes por pagar, facturas por validar y créditos que vencen en los próximos 8 días."""
+    """Órdenes por pagar (de contado o el anticipo), saldos de anticipos con el pedido ya recibido y facturas por validar."""
     from inventario.models import OrdenCompra
 
     O = OrdenCompra.Estado
     base = _Filtro(usuario).ordenes(OrdenCompra.objects.exclude(estado__in=[O.CANCELADA, O.BORRADOR])).select_related("proveedor")
     url = lambda o: reverse("inventario:orden", args=[o.pk])  # noqa: E731
     hoy = timezone.localdate()
-    pagar = [_item(f"{o.numero} · {o.proveedor or 'sin proveedor'}", "Pago anticipado: pague y suba el soporte para que bodega la envíe.",
+    pagar = [_item(f"{o.numero} · {o.proveedor or 'sin proveedor'}",
+                   f"{o.forma_pago_texto}: pague y suba el soporte para que bodega la envíe.",
                    url(o), "Registrar pago", True) for o in base.filter(estado=O.POR_PAGAR).order_by("pk")]
     facturas = [_item(f"{o.numero} · {o.proveedor or 'sin proveedor'}", f"Factura {o.factura or 'sin número'}: no cuadra o falta validarla.",
                       url(o), "Validar factura") for o in base.filter(factura_valor__isnull=False, factura_validada_en__isnull=True).order_by("pk")]
-    creditos = []
-    for o in base.filter(forma_pago=OrdenCompra.FormaPago.CREDITO, pagada_en__isnull=True, estado__in=[O.LISTA, O.ENVIADA, O.RECIBIDA]):
-        if o.vence and o.vence <= hoy + timedelta(days=8):
-            faltan = (o.vence - hoy).days
-            creditos.append(_item(f"{o.numero} · {o.proveedor or 'sin proveedor'}",
-                                  f"Vence el {o.vence:%d/%m}" + (" (vencido)" if faltan < 0 else f" (en {faltan} días)") + ".",
-                                  url(o), "Registrar pago", faltan <= 2))
-    creditos.sort(key=lambda i: i["titulo"])
+    saldos = [_item(f"{o.numero} · {o.proveedor or 'sin proveedor'}",
+                    f"Llegó el pedido: pague el saldo del anticipo ({o.valor_por_pagar:,.0f}).".replace(",", "."),
+                    url(o), "Pagar saldo", True)
+              for o in base.filter(forma_pago=OrdenCompra.FormaPago.ANTICIPO, pagada_en__isnull=False,
+                                   saldo_pagado_en__isnull=True, estado=O.RECIBIDA).order_by("pk")]
     v = reverse("inventario:financiera")
     return [_grupo("pagar", "Por pagar", "bi-cash-coin", pagar, ver_todo=v),
             _grupo("facturas", "Facturas por validar", "bi-receipt", facturas, ver_todo=v),
-            _grupo("creditos", "Créditos por vencer", "bi-hourglass-split", creditos, "Compras a crédito que vencen en los próximos 8 días.", v)]
+            _grupo("saldos", "Saldos de anticipos", "bi-hourglass-split", saldos, "Pedidos con anticipo que ya llegaron a bodega.", v)]
 
 
 # --- Lo que ve cada quien ------------------------------------------------------------------

@@ -434,7 +434,7 @@ def propuesta_para_entregar(ficha, pdf_adjunto, version, autor):
         f"{autor.get_full_name() or autor.username} aprobó la propuesta {version.codigo or f'v{version.numero}'} para que "
         "usted se la entregue al cliente. Al cliente no le llegó por correo.", "",
         f"Empresa: {t.empresa}" + (f" · Sede: {t.sede}" if t.sede else ""), f"Requerimiento: {t.asunto}",
-        f"Valor: ${version.valor:,.0f} antes de IVA".replace(",", ".") if version.valor else "", "",
+        f"Valor: {version.valor_texto}" if version.valor_texto else "", "",
         "Cuando la entregue, márquela como «Entregada al cliente» con la fecha; luego registre lo que responda.", "",
         f"Ver el requerimiento: {settings.SITIO_URL.rstrip('/')}{ficha.get_absolute_url()}"])
     asunto = f"[{t.radicado}] Propuesta para entregar al cliente · {t.empresa}"
@@ -521,8 +521,10 @@ def propuesta_enviada(ficha, pdf_adjunto):
                 adjuntos.append((pdf_adjunto.nombre_original, f.read(), "application/pdf"))
         except Exception:  # noqa: BLE001
             log.exception("No se pudo adjuntar la propuesta de %s", t.radicado)
-    valor = f"${ficha.valor_propuesta:,.0f} antes de IVA".replace(",", ".") if ficha.valor_propuesta else ""
     version = ficha.version_actual
+    # Al cliente se le muestra el total con IVA incluido (si la propuesta salió del cotizador)
+    valor = version.valor_texto if version else (
+        f"${ficha.valor_propuesta:,.0f} antes de IVA".replace(",", ".") if ficha.valor_propuesta else "")
     anterior = ficha.versiones.filter(numero__lt=version.numero).order_by("-numero").first() if version else None
     parrafos = [f"Adjuntamos la propuesta económica de su requerimiento «{t.asunto}»."]
     if anterior and anterior.cambios:

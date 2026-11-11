@@ -1469,7 +1469,7 @@ class CompraConFinancieraTests(BaseInventario):
     def datos(self, **extra):
         o, l = self.orden, self.linea
         return {"proveedor": self.proveedor.pk, "fecha_estimada": f"{o.fecha_estimada:%Y-%m-%d}", "forma_pago": o.forma_pago,
-                "dias_credito": o.dias_credito or "", "notas": "",
+                "porcentaje_anticipo": o.porcentaje_anticipo or "", "notas": "",
                 "lineas-TOTAL_FORMS": "1", "lineas-INITIAL_FORMS": "1", "lineas-MIN_NUM_FORMS": "0", "lineas-MAX_NUM_FORMS": "1000",
                 "lineas-0-id": l.pk, "lineas-0-orden": o.pk, "lineas-0-descripcion": l.descripcion, "lineas-0-cantidad": "100",
                 "lineas-0-adicional": "0", "lineas-0-valor_unitario": "1000", "lineas-0-iva": "19", **extra}
@@ -1517,7 +1517,7 @@ class CompraConFinancieraTests(BaseInventario):
         # Financiera: la ve en su módulo y registra el pago con el soporte
         self.client.force_login(self.financiera)
         r = self.client.get(reverse("inventario:financiera"))
-        self.assertEqual(r.context["anticipadas"], [self.orden])
+        self.assertEqual(r.context["por_pagar"], [self.orden])
         self.assertContains(r, 'title="Órdenes de compra por pagar">1<')
         self.assertEqual(self.client.get(reverse("inventario:ordenes")).status_code, 403)  # no es bodega
         self.client.post(paso("pago"), {"fecha": f"{hoy:%Y-%m-%d}", "valor": "130900", "medio": "Transferencia"})
@@ -1560,29 +1560,41 @@ class CompraConFinancieraTests(BaseInventario):
         self.assertTrue(self.orden.cerrada)
         self.assertEqual(self.client.get(reverse("inventario:financiera")).context["cerradas"], [self.orden])
 
-    def test_credito_va_al_proveedor_sin_pagar_y_vence_con_la_factura(self):
-        from datetime import timedelta
-        self.orden.forma_pago, self.orden.dias_credito = "credito", None
+    def test_anticipo_paga_una_parte_antes_y_el_saldo_despues(self):
+        """Sin crédito: con anticipo financiera paga el porcentaje antes del despacho y el saldo después."""
+        from .models import OrdenCompra
+        self.assertEqual([v for v, _ in OrdenCompra.FormaPago.choices], ["contado", "anticipo"])
+        hoy = timezone.localdate()
+        paso = lambda cual: reverse("inventario:orden_paso", args=[self.orden.pk, cual])  # noqa: E731
+        self.orden.forma_pago = "anticipo"
         self.orden.save()
         url = self.orden.get_absolute_url()
         self.client.force_login(self.miguel)  # dirección la arma y la aprueba de una vez
-        self.assertContains(self.client.post(url, self.datos(accion="aprobar"), follow=True), "los días de crédito")
-        self.client.post(url, self.datos(accion="aprobar", dias_credito="30"))
+        self.assertContains(self.client.post(url, self.datos(accion="aprobar"), follow=True), "el porcentaje del anticipo")
+        self.client.post(url, self.datos(accion="aprobar", porcentaje_anticipo="40"))
         self.orden.refresh_from_db()
-        self.assertEqual((self.orden.estado, self.orden.dias_credito), ("lista", 30))
+        # Con anticipo también pasa por financiera antes del proveedor: paga el 40 % de $119.000
+        self.assertEqual((self.orden.estado, self.orden.porcentaje_anticipo, self.orden.valor_por_pagar), ("por_pagar", 40, 47600))
+        self.assertEqual(self.orden.forma_pago_texto, "Anticipo del 40 %")
+        self.client.force_login(self.financiera)
+        self.assertContains(self.client.get(url), "Registrar el anticipo del 40 %")
+        self.client.post(paso("pago"), {"fecha": f"{hoy:%Y-%m-%d}", "valor": "47600", "soporte_pago": self.pdf("anticipo.pdf")})
+        self.orden.refresh_from_db()
+        self.assertEqual((self.orden.estado, self.orden.pagada, self.orden.saldo_pendiente, self.orden.valor_por_pagar),
+                         ("lista", False, True, 71400))
+        self.assertEqual(self.client.get(reverse("inventario:financiera")).context["saldos"], [self.orden])
         self.client.force_login(self.bodega)
-        self.client.post(reverse("inventario:orden_paso", args=[self.orden.pk, "proveedor"]))
+        self.client.post(paso("proveedor"))
         self.orden.refresh_from_db()
         self.assertEqual(self.orden.estado, "enviada")
-        # La factura llega y cuadra: el pago vence 30 días después
-        hace = timezone.localdate() - timedelta(days=2)
+        # El saldo, con su propio soporte
         self.client.force_login(self.financiera)
-        self.client.post(reverse("inventario:orden_paso", args=[self.orden.pk, "factura"]),
-                         {"numero": "FE-9", "fecha": f"{hace:%Y-%m-%d}", "valor": "119000"})
+        self.assertContains(self.client.get(url), "Registrar el pago del saldo")
+        self.client.post(paso("pago"), {"fecha": f"{hoy:%Y-%m-%d}", "valor": "71400", "soporte_pago": self.pdf("saldo.pdf")})
         self.orden.refresh_from_db()
-        self.assertTrue(self.orden.factura_cuadra and self.orden.factura_validada_en)
-        self.assertEqual(self.orden.vence, hace + timedelta(days=30))
-        self.assertEqual(self.client.get(reverse("inventario:financiera")).context["credito"], [self.orden])
+        self.assertEqual((self.orden.pagada, self.orden.valor_pagado, self.orden.saldo_valor), (True, 47600, 71400))
+        self.assertEqual(self.client.get(reverse("inventario:financiera")).context["saldos"], [])
+        self.assertNotContains(self.client.get(url), "crédito")
 
     def test_urgente_sin_direccion_le_avisa_y_sin_financiera_le_llega_a_direccion(self):
         from django.core import mail
@@ -1863,3 +1875,19 @@ class IngresoSinFacturaTests(BaseInventario):
                                                         "i-sin_factura": "on", "i-motivo_sin_factura": "inventario_inicial"})
         self.assertEqual(servicios.disponible_en(Insumo.objects.get(codigo="CAN-20X12"), Lugar.BODEGA), 30)
         self.assertEqual(Insumo.objects.get(codigo="CAN-20X12").stock_minimo, 1)  # sin escribirlo: 1 por defecto
+
+
+class IngresoInsumoDesdeLaListaTests(BaseInventario):
+    """La sugerencia «CÓDIGO · descripción» de un insumo con descripción larga no bloquea «Ingresar a bodega»."""
+
+    def test_codigo_elegido_de_la_lista_con_descripcion_larga(self):
+        Insumo.objects.create(codigo="PRUEBA-BOTON", descripcion="PRUEBA Boton de salida sin contacto", unidad="Unidad")
+        self.client.force_login(self.bodega)
+        r = self.client.get(reverse("inventario:compra") + "?tipo=insumo")
+        self.assertContains(r, '<option value="PRUEBA-BOTON">PRUEBA Boton de salida sin contacto</option>')
+        self.assertNotContains(r, 'maxlength="40"')
+        self.client.post(reverse("inventario:compra"), {
+            "tipo": "insumo", "i-codigo": "PRUEBA-BOTON · PRUEBA Boton de salida sin contacto", "i-unidad": "Unidad",
+            "i-cantidad": "2", "i-sin_factura": "on", "i-motivo_sin_factura": "inventario_inicial", "i-iva": "19",
+            "i-stock_minimo": "1"})
+        self.assertEqual(servicios.disponible_en(Insumo.objects.get(codigo="PRUEBA-BOTON"), Lugar.BODEGA), 2)

@@ -136,7 +136,7 @@ def orden_detalle(request, pk):
     u = request.user
     editable = ((orden.estado == E.BORRADOR and u.gestiona_inventario) or (orden.estado == E.REVISION and u.es_direccion)
                 or (orden.estado == E.POR_REVISAR and (u.revisa_compras or u.es_direccion)))
-    cancelable = u.gestiona_inventario and orden.estado not in (E.RECIBIDA, E.CANCELADA) and not orden.pagada
+    cancelable = u.gestiona_inventario and orden.estado not in (E.RECIBIDA, E.CANCELADA) and not orden.pago_inicial
     form = OrdenCompraForm(request.POST or None, request.FILES or None, instance=orden)
     lineas = formset_orden()(request.POST or None, instance=orden, prefix="lineas")
     if request.method == "POST":
@@ -176,7 +176,6 @@ def orden_detalle(request, pk):
                     E.POR_REVISAR: f"{orden.numero} enviada a la coordinación administrativa para su revisión.",
                     E.REVISION: f"{orden.numero} enviada a dirección para su aprobación.",
                     E.POR_PAGAR: f"{orden.numero} aprobada: pasó a financiera para el pago.",
-                    E.LISTA: f"{orden.numero} aprobada (a crédito): ya puede enviarla al proveedor.",
                 }.get(orden.estado, f"{orden.numero} guardada."))
                 return redirect(orden)
             messages.success(request, f"{orden.numero} guardada.")

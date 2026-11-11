@@ -343,7 +343,7 @@ class RecorridoComercialTests(BaseActuar):
 
 class RecorridoOrdenDeCompraTests(BaseActuar):
     """Orden de compra con revisión administrativa, devoluciones, aprobación, pago anticipado, recepción y factura con
-    diferencia; y la de crédito."""
+    diferencia; y la de anticipo."""
 
     def setUp(self):
         super().setUp()
@@ -357,7 +357,7 @@ class RecorridoOrdenDeCompraTests(BaseActuar):
     def datos(self, **extra):
         o, l = self.orden, self.linea
         return {"proveedor": self.proveedor.pk, "fecha_estimada": f"{o.fecha_estimada:%Y-%m-%d}", "forma_pago": o.forma_pago,
-                "dias_credito": o.dias_credito or "", "notas": "",
+                "porcentaje_anticipo": o.porcentaje_anticipo or "", "notas": "",
                 "lineas-TOTAL_FORMS": "1", "lineas-INITIAL_FORMS": "1", "lineas-MIN_NUM_FORMS": "0",
                 "lineas-MAX_NUM_FORMS": "1000", "lineas-0-id": l.pk, "lineas-0-orden": o.pk,
                 "lineas-0-descripcion": l.descripcion, "lineas-0-cantidad": "100", "lineas-0-adicional": "0",
@@ -423,15 +423,21 @@ class RecorridoOrdenDeCompraTests(BaseActuar):
         self.orden.refresh_from_db()
         self.assertTrue(self.orden.cerrada)
 
-    def test_urgente_y_credito(self):
+    def test_urgente_y_anticipo(self):
         url = self.orden.get_absolute_url()
-        self.orden.forma_pago = "credito"
+        self.orden.forma_pago = "anticipo"
         self.orden.save()
-        # Bodega la pasa urgente (sin dirección): queda lista para el proveedor porque es a crédito
+        # Bodega la pasa urgente (sin dirección): pasa a financiera para pagar el anticipo
         self.como("prueba.bodega")
-        self.client.post(url, self.datos(accion="a_direccion", urgente="1", dias_credito="30",
+        self.client.post(url, self.datos(accion="a_direccion", urgente="1", porcentaje_anticipo="50",
                                          motivo_urgencia="PRUEBA el proveedor solo la separa hoy"))
-        self.assertEqual(self.estado(), "lista")
+        self.assertEqual(self.estado(), "por_pagar")
         self.assertEqual(self.orden.motivo_urgencia, "PRUEBA el proveedor solo la separa hoy")
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        self.como("prueba.financiera")
+        self.paso("pago", {"fecha": f"{timezone.localdate():%Y-%m-%d}", "valor": "59500",
+                           "soporte_pago": SimpleUploadedFile("anticipo.pdf", b"%PDF-1.4 x", content_type="application/pdf")})
+        self.assertEqual(self.estado(), "lista")
+        self.como("prueba.bodega")
         self.paso("proveedor")
         self.assertEqual(self.estado(), "enviada")

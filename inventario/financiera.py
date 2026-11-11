@@ -2,8 +2,8 @@
 
 1. Bodega arma la orden y la envía a dirección, que la aprueba o la devuelve con observaciones. Si es urgente y
    dirección no puede atenderla, bodega la pasa con un motivo: queda en el historial y dirección recibe el aviso.
-2. Pago anticipado: financiera paga y sube el soporte de pago. A crédito: queda lista para el proveedor y
-   financiera la paga después, contra la factura, al vencer el plazo.
+2. Financiera paga y sube el soporte: de contado el 100 %; con anticipo, el porcentaje acordado (el saldo lo paga
+   cuando llega el pedido). JANOTEC no compra a crédito.
 3. Bodega se la envía al proveedor (orden + soporte de pago por correo, o por WhatsApp) y recibe lo que llega.
 4. La factura llega a financiera, que la registra y la compara con la orden. Si no cuadra queda marcada, salvo
    que financiera acepte la diferencia con una nota.
@@ -118,7 +118,7 @@ def _resumen(orden):
     """Líneas de resumen de la orden para los correos: proveedor, total con IVA, forma de pago y ticket."""
     t = orden.totales()
     return [f"Proveedor: {orden.proveedor or '—'}", f"Total: {_pesos(t['total'])} (con IVA)",
-            f"Forma de pago: {orden.get_forma_pago_display()}" + (f" a {orden.dias_credito} días" if orden.a_credito and orden.dias_credito else "")
+            f"Forma de pago: {orden.forma_pago_texto}"
             ] + ([f"Para: {orden.solicitud.ticket.radicado} · {orden.solicitud.ticket.empresa}"] if orden.solicitud_id else [])
 
 
@@ -168,13 +168,13 @@ def _nota(orden, autor, texto):
 
 # --- 1. Dirección aprueba -----------------------------------------------------------------------
 def validar(orden):
-    """Lo mínimo para que una orden pueda salir: proveedor, fecha de llegada, ítems con precio y plazo si es a crédito."""
+    """Lo mínimo para que una orden pueda salir: proveedor, fecha de llegada, ítems con precio y el % si es con anticipo."""
     faltan = [t for t, v in (("el proveedor", orden.proveedor_id), ("la fecha estimada de llegada", orden.fecha_estimada),
                              ("al menos un ítem", orden.lineas.exists())) if not v]
     if orden.lineas.exists() and orden.totales()["total"] <= 0:
         faltan.append("el precio de los ítems")
-    if orden.a_credito and not orden.dias_credito:
-        faltan.append("los días de crédito")
+    if orden.es_anticipo and not orden.porcentaje_anticipo:
+        faltan.append("el porcentaje del anticipo")
     if faltan:
         raise ValidationError("Para enviarla falta " + ", ".join(faltan) + ".")
 
@@ -249,13 +249,13 @@ def _a_direccion(orden, autor):
 
 
 def aprobar(orden, autor, motivo_urgencia=""):
-    """Aprobada por dirección (o pasada por urgencia): anticipada → financiera la paga; a crédito → lista para el proveedor."""
+    """Aprobada por dirección (o pasada por urgencia): pasa a financiera para el pago (el total o el anticipo)."""
     validar(orden)
     urgente = not autor.es_direccion
     if urgente and len(motivo_urgencia.strip()) < 10:
         raise ValidationError("La orden la aprueba dirección. Si es urgente, escriba el motivo (mínimo 10 caracteres).")
     with transaction.atomic():
-        orden.estado = E.LISTA if orden.a_credito else E.POR_PAGAR
+        orden.estado = E.POR_PAGAR
         orden.aprobada_en = timezone.now()
         orden.aprobada_por = None if urgente else autor
         orden.motivo_urgencia = motivo_urgencia.strip()[:500] if urgente else ""
@@ -271,17 +271,14 @@ def aprobar(orden, autor, motivo_urgencia=""):
                       correos_direccion())
     if orden.estado == E.POR_PAGAR:
         adjuntos = [_pdf_orden(orden)] + [a for a in (_archivo(orden.soporte),) if a]
+        que = (f"con anticipo del {orden.porcentaje_anticipo} %: pague {_pesos(orden.valor_por_pagar)} y el saldo cuando llegue el pedido"
+               if orden.es_anticipo else f"de contado: pague el total, {_pesos(orden.valor_por_pagar)}")
         _correo(f"[{orden.numero}] Orden de compra por pagar · {orden.proveedor}",
-                "\n".join(["Esta orden de compra es de pago anticipado: el proveedor despacha cuando reciba el soporte de pago.", "",
+                "\n".join([f"Esta orden de compra es {que}. El proveedor despacha cuando reciba el soporte de pago.", "",
                            *_resumen(orden), "", "Adjuntamos la orden y la cotización del proveedor. Cuando pague, suba el "
                            "soporte en la plataforma: le llega a bodega para reenviárselo al proveedor.", "",
                            f"Registrar el pago: {_enlace(orden)}"]),
                 correos_financiera(), adjuntos)
-    else:
-        notif._enviar(f"[{orden.numero}] Orden de compra aprobada: envíela al proveedor",
-                      "\n".join(["La orden es a crédito: ya puede enviársela al proveedor.", "", *_resumen(orden), "",
-                                 f"Enviar: {_enlace(orden)}"]),
-                      correos_bodega())
     return orden
 
 
@@ -304,7 +301,8 @@ def devolver(orden, autor, observaciones):
 
 # --- 2. Financiera paga ----------------------------------------------------------------------------
 def registrar_pago(orden, autor, fecha, valor, medio, soporte):
-    """Financiera registra el pago con su soporte. La anticipada queda lista para enviarla al proveedor."""
+    """Financiera registra un pago con su soporte: el total de contado o el anticipo (la orden queda lista para
+    enviarla al proveedor) y, con anticipo, después el saldo."""
     if orden.pagada:
         raise ValidationError("Esta orden ya tiene el pago registrado.")
     if orden.estado in (E.BORRADOR, E.POR_REVISAR, E.REVISION, E.CANCELADA):
@@ -315,14 +313,20 @@ def registrar_pago(orden, autor, fecha, valor, medio, soporte):
         raise ValidationError("La fecha del pago no puede ser futura.")
     if valor <= 0:
         raise ValidationError("Escriba el valor pagado.")
+    saldo = orden.saldo_pendiente
     with transaction.atomic():
-        orden.pagada_en, orden.valor_pagado, orden.medio_pago = fecha, valor, medio.strip()[:80]
-        orden.soporte_pago, orden.pago_por = soporte, autor
-        if orden.estado == E.POR_PAGAR:
-            orden.estado = E.LISTA
+        if saldo:
+            orden.saldo_pagado_en, orden.saldo_valor, orden.saldo_medio = fecha, valor, medio.strip()[:80]
+            orden.saldo_soporte, orden.saldo_por = soporte, autor
+        else:
+            orden.pagada_en, orden.valor_pagado, orden.medio_pago = fecha, valor, medio.strip()[:80]
+            orden.soporte_pago, orden.pago_por = soporte, autor
+            if orden.estado == E.POR_PAGAR:
+                orden.estado = E.LISTA
         orden.save()
-        _nota(orden, autor, f"financiera pagó la orden de compra {orden.numero} ({_pesos(valor)}).")
-    if orden.estado == E.LISTA:
+        que = "el saldo de" if saldo else ("el anticipo de" if orden.es_anticipo else "")
+        _nota(orden, autor, f"financiera pagó {que} la orden de compra {orden.numero} ({_pesos(valor)}).".replace("  ", " "))
+    if not saldo and orden.estado == E.LISTA:
         notif._enviar(f"[{orden.numero}] Pago listo: reenvíe el soporte al proveedor · {orden.proveedor}",
                       "\n".join([f"Financiera pagó {_pesos(valor)} el {fecha:%d/%m/%Y}" + (f" por {orden.medio_pago}" if orden.medio_pago else "") + ".",
                                  "", "Envíele al proveedor la orden con el soporte de pago para que despache.", "",
@@ -347,15 +351,14 @@ def whatsapp_proveedor(orden):
     if len(numero) == 10 and numero.startswith("3"):
         numero = "57" + numero
     texto = (f"Buenos días. Le enviamos la orden de compra {orden.numero} de JANOTEC S.A.S."
-             + (" con el soporte de pago" if orden.pagada else "") + ". Le adjunto los PDF; quedamos atentos al despacho y la factura.")
+             + (" con el soporte de pago" if orden.pago_inicial else "") + ". Le adjunto los PDF; quedamos atentos al despacho y la factura.")
     return f"https://wa.me/{numero}?text={quote(texto)}" if len(numero) >= 10 else ""
 
 
 def enviar_al_proveedor(orden, autor):
     """Le manda al proveedor la orden (y el soporte de pago si es anticipada). Devuelve True si salió por correo."""
     if orden.estado != E.LISTA:
-        raise ValidationError("La orden se envía al proveedor cuando está aprobada" +
-                              (" y pagada." if not orden.a_credito else "."))
+        raise ValidationError("La orden se envía al proveedor cuando está aprobada y pagada (el total o el anticipo).")
     destinos = correos_proveedor(orden.proveedor) if orden.proveedor else []
     enviado = False
     if destinos:
@@ -363,7 +366,7 @@ def enviar_al_proveedor(orden, autor):
         enviado = _correo(
             f"Orden de compra {orden.numero} · JANOTEC S.A.S.",
             "\n".join([f"Señores {orden.proveedor.razon_social}:", "",
-                       f"Adjuntamos la orden de compra {orden.numero}" + (" y el soporte de pago" if orden.pagada else "") + ".",
+                       f"Adjuntamos la orden de compra {orden.numero}" + (" y el soporte de pago" if orden.pago_inicial else "") + ".",
                        f"Fecha estimada de entrega: {orden.fecha_estimada:%d/%m/%Y}." if orden.fecha_estimada else "",
                        "Por favor envíen la factura electrónica junto con el despacho.", "",
                        "Cordialmente,", "Bodega y logística · JANOTEC S.A.S."]),
@@ -510,7 +513,7 @@ def accion(request, pk, cual):
 def archivo(request, pk, cual):
     """Soporte de pago o factura del proveedor."""
     orden = get_object_or_404(OrdenCompra, pk=pk)
-    campo = {"soporte_pago": orden.soporte_pago, "factura_pdf": orden.factura_pdf}.get(cual)
+    campo = {"soporte_pago": orden.soporte_pago, "saldo_soporte": orden.saldo_soporte, "factura_pdf": orden.factura_pdf}.get(cual)
     if not campo:
         raise Http404
     return FileResponse(campo.open("rb"), as_attachment=False, filename=campo.name.rsplit("/", 1)[-1])
@@ -522,15 +525,14 @@ def bandeja(request):
     """Módulo del área financiera: qué pagar, qué factura falta y cuál no cuadra."""
     base = OrdenCompra.objects.exclude(estado__in=[E.CANCELADA, E.BORRADOR]).select_related(
         "proveedor", "solicitud__ticket__empresa").prefetch_related("lineas")
-    anticipadas = list(base.filter(estado=E.POR_PAGAR))
-    credito = sorted(base.filter(forma_pago=OrdenCompra.FormaPago.CREDITO, pagada_en__isnull=True,
-                                 estado__in=[E.LISTA, E.ENVIADA, E.RECIBIDA]),
-                     key=lambda o: (o.vence is None, o.vence or date.max))
+    # Por pagar: las aprobadas (el total o el anticipo) y alguna que haya quedado sin pago registrado
+    por_pagar = list(base.filter(Q(estado=E.POR_PAGAR) | Q(pagada_en__isnull=True, estado__in=[E.LISTA, E.ENVIADA, E.RECIBIDA])))
+    saldos = list(base.filter(forma_pago=OrdenCompra.FormaPago.ANTICIPO, pagada_en__isnull=False, saldo_pagado_en__isnull=True))
     sin_factura = list(base.filter(estado__in=[E.LISTA, E.ENVIADA, E.RECIBIDA], factura_valor__isnull=True))
     con_diferencia = list(base.filter(factura_valor__isnull=False, factura_validada_en__isnull=True))
     cerradas = [o for o in base.filter(estado=E.RECIBIDA, factura_validada_en__isnull=False, pagada_en__isnull=False)
-                .order_by("-factura_validada_en")[:15]]
+                .order_by("-factura_validada_en")[:30] if o.pagada][:15]
     return render(request, "inventario/financiera.html", {
-        "anticipadas": anticipadas, "credito": credito, "sin_factura": sin_factura, "con_diferencia": con_diferencia,
+        "por_pagar": por_pagar, "saldos": saldos, "sin_factura": sin_factura, "con_diferencia": con_diferencia,
         "cerradas": cerradas, "hoy": timezone.localdate(),
     })

@@ -209,7 +209,8 @@ class CompraInsumoForm(SinFacturaMixin, _Estilos, BootstrapMixin, forms.Form):
     """Ingreso de insumos (cable, conectores…) por código; si el código es nuevo se crea en el catálogo."""
     DATOS_COMPRA = ("valor_unitario", "proveedor", "factura", "fecha")
 
-    codigo = forms.CharField(label="Código del insumo", max_length=40, widget=forms.TextInput(attrs={"list": "lista-insumos"}))
+    # Sin límite de largo en la casilla: la sugerencia trae «CÓDIGO · descripción» y el código se separa en clean
+    codigo = forms.CharField(label="Código del insumo", max_length=300, widget=forms.TextInput(attrs={"list": "lista-insumos"}))
     descripcion = forms.CharField(label="Descripción (solo si es un insumo nuevo)", required=False, max_length=250)
     unidad = forms.ChoiceField(label="Unidad", choices=Insumo.Unidad.choices, required=False)
     cantidad = forms.DecimalField(min_value=Decimal("0.01"), max_digits=12, decimal_places=2)
@@ -224,7 +225,9 @@ class CompraInsumoForm(SinFacturaMixin, _Estilos, BootstrapMixin, forms.Form):
         d = super().clean()
         codigo = (d.get("codigo") or "").split(" · ")[0].strip().upper()
         d["codigo"] = codigo
-        if codigo and not Insumo.objects.filter(codigo=codigo).exists() and not d.get("descripcion"):
+        if len(codigo) > 40:
+            self.add_error("codigo", "El código es de máximo 40 caracteres: elíjalo de la lista o escriba solo el código.")
+        elif codigo and not Insumo.objects.filter(codigo=codigo).exists() and not d.get("descripcion"):
             self.add_error("descripcion", "Es un código nuevo: escriba la descripción para crearlo en el catálogo.")
         self._exigir_datos_de_compra(d)
         return d
@@ -392,28 +395,30 @@ class OrdenCompraForm(BootstrapMixin, forms.ModelForm):
     """Encabezado de la orden de compra: proveedor, fecha estimada, forma de pago y cotización del proveedor."""
     class Meta:
         model = OrdenCompra
-        fields = ["proveedor", "fecha_estimada", "forma_pago", "dias_credito", "notas", "soporte"]
+        fields = ["proveedor", "fecha_estimada", "forma_pago", "porcentaje_anticipo", "notas", "soporte"]
         widgets = {"fecha_estimada": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
                    "notas": forms.Textarea(attrs={"rows": 2, "placeholder": "Forma de pago, entrega en bodega, garantía…"})}
 
     def __init__(self, *args, **kwargs):
-        """La forma de pago es opcional en el formulario: si no se elige, queda pago anticipado."""
+        """La forma de pago es opcional en el formulario: si no se elige, queda de contado."""
         super().__init__(*args, **kwargs)
         self.fields["proveedor"].empty_label = "— Elija el proveedor —"
         self.fields["soporte"].widget.attrs["accept"] = ".pdf,image/*"
         self.fields["soporte"].label = "Cotización del proveedor (PDF)"
-        self.fields["forma_pago"].required = False  # si no se elige, pago anticipado
+        self.fields["forma_pago"].required = False  # si no se elige, de contado
+        self.fields["porcentaje_anticipo"].label = "Anticipo (%)"
+        self.fields["porcentaje_anticipo"].widget.attrs.update({"min": "1", "max": "99", "placeholder": "Ej.: 50"})
         self._aplicar_estilos()
 
     def clean_forma_pago(self):
-        """Pago anticipado cuando no se eligió forma de pago."""
-        return self.cleaned_data.get("forma_pago") or OrdenCompra.FormaPago.ANTICIPADO
+        """De contado cuando no se eligió forma de pago."""
+        return self.cleaned_data.get("forma_pago") or OrdenCompra.FormaPago.CONTADO
 
     def clean(self):
-        """A crédito lleva los días; anticipada no."""
+        """Con anticipo lleva el porcentaje; de contado no."""
         datos = super().clean()
-        if datos.get("forma_pago") != OrdenCompra.FormaPago.CREDITO:
-            datos["dias_credito"] = None
+        if datos.get("forma_pago") != OrdenCompra.FormaPago.ANTICIPO:
+            datos["porcentaje_anticipo"] = None
         return datos
 
 

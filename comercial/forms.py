@@ -460,15 +460,19 @@ class CotizacionForm(BootstrapMixin, forms.ModelForm):
         """Del 1 al 999 y sin repetir el de otra propuesta del año."""
         from django.utils import timezone
 
-        from .cotizador import consecutivos_usados
+        from .cotizador import consecutivos_usados, ultimo_externo
 
         n = self.cleaned_data.get("consecutivo")
         if n is None or self.fields["consecutivo"].disabled:
             return n
         if not 1 <= n <= 999:
             raise forms.ValidationError("Escriba un número del 1 al 999.")
-        if n in consecutivos_usados(timezone.localdate().year, excepto=self.instance.ficha):
+        anio = timezone.localdate().year
+        if n in consecutivos_usados(anio, excepto=self.instance.ficha):
             raise forms.ValidationError(f"El {n:03d} ya lo usa otra propuesta de este año.")
+        externo = ultimo_externo(anio)
+        if n <= externo:
+            raise forms.ValidationError(f"Hasta el {externo:03d} ya se usó fuera de la plataforma este año: escriba uno mayor.")
         return n
 
 

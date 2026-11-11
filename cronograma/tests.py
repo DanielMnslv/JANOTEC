@@ -220,22 +220,21 @@ class AutorizacionTests(BaseCronograma):
         self.enviar(a)
         url = self.enlace(mail.outbox[-1])
         self.client.logout()
-        # Abrir el enlace (como lo haría un antivirus) no responde por el cliente
+        # Como en la propuesta: el clic en «Aceptar» se registra con la página que se envía sola (un antivirus que solo
+        # abre el enlace no ejecuta la página, así que no acepta por el cliente)
         r = self.client.get(url + "?r=aceptar")
-        self.assertContains(r, "Aceptar la visita")
+        self.assertContains(r, 'id="aceptar-ya"')
         a.refresh_from_db()
         self.assertEqual(a.autorizacion, A.ENVIADA)
         mail.outbox.clear()
-        # Debe decir quién responde: su correo (de los notificados) y su nombre
-        self.client.post(url, {"accion": "aceptar", "correo": "otro@cliente.co", "nombre": "Ana"})
-        a.refresh_from_db()
-        self.assertEqual(a.autorizacion, A.ENVIADA)
+        # Decir quién responde es opcional; un correo que no fue notificado no queda registrado
         correo = a.correos[0]
         self.client.post(url, {"accion": "aceptar", "correo": correo.upper(), "nombre": "Ana Ruiz"})
         a.refresh_from_db()
         self.assertEqual(a.quien_respondio, f"Ana Ruiz ({correo})")
         self.ticket.refresh_from_db()
         self.assertEqual((a.autorizacion, self.ticket.estado), (A.ACEPTADA, E.AUTORIZADO))
+        self.assertNotContains(self.client.get(url + "?r=aceptar"), 'id="aceptar-ya"')  # ya aceptada: no se reenvía
         sst = next(m for m in mail.outbox if "sst@janotec.test" in m.to)
         self.assertIn("Javier Jaramillo", sst.body)
         self.assertTrue(any("coordinador@janotec.test" in m.to and "ACEPTÓ" in m.subject
@@ -1082,3 +1081,20 @@ class HorasExtrasTests(BaseCronograma):
     def test_el_cliente_no_entra(self):
         self.client.force_login(self.cli)
         self.assertEqual(self.client.get(reverse("cronograma:horas_extras")).status_code, 403)
+
+
+class AceptarVisitaConUnClicTests(BaseCronograma):
+    """Sin escribir nombre ni correo: el «Aceptar» del correo deja la visita autorizada del todo."""
+    enviar, enlace = AutorizacionTests.enviar, AutorizacionTests.enlace
+
+    def test_aceptar_sin_datos_queda_autorizada(self):
+        self.programar(proximo(1))
+        a = Actividad.objects.get()
+        self.con_documentos(self.tec)
+        self.enviar(a)
+        url = self.enlace(mail.outbox[-1])
+        self.client.logout()
+        self.client.post(url, {"accion": "aceptar"})
+        a.refresh_from_db()
+        self.ticket.refresh_from_db()
+        self.assertEqual((a.autorizacion, self.ticket.estado), (A.ACEPTADA, E.AUTORIZADO))

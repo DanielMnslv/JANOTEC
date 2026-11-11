@@ -1077,3 +1077,36 @@ class PlazoAlquilerTests(BaseComercial):
         t = self.enviar_alquiler()
         r = self.client.get(reverse("comercial:cotizacion_pdf", args=[t.radicado]))
         self.assertEqual(r["Content-Type"], "application/pdf")
+
+
+class ConsecutivoYValorTests(BaseComercial):
+    """El consecutivo sigue al de Excel y el cliente ve el valor con IVA incluido."""
+    lineas = CotizadorTests.lineas
+
+    def test_consecutivo_sincronizado_con_el_de_excel(self):
+        from django.utils import timezone
+
+        from .models import PropuestaVersion
+        anio = timezone.localdate().year
+        self.client.force_login(self.asesor)
+        url = reverse("comercial:propuestas")
+        self.assertContains(self.client.get(url), "La próxima propuesta sale con el <b>001</b>")
+        self.client.post(url, {"accion": "consecutivo", "ultimo": "47"})
+        self.assertContains(self.client.get(url), "La próxima propuesta sale con el <b>048</b>")
+        self.client.post(url, {"accion": "consecutivo", "ultimo": "x"})  # no se daña con un valor raro
+        t = self.crear()
+        self.client.post(reverse("comercial:informe", args=[t.radicado]), {"necesidad": "Cámaras", "servicios": "CCTV"})
+        cot = reverse("comercial:cotizador", args=[t.radicado])
+        self.assertContains(self.client.get(cot), f"PE-{anio}-")
+        self.client.post(cot, {**self.lineas([("Cámara", "1", "100000", "0")]), "margen": "10"})
+        # Un número que ya se usó en Excel no se deja poner
+        r = self.client.post(cot, {**self.lineas([]), "margen": "10", "consecutivo": "30"})
+        self.assertIn("consecutivo", r.context["form"].errors)
+        self.client.post(cot, {**self.lineas([]), "margen": "10", **URGENTE, "accion": "enviar"})
+        v = PropuestaVersion.objects.get(ficha=t.ficha)
+        self.assertRegex(v.codigo, rf"^PE-{anio}-\d{{2}}-048-V1$")
+        # Correo y página de respuesta: el total con IVA (100.000 / 0,9 = 111.111,11 + 19 % = 132.222)
+        correo = next(m for m in mail.outbox if "leidy@a.co" in m.to and "Propuesta económica" in m.subject)
+        self.assertIn("$132.222 IVA incluido", correo.alternatives[0][0])
+        self.assertNotIn("antes de IVA", correo.alternatives[0][0])
+        self.assertEqual(v.valor_texto, "$132.222 IVA incluido")

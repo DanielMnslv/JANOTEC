@@ -204,8 +204,8 @@ def orden_compra_pdf(orden):
     tabla.setStyle(TableStyle([("GRID", (0, 0), (-1, -4), 0.5, BORDE), ("BACKGROUND", (0, 0), (-1, 0), TINTE_VERDE),
                                ("VALIGN", (0, 0), (-1, -1), "TOP"), ("BOX", (3, -3), (-1, -1), 0.5, BORDE)]))
     historia = _cabecera_compra(ancho, f"ORDEN DE COMPRA · {orden.numero}") + [tabla_datos, Spacer(1, 8), tabla]
-    pago = "Pago anticipado: despachar al recibir el soporte de pago." if not orden.a_credito else \
-        f"Crédito a {orden.dias_credito or '—'} días contra factura."
+    pago = (f"anticipo del {orden.porcentaje_anticipo or '—'} %: despachar al recibir el soporte del anticipo; el saldo "
+            "se paga al recibir el pedido." if orden.es_anticipo else "contado: despachar al recibir el soporte de pago del 100 %.")
     historia += [Spacer(1, 8), _p("Forma de pago: " + pago + " Enviar la factura electrónica con el despacho.")]
     if orden.notas:
         historia += [Spacer(1, 4), _p("Condiciones: " + orden.notas)]

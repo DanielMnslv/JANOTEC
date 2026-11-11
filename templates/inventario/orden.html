@@ -25,7 +25,7 @@
       {% if orden.proveedor %}<div class="small mb-3 mt-n2">{% with a=orden.proveedor.asesor %}{% if a %}<i class="bi bi-person-badge"></i> {{ a.nombre }}{% if a.celular %} · <a href="tel:{{ a.celular }}">{{ a.celular }}</a>{% endif %}{% else %}<span class="text-muted-jn">Sin asesor registrado.</span>{% endif %}{% endwith %} · <a href="{% url 'inventario:proveedor' orden.proveedor.pk %}">Ver ficha</a></div>{% endif %}
       {% include "tickets/_campo.html" with campo=form.fecha_estimada %}
       {% include "tickets/_campo.html" with campo=form.forma_pago %}
-      {% include "tickets/_campo.html" with campo=form.dias_credito %}
+      {% include "tickets/_campo.html" with campo=form.porcentaje_anticipo %}
       {% include "tickets/_campo.html" with campo=form.notas %}
       {% include "tickets/_campo.html" with campo=form.soporte %}
     </div></div></div>

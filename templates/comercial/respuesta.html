@@ -12,7 +12,7 @@
     <h1 class="h5 mb-1">{{ ticket.asunto }}</h1>
     <div class="small text-muted-jn mb-3">{{ ticket.empresa }}{% if ficha.comercial %} · Asesor: {{ ficha.comercial }}{% endif %}</div>
     <dl class="dl-ficha mb-3">
-      {% if version.valor %}<dt>Valor</dt><dd><b>${{ version.valor|floatformat:"0g" }}</b> antes de IVA</dd>{% endif %}
+      {% if version.valor_texto %}<dt>Valor</dt><dd><b>{{ version.valor_texto }}</b></dd>{% endif %}
       {% if version.archivo %}<dt>Documento</dt><dd>{{ version.archivo.nombre_original }} <span class="small text-muted-jn">(adjunto en el correo)</span></dd>{% endif %}
     </dl>
 

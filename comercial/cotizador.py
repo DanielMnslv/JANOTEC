@@ -118,9 +118,27 @@ def consecutivos_usados(anio, excepto=None):
     return {int(patron.match(c).group(1)) for c in qs.values_list("codigo", flat=True)}
 
 
+def ultimo_externo(anio=None):
+    """El último NNN que se usó fuera de la plataforma ese año (en Excel, antes de ponerla en marcha); 0 si no se anotó."""
+    from .models import ConsecutivoPropuesta
+    anio = anio or timezone.localdate().year
+    return ConsecutivoPropuesta.objects.filter(anio=anio).values_list("ultimo_externo", flat=True).first() or 0
+
+
 def siguiente_consecutivo(anio=None):
-    """El siguiente NNN del año: el mayor ya usado más uno."""
-    return max(consecutivos_usados(anio or timezone.localdate().year), default=0) + 1
+    """El siguiente NNN del año: el mayor entre los usados en la plataforma y el último usado por fuera, más uno."""
+    anio = anio or timezone.localdate().year
+    return max(consecutivos_usados(anio) | {ultimo_externo(anio)}) + 1
+
+
+def sincronizar_consecutivo(ultimo, autor, anio=None):
+    """Anota el último NNN usado fuera de la plataforma para que la numeración siga desde ahí."""
+    from .models import ConsecutivoPropuesta
+    if not 0 <= ultimo <= 998:
+        raise ValueError("Escriba un número del 0 al 998.")
+    anio = anio or timezone.localdate().year
+    ConsecutivoPropuesta.objects.update_or_create(anio=anio, defaults={"ultimo_externo": ultimo, "actualizado_por": autor})
+    return siguiente_consecutivo(anio)
 
 
 def codigo(ficha, numero, cotizacion=None):

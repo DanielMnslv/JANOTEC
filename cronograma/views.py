@@ -196,35 +196,31 @@ def enviar_autorizacion(request, pk):
 
 # --- Respuesta del cliente desde el correo (sin iniciar sesión) ---------------------------
 def autorizacion(request, token):
-    """Los botones del correo abren esta página; la respuesta se registra al confirmar (POST).
-
-    Así los antivirus de correo que abren los enlaces no aceptan ni rechazan por el cliente.
+    """Los botones del correo abren esta página. Como en la propuesta, «Aceptar» queda registrado con el solo clic:
+    la página se envía sola con JavaScript, así los antivirus del correo (que abren los enlaces sin ejecutar la
+    página) no aceptan por el cliente. «Rechazar» abre la página para que diga por qué (opcional) y confirme.
+    El correo y el nombre de quien responde son opcionales: si solo hay un correo notificado, queda ese.
     """
     actividad = servicios.actividad_de_token(token)
     if actividad is None:
         return render(request, "cronograma/autorizacion.html", {"invalido": True}, status=404)
-    error = ""
     correos = actividad.correos
     if request.method == "POST":
         accion = request.POST.get("accion")
-        correo = request.POST.get("correo", "").strip()
-        nombre = request.POST.get("nombre", "").strip()
         if accion in ("aceptar", "rechazar"):
-            # Cualquiera de los correos notificados puede responder, pero debe decir cuál es el suyo
-            if correos and correo.lower() not in {c.lower() for c in correos}:
-                error = "Elija su correo de la lista para saber quién responde."
-            elif not nombre:
-                error = "Escriba su nombre para saber quién responde."
-            else:
-                servicios.responder_autorizacion(actividad, accion == "aceptar", request.POST.get("motivo", "").strip(),
-                                                 correo=correo, nombre=nombre)
-                return render(request, "cronograma/autorizacion.html", {"a": actividad, "respondida": True,
-                                                                        "cuando": servicios.cuando(actividad)})
+            correo = request.POST.get("correo", "").strip() or (correos[0] if len(correos) == 1 else "")
+            servicios.responder_autorizacion(actividad, accion == "aceptar", request.POST.get("motivo", "").strip(),
+                                             correo=correo, nombre=request.POST.get("nombre", "").strip())
+            return render(request, "cronograma/autorizacion.html", {"a": actividad, "respondida": True,
+                                                                    "cuando": servicios.cuando(actividad)})
+    elegida = request.POST.get("accion") or request.GET.get("r", "")
     return render(request, "cronograma/autorizacion.html", {
         "a": actividad, "cuando": servicios.cuando(actividad), "tecnicos": actividad.tecnicos(),
-        "elegida": request.POST.get("accion") or request.GET.get("r", ""), "correos": correos, "error": error,
+        "elegida": elegida, "correos": correos,
         "correo_elegido": request.POST.get("correo", "") or (correos[0] if len(correos) == 1 else ""),
         "nombre": request.POST.get("nombre", ""),
+        # «Aceptar» desde el correo se registra con el clic (salvo que ya la hubiera aceptado)
+        "aceptar_ya": request.method == "GET" and elegida == "aceptar" and actividad.autorizacion != Actividad.Autorizacion.ACEPTADA,
     })
 
 

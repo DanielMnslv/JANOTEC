@@ -2,13 +2,13 @@
 {# El camino de la orden de compra y lo que le toca hacer ahora a cada área (dirección, financiera, bodega). #}
 <div class="card mb-3" id="camino">
   <div class="card-header"><i class="bi bi-signpost-split"></i> Camino de la compra
-    <span class="small text-muted-jn fw-normal">· {{ orden.get_forma_pago_display }}{% if orden.a_credito and orden.dias_credito %} a {{ orden.dias_credito }} días{% endif %}</span></div>
+    <span class="small text-muted-jn fw-normal">· {{ orden.forma_pago_texto }}</span></div>
   <div class="card-body">
     <ol class="list-unstyled d-flex flex-wrap gap-2 small mb-3 camino-orden">
       <li class="badge {% if orden.estado != 'borrador' %}text-bg-success{% else %}text-bg-secondary{% endif %}">1. Preparación (bodega)</li>
       <li class="badge {% if orden.revisada_en %}text-bg-success{% elif orden.estado == 'por_revisar' %}text-bg-info{% else %}text-bg-light border{% endif %}">2. Revisión (coordinación administrativa)</li>
       <li class="badge {% if orden.aprobada_en %}text-bg-success{% elif orden.estado == 'revision' %}text-bg-info{% else %}text-bg-light border{% endif %}">3. Aprobación (dirección){% if orden.motivo_urgencia %} · urgente{% endif %}</li>
-      <li class="badge {% if orden.pagada %}text-bg-success{% elif orden.estado == 'por_pagar' %}text-bg-danger{% else %}text-bg-light border{% endif %}">4. Pago (financiera){% if orden.a_credito and not orden.pagada %} · a crédito{% endif %}</li>
+      <li class="badge {% if orden.pagada %}text-bg-success{% elif orden.saldo_pendiente %}text-bg-warning{% elif orden.estado == 'por_pagar' %}text-bg-danger{% else %}text-bg-light border{% endif %}">4. Pago (financiera){% if orden.saldo_pendiente %} · falta el saldo{% endif %}</li>
       <li class="badge {% if orden.estado == 'enviada' or orden.estado == 'recibida' %}text-bg-success{% elif orden.estado == 'lista' %}text-bg-primary{% else %}text-bg-light border{% endif %}">5. Envío al proveedor (bodega)</li>
       <li class="badge {% if orden.estado == 'recibida' %}text-bg-success{% else %}text-bg-light border{% endif %}">6. Recepción (bodega)</li>
       <li class="badge {% if orden.factura_validada_en %}text-bg-success{% elif orden.factura_registrada %}text-bg-warning{% else %}text-bg-light border{% endif %}">7. Factura (financiera)</li>
@@ -20,9 +20,11 @@
       {% if orden.creado_por %}<li>Preparada por {{ orden.creado_por.get_full_name|default:orden.creado_por.username }} el {{ orden.creado|date:"d/m/Y" }}.</li>{% endif %}
       {% if orden.revisada_en %}<li>Revisada por {{ orden.revisada_por.get_full_name|default:orden.revisada_por.username }} el {{ orden.revisada_en|date:"d/m/Y h:i a" }}.</li>{% endif %}
       {% if orden.aprobada_en %}<li>{% if orden.aprobada_por %}Aprobada por {{ orden.aprobada_por.get_full_name|default:orden.aprobada_por.username }}{% else %}Pasada sin aprobación de dirección por urgencia: <em>{{ orden.motivo_urgencia }}</em>{% endif %} el {{ orden.aprobada_en|date:"d/m/Y h:i a" }}.</li>{% endif %}
-      {% if orden.pagada %}<li>Pagada el {{ orden.pagada_en|date:"d/m/Y" }}: {{ orden.valor_pagado|pesos }}{% if orden.medio_pago %} por {{ orden.medio_pago }}{% endif %}{% if orden.pago_por %} · {{ orden.pago_por.get_full_name|default:orden.pago_por.username }}{% endif %}
-        {% if orden.soporte_pago %}· <a href="{% url 'inventario:orden_archivo_financiera' orden.pk 'soporte_pago' %}" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i> Soporte de pago</a>{% endif %}</li>
-      {% elif orden.vence %}<li>A crédito: se paga antes del <b {% if orden.vence < hoy %}class="text-danger"{% endif %}>{{ orden.vence|date:"d/m/Y" }}</b>.</li>{% endif %}
+      {% if orden.pago_inicial %}<li>{% if orden.es_anticipo %}Anticipo pagado{% else %}Pagada{% endif %} el {{ orden.pagada_en|date:"d/m/Y" }}: {{ orden.valor_pagado|pesos }}{% if orden.medio_pago %} por {{ orden.medio_pago }}{% endif %}{% if orden.pago_por %} · {{ orden.pago_por.get_full_name|default:orden.pago_por.username }}{% endif %}
+        {% if orden.soporte_pago %}· <a href="{% url 'inventario:orden_archivo_financiera' orden.pk 'soporte_pago' %}" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i> Soporte de pago</a>{% endif %}</li>{% endif %}
+      {% if orden.saldo_pagado_en %}<li>Saldo pagado el {{ orden.saldo_pagado_en|date:"d/m/Y" }}: {{ orden.saldo_valor|pesos }}{% if orden.saldo_medio %} por {{ orden.saldo_medio }}{% endif %}{% if orden.saldo_por %} · {{ orden.saldo_por.get_full_name|default:orden.saldo_por.username }}{% endif %}
+        {% if orden.saldo_soporte %}· <a href="{% url 'inventario:orden_archivo_financiera' orden.pk 'saldo_soporte' %}" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i> Soporte del saldo</a>{% endif %}</li>
+      {% elif orden.saldo_pendiente %}<li>Falta pagar el saldo: {{ orden.valor_por_pagar|pesos }}{% if orden.estado != 'recibida' %}, cuando llegue el pedido{% endif %}.</li>{% endif %}
       {% if orden.enviada_proveedor_en %}<li>Enviada al proveedor el {{ orden.enviada_proveedor_en|date:"d/m/Y h:i a" }}.</li>{% endif %}
       {% if orden.factura_registrada %}<li>Factura {{ orden.factura }} del {{ orden.fecha_factura|date:"d/m/Y" }} por {{ orden.factura_valor|pesos }}
         {% if orden.factura_pdf %}· <a href="{% url 'inventario:orden_archivo_financiera' orden.pk 'factura_pdf' %}" target="_blank" rel="noopener"><i class="bi bi-receipt"></i> PDF</a>{% endif %}
@@ -60,12 +62,12 @@
       {% else %}<div class="small text-muted-jn"><i class="bi bi-hourglass-split"></i> En revisión de dirección: no se modifica hasta que la apruebe o la devuelva.</div>{% endif %}
     {% endif %}
 
-    {% if user.ve_financiera and not orden.pagada %}{% if orden.estado == 'por_pagar' or orden.a_credito and orden.estado in 'lista enviada recibida' %}
+    {% if user.ve_financiera and not orden.pagada %}{% if orden.estado == 'por_pagar' or orden.estado in 'lista enviada recibida' %}
       <form method="post" enctype="multipart/form-data" action="{% url 'inventario:orden_paso' orden.pk 'pago' %}" class="border border-danger rounded p-2 mt-2" id="form-pago">{% csrf_token %}
-        <div class="fw-semibold small mb-2"><i class="bi bi-cash-coin"></i> Registrar el pago (financiera)</div>
+        <div class="fw-semibold small mb-2"><i class="bi bi-cash-coin"></i> {% if orden.saldo_pendiente %}Registrar el pago del saldo{% elif orden.es_anticipo %}Registrar el anticipo del {{ orden.porcentaje_anticipo }} %{% else %}Registrar el pago de contado{% endif %} (financiera)</div>
         <div class="row g-2">
           <div class="col-sm-3"><label class="form-label small mb-0" for="pago-fecha">Fecha</label><input type="date" name="fecha" id="pago-fecha" class="form-control form-control-sm" required value="{{ hoy|date:'Y-m-d' }}" max="{{ hoy|date:'Y-m-d' }}"></div>
-          <div class="col-sm-3"><label class="form-label small mb-0" for="pago-valor">Valor pagado</label><input type="number" step="any" min="1" name="valor" id="pago-valor" class="form-control form-control-sm" required value="{{ totales.total|floatformat:'0' }}"></div>
+          <div class="col-sm-3"><label class="form-label small mb-0" for="pago-valor">Valor pagado</label><input type="number" step="any" min="1" name="valor" id="pago-valor" class="form-control form-control-sm" required value="{{ orden.valor_por_pagar|floatformat:'0' }}"></div>
           <div class="col-sm-3"><label class="form-label small mb-0" for="pago-medio">Medio</label><input name="medio" id="pago-medio" class="form-control form-control-sm" maxlength="80" placeholder="Transferencia…"></div>
           <div class="col-sm-3"><label class="form-label small mb-0" for="pago-soporte">Soporte de pago</label><input type="file" name="soporte_pago" id="pago-soporte" class="form-control form-control-sm" required accept=".pdf,image/*"></div>
         </div>
@@ -75,7 +77,7 @@
 
     {% if orden.estado == 'lista' and user.gestiona_inventario %}
       <div class="border border-primary rounded p-2 mt-2 d-flex flex-wrap gap-2 align-items-center">
-        <span class="small me-auto"><i class="bi bi-send"></i> <b>Envíele al proveedor</b> la orden{% if orden.pagada %} y el soporte de pago{% endif %}.
+        <span class="small me-auto"><i class="bi bi-send"></i> <b>Envíele al proveedor</b> la orden{% if orden.pago_inicial %} y el soporte de pago{% endif %}.
           {% if correos_proveedor %}Sale por correo a {{ correos_proveedor|join:", " }}.{% else %}<span class="text-danger">El proveedor no tiene correo: use WhatsApp.</span>{% endif %}</span>
         {% if whatsapp %}<a class="btn btn-sm btn-outline-success" href="{{ whatsapp }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> WhatsApp</a>{% endif %}
         <form method="post" action="{% url 'inventario:orden_paso' orden.pk 'proveedor' %}">{% csrf_token %}

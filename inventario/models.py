@@ -13,6 +13,7 @@ import unicodedata
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.urls import reverse
 from django.utils.timezone import now as timezone_now
@@ -646,8 +647,8 @@ class OrdenCompra(models.Model):
     El camino de una orden:
     1. Bodega la arma (en preparación) y la envía a dirección; dirección la aprueba o la devuelve con observaciones.
        Si es urgente y dirección no puede, bodega la pasa con un motivo y dirección recibe el aviso.
-    2. Pago anticipado: financiera la paga y sube el soporte (por pagar → lista). A crédito: queda lista de una vez y
-       financiera la paga después, contra la factura, al vencer el plazo.
+    2. Pago: de contado, financiera paga el 100 % y sube el soporte (por pagar → lista). Con anticipo paga primero
+       el porcentaje acordado (por pagar → lista) y el saldo cuando llega el pedido.
     3. Bodega se la envía al proveedor (con el soporte de pago si lo hay) y recibe lo que llega.
     4. La factura llega a financiera, que la registra y la compara con la orden. Cerrada = recibida, pagada y facturada.
     """
@@ -656,8 +657,8 @@ class OrdenCompra(models.Model):
         """Camino de la orden de compra:
 
             borrador → revisión administrativa (si quien la arma no revisa compras) → revisión de dirección →
-            por pagar (financiera, si es anticipado) → lista →
-            enviada al proveedor → recibida en bodega. Con crédito se salta «por pagar».
+            por pagar (financiera: el total de contado, o el anticipo) → lista →
+            enviada al proveedor → recibida en bodega (con anticipo, financiera paga ahí el saldo).
         """
         BORRADOR = "borrador", "En preparación"
         POR_REVISAR = "por_revisar", "En revisión administrativa"
@@ -669,9 +670,10 @@ class OrdenCompra(models.Model):
         CANCELADA = "cancelada", "Cancelada"
 
     class FormaPago(models.TextChoices):
-        """Anticipado: financiera paga antes del despacho. Crédito: se paga contra la factura."""
-        ANTICIPADO = "anticipado", "Pago anticipado (antes del despacho)"
-        CREDITO = "credito", "Crédito (se paga contra factura)"
+        """JANOTEC no compra a crédito. Contado: el 100 % antes del despacho. Anticipo: una parte antes y el saldo
+        cuando llega el pedido."""
+        CONTADO = "contado", "Contado (100 % antes del despacho)"
+        ANTICIPO = "anticipo", "Anticipo (una parte antes; el saldo al recibir)"
 
     proveedor = models.ForeignKey(Proveedor, on_delete=models.SET_NULL, null=True, blank=True, related_name="ordenes")
     solicitud = models.ForeignKey(SolicitudMaterial, on_delete=models.SET_NULL, null=True, blank=True,
@@ -690,9 +692,10 @@ class OrdenCompra(models.Model):
     fecha_factura = models.DateField("fecha de la factura", null=True, blank=True)
     recibida_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     recibida_en = models.DateTimeField(null=True, blank=True)
-    forma_pago = models.CharField("forma de pago", max_length=12, choices=FormaPago.choices, default=FormaPago.ANTICIPADO)
-    dias_credito = models.PositiveSmallIntegerField("días de crédito", null=True, blank=True,
-                                                    help_text="Solo a crédito: cuántos días después de la factura se paga.")
+    forma_pago = models.CharField("forma de pago", max_length=12, choices=FormaPago.choices, default=FormaPago.CONTADO)
+    porcentaje_anticipo = models.PositiveSmallIntegerField(
+        "porcentaje del anticipo", null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(99)],
+        help_text="Solo con anticipo: qué porcentaje del total se paga antes del despacho.")
     # Revisión de la coordinación administrativa (firma «Revisó»), antes de dirección
     revisada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                      related_name="+", verbose_name="revisada por")
@@ -710,6 +713,12 @@ class OrdenCompra(models.Model):
     medio_pago = models.CharField("medio de pago", max_length=80, blank=True, help_text="Transferencia, consignación…")
     soporte_pago = models.FileField("soporte de pago", upload_to="compras/pagos/%Y/%m/", blank=True)
     pago_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    # Saldo del anticipo (financiera lo paga cuando llega el pedido)
+    saldo_pagado_en = models.DateField("fecha del pago del saldo", null=True, blank=True)
+    saldo_valor = models.DecimalField("saldo pagado", max_digits=14, decimal_places=2, null=True, blank=True)
+    saldo_medio = models.CharField("medio de pago del saldo", max_length=80, blank=True)
+    saldo_soporte = models.FileField("soporte de pago del saldo", upload_to="compras/pagos/%Y/%m/", blank=True)
+    saldo_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     enviada_proveedor_en = models.DateTimeField("enviada al proveedor", null=True, blank=True)
     # Factura del proveedor: llega a financiera, que la compara con la orden
     factura_valor = models.DecimalField("valor total de la factura (con IVA)", max_digits=14, decimal_places=2, null=True, blank=True)
@@ -754,15 +763,17 @@ class OrdenCompra(models.Model):
         pasos = {E.BORRADOR: ("Completar y enviar a revisión", "Bodega"),
                  E.POR_REVISAR: ("Revisión administrativa", "Coordinación administrativa"),
                  E.REVISION: ("Aprobación", "Dirección"),
-                 E.POR_PAGAR: ("Pago anticipado", "Financiera"),
+                 E.POR_PAGAR: ("Pagar el anticipo" if self.es_anticipo else "Pago de contado", "Financiera"),
                  E.LISTA: ("Enviar al proveedor", "Bodega"),
                  E.ENVIADA: ("Recibir lo que llegue", "Bodega")}
         if self.estado in pasos:
             return pasos[self.estado]
         if self.estado == E.RECIBIDA and self.factura_validada_en is None:
             return ("Registrar y validar la factura", "Financiera")
-        if self.estado == E.RECIBIDA and self.a_credito and self.pagada_en is None:
-            return ("Pago a crédito", "Financiera")
+        if self.estado == E.RECIBIDA and self.saldo_pendiente:
+            return ("Pagar el saldo del anticipo", "Financiera")
+        if self.estado == E.RECIBIDA and self.pagada_en is None:
+            return ("Registrar el pago", "Financiera")
         return None
 
     @property
@@ -773,22 +784,44 @@ class OrdenCompra(models.Model):
 
     # --- Pago y factura ---------------------------------------------------------------------
     @property
-    def a_credito(self):
-        """True si la orden se paga a crédito, contra factura."""
-        return self.forma_pago == self.FormaPago.CREDITO
+    def es_anticipo(self):
+        """True si la orden se paga con anticipo: una parte antes del despacho y el saldo al recibir."""
+        return self.forma_pago == self.FormaPago.ANTICIPO
 
     @property
-    def pagada(self):
-        """True si financiera ya registró el pago."""
+    def pago_inicial(self):
+        """True si financiera ya pagó lo que se paga antes del despacho (el total de contado o el anticipo)."""
         return bool(self.pagada_en)
 
     @property
-    def vence(self):
-        """A crédito: fecha en que hay que pagarla (factura + días de crédito)."""
-        from datetime import timedelta
-        if self.a_credito and self.fecha_factura:
-            return self.fecha_factura + timedelta(days=self.dias_credito or 0)
-        return None
+    def saldo_pendiente(self):
+        """True si ya se pagó el anticipo y falta el saldo."""
+        return self.es_anticipo and self.pago_inicial and not self.saldo_pagado_en
+
+    @property
+    def pagada(self):
+        """True si la orden quedó pagada del todo (de contado, o el anticipo y su saldo)."""
+        return self.pago_inicial and (not self.es_anticipo or bool(self.saldo_pagado_en))
+
+    @property
+    def valor_por_pagar(self):
+        """Lo que financiera paga ahora: el saldo, el anticipo o el total (con IVA, en pesos enteros)."""
+        from decimal import ROUND_HALF_UP, Decimal
+        total = self.totales()["total"]
+        if self.saldo_pendiente:
+            valor = total - (self.valor_pagado or 0)
+        elif self.es_anticipo and not self.pago_inicial:
+            valor = total * Decimal(self.porcentaje_anticipo or 0) / 100
+        else:
+            valor = total
+        return max(valor, Decimal(0)).quantize(Decimal(1), ROUND_HALF_UP)
+
+    @property
+    def forma_pago_texto(self):
+        """«Contado» o «Anticipo del 50 %», para el encabezado, los correos y el PDF."""
+        if self.es_anticipo:
+            return f"Anticipo del {self.porcentaje_anticipo} %" if self.porcentaje_anticipo else "Anticipo"
+        return "Contado"
 
     @property
     def factura_registrada(self):
