@@ -410,6 +410,7 @@ def ticket_detalle(request, radicado):
 
         contexto["borrador"] = inf.vigente(ticket)
         contexto["tipo_sugerido"] = inf.tipo_sugerido(ticket)
+        contexto["es_instalacion"] = inf.es_instalacion(ticket)
         # «Si pasa a comercial»: la misma tabla de equipos y materiales del informe, ya llena con sus filas
         contexto["filas_requeridas"] = _filas_para_editar(contexto["borrador"]) if contexto["borrador"] else []
     if contexto["es_levantamiento"]:
@@ -1166,6 +1167,15 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
     else:
         elegidos = {str(a.pk) for a in mat_activos if ticket and a.ticket_destino_id == ticket.pk}
 
+    # Instalación con propuesta aprobada: el técnico dice qué se usó realmente y qué sobró
+    from . import material_propuesta
+    propuesta = material_propuesta.de_la_propuesta(ticket)
+    if request.method == "POST":
+        propuesta, errores_propuesta = material_propuesta.leer(request.POST, propuesta)
+        material_errores += errores_propuesta
+    else:
+        propuesta = material_propuesta.iniciales(propuesta)
+
     if (request.method == "POST" and form.is_valid() and equipos.is_valid()
             and (not utilizados.is_bound or utilizados.is_valid()) and (not retirados.is_bound or retirados.is_valid())
             and (not requeridos.is_bound or requeridos.is_valid()) and not material_errores):
@@ -1203,6 +1213,7 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
                 for archivo in d.get(f"evidencias_{etapa}") or []:
                     EvidenciaActa.objects.create(acta=acta, etapa=etapa, archivo=archivo, nombre_original=archivo.name[:255],
                                                  subido_por=request.user)
+            sobrantes = material_propuesta.guardar(acta, propuesta, request.user)
             inventario.usar_en_acta(acta, usar_activos, usar_insumos, request.user)
             inventario.retirar_en_acta(acta, request.user)
             nombre_tecnico = request.user.get_full_name() or request.user.username
@@ -1245,7 +1256,8 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
         messages.success(request, f"Acta de soporte N° {acta.numero} registrada."
                          + (f" Se descontaron del inventario {len(usar_activos)} activo(s) y {len(usar_insumos)} insumo(s)."
                             if usar_activos or usar_insumos else "")
-                         + (" Gracias por reportar la oportunidad comercial." if oportunidad else ""))
+                         + (" Gracias por reportar la oportunidad comercial." if oportunidad else "")
+                         + (f" Bodega ya sabe que sobraron {len(sobrantes)} ítem(s) de la propuesta para recibírselos." if sobrantes else ""))
         if levantamiento:
             # El acta es la constancia de la visita; lo que cotiza comercial es el informe del requerimiento
             messages.info(request, "Ahora diligencie el informe del requerimiento para devolverlo al área comercial.")
@@ -1257,7 +1269,7 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
         return extra or (fs.is_bound and (fs.has_changed() or fs.total_error_count() > 0))
 
     equipos.abierto = _abierta(equipos)
-    utilizados.abierto = _abierta(utilizados, bool(elegidos) or bool(usados) or bool(material_errores))
+    utilizados.abierto = _abierta(utilizados, bool(elegidos) or bool(usados) or bool(material_errores) or bool(propuesta))
     requeridos.abierto = _abierta(requeridos)
     equipos.boton, utilizados.boton = "Agregar equipo intervenido", "Agregar material o equipo que no está en el inventario"
     requeridos.boton = "Agregar material o equipo requerido"
@@ -1271,7 +1283,7 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
          "Lo que hace falta para solucionar y no se tenía en la visita. Ej.: fuente de 12 V, disco duro de 2 TB. "
          "Pasa sola a la tabla de «equipos y materiales requeridos» del informe."),
     ]
-    from . import redaccion
+    from . import historial_cliente, redaccion
 
     return render(request, "tickets/acta_form.html", {
         "redaccion": redaccion.configuracion(reverse("mejorar_redaccion"), reverse("revisar_ortografia")),
@@ -1280,6 +1292,7 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
         "mat_activos": mat_activos,
         "mat_insumos": [(i, c, usados.get(i.pk, "")) for i, c in mat_insumos],
         "elegidos": {int(pk) for pk in elegidos if str(pk).isdigit()}, "material_errores": material_errores,
+        "propuesta_material": propuesta, "historial": historial_cliente.resumen(empresa, sede, excluir_ticket=ticket),
     })
 
 
@@ -1606,7 +1619,7 @@ def entregar_informe(request, radicado):
         if aprobado:  # el informe que coordinación pasó a limpio
             with aprobado.archivo.open("rb") as f:
                 Adjunto.objects.create(ticket=ticket, seguimiento=seg, archivo=ContentFile(f.read(), name=os.path.basename(aprobado.archivo.name)),
-                                       nombre_original=f"Informe_tecnico_{ticket.radicado}.pdf", tamano=aprobado.archivo.size,
+                                       nombre_original=f"{'Informe_de_entrega' if aprobado.es_entrega else 'Informe_tecnico'}_{ticket.radicado}.pdf", tamano=aprobado.archivo.size,
                                        subido_por=request.user, es_informe=True)
         if destino == "comercial":
             from comercial import servicios as com
@@ -1782,8 +1795,11 @@ def informe_borrador(request, radicado):
             return redirect(ticket)
         tipo = request.POST.get("tipo") if request.POST.get("tipo") in InformeBorrador.Tipo.values else None
         tipo_final = tipo or (borrador.tipo if borrador else inf.tipo_sugerido(ticket))
-        if accion in ("generar", "redactar") and tipo_final == InformeBorrador.Tipo.VISITA and not ticket.actas.exists():
+        if accion in ("generar", "redactar") and tipo_final != InformeBorrador.Tipo.ESTUDIO and not ticket.actas.exists():
             messages.error(request, "Primero diligencie el acta de la visita: de ella sale el borrador del informe.")
+            return redirect(ticket)
+        if accion in ("generar", "redactar") and tipo == InformeBorrador.Tipo.ENTREGA and not inf.es_instalacion(ticket):
+            messages.error(request, "El informe de entrega del proyecto es solo para las instalaciones.")
             return redirect(ticket)
         if accion == "generar" and borrador is None:
             borrador = inf.generar(ticket, request.user, tipo=tipo)
@@ -1871,7 +1887,7 @@ def informe_borrador(request, radicado):
     return render(request, "tickets/informe_borrador.html", {
         "ticket": ticket, "borrador": borrador, "form": form, "en_informe": en_informe,
         "zonas": borrador.zonas.prefetch_related("fotos") if borrador.es_estudio else [],
-        "filas_requeridas": _filas_para_editar(borrador),
+        "filas_requeridas": _filas_para_editar(borrador), "es_instalacion": inf.es_instalacion(ticket),
         "puede_aprobar": request.user.es_direccion,
         "puede_enviar": request.user.es_supervisor and not request.user.es_direccion,
         "bloqueado": borrador.en_revision and not request.user.es_direccion})
@@ -1920,7 +1936,8 @@ def informe_borrador_pdf(request, radicado):
     if borrador.aprobado and borrador.archivo:
         try:
             return FileResponse(borrador.archivo.open("rb"), as_attachment=False,
-                                filename=f"Informe_tecnico_{ticket.radicado}.pdf", content_type="application/pdf")
+                                filename=f"{'Informe_de_entrega' if borrador.es_entrega else 'Informe_tecnico'}_{ticket.radicado}.pdf",
+                                content_type="application/pdf")
         except FileNotFoundError:
             pass
     nombre, contenido = inf.pdf(borrador, definitivo=borrador.en_revision)

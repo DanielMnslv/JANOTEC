@@ -359,8 +359,18 @@ def financiera(usuario):
                     url(o), "Pagar saldo", True)
               for o in base.filter(forma_pago=OrdenCompra.FormaPago.ANTICIPO, pagada_en__isnull=False,
                                    saldo_pagado_en__isnull=True, estado=O.RECIBIDA).order_by("pk")]
+    from cronograma.models import SolicitudViaticos
+
+    vqs = SolicitudViaticos.objects.filter(estado=SolicitudViaticos.Estado.PENDIENTE).select_related("ticket")
+    if _Filtro(usuario).prueba:
+        vqs = vqs.filter(destino__istartswith="PRUEBA")
+    viaticos = [_item(f"{x.numero} · {x.destino}", f"{x.fecha:%d/%m/%Y} · {x.para_texto} · {x.conceptos_texto}.",
+                      x.get_absolute_url(), "Gestionar", x.fecha <= hoy + timedelta(days=1), ticket=x.ticket)
+                for x in vqs.order_by("fecha", "pk")]
     v = reverse("inventario:financiera")
-    return [_grupo("pagar", "Por pagar", "bi-cash-coin", pagar, ver_todo=v),
+    return [_grupo("viaticos", "Viáticos por gestionar", "bi-wallet2", viaticos,
+                   "Alimentación, transporte, gasolina u otros para el personal SST/SGI o técnico.", reverse("cronograma:viaticos")),
+            _grupo("pagar", "Por pagar", "bi-cash-coin", pagar, ver_todo=v),
             _grupo("facturas", "Facturas por validar", "bi-receipt", facturas, ver_todo=v),
             _grupo("saldos", "Saldos de anticipos", "bi-hourglass-split", saldos, "Pedidos con anticipo que ya llegaron a bodega.", v)]
 

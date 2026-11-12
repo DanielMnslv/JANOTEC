@@ -1,0 +1,15 @@
+{# Acta de instalación con propuesta aprobada: de cada material o equipo, cuánto se usó realmente y cuánto sobró #}
+<div class="p-3 rounded border mb-3" style="background:#eef6f0">
+  <div class="fw-semibold"><i class="bi bi-clipboard-check"></i> Material de la propuesta aprobada</div>
+  <p class="small text-muted-jn mb-2">Escriba cuánto usó realmente de cada ítem y cuánto sobró. Lo que sobra sigue en su poder: bodega recibe el aviso para recibírselo.
+    Para descontarlo del inventario, márquelo también en «Del inventario que bodega le entregó».</p>
+  <div class="table-responsive"><table class="table table-sm align-middle mb-0 small">
+    <thead><tr><th>Material o equipo</th><th class="text-end" style="width:5.5rem">Propuesta</th><th style="width:6.5rem">Usó</th><th style="width:6.5rem">Sobró</th></tr></thead>
+    <tbody>{% for f in propuesta_material %}<tr>
+      <td>{{ f.descripcion }}{% if f.marca or f.referencia %}<div class="text-muted-jn">{{ f.marca }}{% if f.marca and f.referencia %} · {% endif %}{{ f.referencia }}</div>{% endif %}</td>
+      <td class="text-end">{{ f.cantidad|floatformat:"-2" }}</td>
+      <td><input type="number" step="any" min="0" name="prop_usado_{{ forloop.counter0 }}" value="{{ f.usado_texto }}" class="form-control form-control-sm" aria-label="Usó de {{ f.descripcion }}"></td>
+      <td><input type="number" step="any" min="0" name="prop_sobra_{{ forloop.counter0 }}" value="{{ f.sobra_texto }}" class="form-control form-control-sm" aria-label="Sobró de {{ f.descripcion }}"></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+</div>

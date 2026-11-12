@@ -69,7 +69,7 @@
               <div class="collapse{% if fs.abierto %} show{% endif %}" id="grupo-{{ fs.prefix }}">
                 <div class="px-3 pb-3">
                   <p class="small text-muted-jn mb-2">{{ ayuda|safe }}</p>
-                  {% if clave == "utilizado" %}{% include "inventario/_acta_materiales.html" %}{% endif %}
+                  {% if clave == "utilizado" %}{% if propuesta_material %}{% include "tickets/_acta_material_propuesta.html" %}{% endif %}{% include "inventario/_acta_materiales.html" %}{% endif %}
                   {{ fs.management_form }}
                   {% for e in fs.non_form_errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
                   <div id="lista-{{ fs.prefix }}"{% if clave == "utilizado" %} class="mt-3"{% endif %}>
@@ -161,6 +161,7 @@
     </div>
 
     <div class="col-lg-4">
+      {% include "tickets/_historial_cliente.html" with h=historial %}
       {% if not ticket %}
       <div class="card">
         <div class="card-header">Trabajo no programado</div>

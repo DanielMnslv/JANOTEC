@@ -1,0 +1,37 @@
+{# Historial del cliente y la sede dentro del acta: qué se ha hecho, qué equipos y materiales tiene y las intervenciones. Sirve sobre todo al técnico nuevo. #}
+{% load inventario_extras %}
+<div class="card mb-3 border-info">
+  <div class="card-header"><i class="bi bi-clock-history"></i> Historial de {{ h.empresa }}{% if h.sede %} · {{ h.sede }}{% endif %}</div>
+  {% if h.vacio %}<div class="card-body small text-muted-jn">Es la primera vez que se registra algo en {% if h.sede %}esta sede{% else %}este cliente{% endif %}.</div>
+  {% else %}
+  <div class="accordion accordion-flush small" id="historial-cliente">
+    {% if h.actas %}<div class="accordion-item"><h3 class="accordion-header"><button class="accordion-button py-2" type="button" data-bs-toggle="collapse" data-bs-target="#hc-actas">Visitas anteriores <span class="badge text-bg-secondary ms-2">{{ h.actas|length }}</span></button></h3>
+      <div id="hc-actas" class="accordion-collapse collapse show" data-bs-parent="#historial-cliente"><ul class="list-group list-group-flush">
+        {% for a in h.actas %}<li class="list-group-item"><a href="{{ a.get_absolute_url }}" target="_blank" rel="noopener"><span class="radicado">{{ a.numero }}</span></a> · {{ a.fecha|date:"d/m/Y" }} · {{ a.actividad|default:"—" }}{% if a.sistema %} · {{ a.get_sistema_display_corto }}{% endif %}
+          <div class="text-muted-jn">{{ a.tecnico_texto|default:"—" }}{% if a.ticket %} · {{ a.ticket.radicado }}{% endif %}</div>
+          {% if a.diagnostico %}<div class="text-truncate" title="{{ a.diagnostico }}">{{ a.diagnostico }}</div>{% endif %}</li>{% endfor %}
+      </ul></div></div>{% endif %}
+    {% if h.instalados or h.de_propuestas %}<div class="accordion-item"><h3 class="accordion-header"><button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#hc-instalado">Equipos y materiales instalados por JANOTEC</button></h3>
+      <div id="hc-instalado" class="accordion-collapse collapse" data-bs-parent="#historial-cliente"><ul class="list-group list-group-flush">
+        {% for g in h.instalados %}<li class="list-group-item"><b>{{ g.unidades }}</b> × {{ g.descripcion }}{% if g.referencia %} · {{ g.referencia }}{% endif %}{% if g.marca %} · {{ g.marca }}{% endif %}
+          <div class="text-muted-jn">Placas: {{ g.placas|join:", " }}{% if g.unidades > g.placas|length %}…{% endif %}</div></li>{% endfor %}
+        {% for g in h.de_propuestas %}<li class="list-group-item"><b>{{ g.usado|cant }}</b> × {{ g.descripcion }}{% if g.referencia %} · {{ g.referencia }}{% endif %}
+          <div class="text-muted-jn">De la propuesta · acta {{ g.acta.numero }} ({{ g.acta.fecha|date:"d/m/Y" }})</div></li>{% endfor %}
+      </ul></div></div>{% endif %}
+    {% if h.material %}<div class="accordion-item"><h3 class="accordion-header"><button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#hc-material">Material entregado del inventario</button></h3>
+      <div id="hc-material" class="accordion-collapse collapse" data-bs-parent="#historial-cliente"><ul class="list-group list-group-flush">
+        {% for m in h.material %}<li class="list-group-item"><b>{{ m.total|cant }}</b> {{ m.insumo__unidad }} · {{ m.insumo__descripcion }} <span class="text-muted-jn">({{ m.insumo__codigo }})</span></li>{% endfor %}
+      </ul></div></div>{% endif %}
+    {% if h.registrados %}<div class="accordion-item"><h3 class="accordion-header"><button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#hc-equipos">Equipos registrados en las actas</button></h3>
+      <div id="hc-equipos" class="accordion-collapse collapse" data-bs-parent="#historial-cliente"><ul class="list-group list-group-flush">
+        {% for e in h.registrados %}<li class="list-group-item">{{ e.equipo }}{% if e.marca %} · {{ e.marca }}{% endif %}{% if e.referencia %} · {{ e.referencia }}{% endif %}
+          <div class="text-muted-jn">{% if e.propiedad %}{{ e.propiedad }} · {% endif %}última vez {{ e.ultima|date:"d/m/Y" }} (acta {{ e.acta.numero }}){% if e.veces > 1 %} · {{ e.veces }} registros{% endif %}</div></li>{% endfor %}
+      </ul></div></div>{% endif %}
+    {% if h.tickets %}<div class="accordion-item"><h3 class="accordion-header"><button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#hc-tickets">Intervenciones (tickets)</button></h3>
+      <div id="hc-tickets" class="accordion-collapse collapse" data-bs-parent="#historial-cliente"><ul class="list-group list-group-flush">
+        {% for t in h.tickets %}<li class="list-group-item"><span class="radicado">{{ t.radicado }}</span> · {{ t.creado|date:"d/m/Y" }} · {{ t.get_tipo_display }}
+          <div>{{ t.asunto|truncatechars:80 }}</div><div class="text-muted-jn">{{ t.get_estado_display }}</div></li>{% endfor %}
+      </ul></div></div>{% endif %}
+  </div>
+  {% endif %}
+</div>

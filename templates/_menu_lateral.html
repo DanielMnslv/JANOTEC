@@ -4,8 +4,9 @@
 {% if user.es_personal %}
   <li class="menu-grupo">Área técnica</li>
   <li class="nav-item"><a class="nav-link {% if u == 'panel' %}active{% endif %}" href="{% url 'panel' %}"><i class="bi bi-kanban"></i> {% if user.es_supervisor %}Recepción{% else %}Mis tickets{% endif %}</a></li>
-  <li class="nav-item"><a class="nav-link {% if ns == 'cronograma' and u != 'horas_extras' %}active{% endif %}" href="{% url 'cronograma:semana' %}"><i class="bi bi-calendar-week"></i> Cronograma</a></li>
+  <li class="nav-item"><a class="nav-link {% if ns == 'cronograma' and u != 'horas_extras' and u != 'viaticos' %}active{% endif %}" href="{% url 'cronograma:semana' %}"><i class="bi bi-calendar-week"></i> Cronograma</a></li>
   <li class="nav-item"><a class="nav-link {% if u == 'horas_extras' %}active{% endif %}" href="{% url 'cronograma:horas_extras' %}"><i class="bi bi-clock-history"></i> Horas extras</a></li>
+  {% if user.es_supervisor or user.ve_financiera %}<li class="nav-item"><a class="nav-link {% if u == 'viaticos' %}active{% endif %}" href="{% url 'cronograma:viaticos' %}"><i class="bi bi-wallet2"></i> Viáticos</a></li>{% endif %}
   <li class="nav-item"><a class="nav-link {% if u == 'actas_lista' or u == 'acta_detalle' %}active{% endif %}" href="{% url 'actas_lista' %}"><i class="bi bi-clipboard-check"></i> Actas</a></li>
   {% if user.ve_inventario and not user.gestiona_inventario %}<li class="nav-item"><a class="nav-link {% if ns == 'inventario' %}active{% endif %}" href="{% url 'inventario:mi_material' %}"><i class="bi bi-boxes"></i> Mi material</a></li>
   {% elif not user.ve_inventario and user.es_coordinador %}<li class="nav-item"><a class="nav-link {% if ns == 'inventario' %}active{% endif %}" href="{% url 'inventario:funcionarios' %}"><i class="bi bi-people"></i> Funcionarios</a></li>{% endif %}
@@ -38,7 +39,7 @@
   <li class="nav-item"><a class="nav-link {% if ns == 'comercial' and u not in modulo_administrativo %}active{% endif %}" href="{% url 'comercial:bandeja' %}"><i class="bi bi-briefcase"></i> Comercial</a></li>
   <li class="nav-item"><a class="nav-link {% if u == 'oportunidades' %}active{% endif %}" href="{% url 'oportunidades' %}"><i class="bi bi-graph-up-arrow"></i> Oportunidades</a></li>
   {% endif %}
-  {% if user.es_financiera %}<li class="nav-item"><a class="nav-link {% if u == 'financiera' %}active{% endif %}" href="{% url 'inventario:financiera' %}"><i class="bi bi-cash-stack"></i> Financiera{% if compras_por_pagar %} <span class="badge text-bg-danger ms-auto" title="Órdenes de compra por pagar">{{ compras_por_pagar }}</span>{% endif %}</a></li>{% endif %}
+  {% if user.es_financiera %}<li class="nav-item"><a class="nav-link {% if u == 'financiera' %}active{% endif %}" href="{% url 'inventario:financiera' %}"><i class="bi bi-cash-stack"></i> Financiera{% if compras_por_pagar %} <span class="badge text-bg-danger ms-auto" title="Órdenes de compra por pagar">{{ compras_por_pagar }}</span>{% endif %}</a></li><li class="nav-item"><a class="nav-link {% if u == 'viaticos' %}active{% endif %}" href="{% url 'cronograma:viaticos' %}"><i class="bi bi-wallet2"></i> Viáticos</a></li>{% endif %}
   {% if user.es_administrativo %}{# bodega que también arma las propuestas (área administrativa) #}
   <li class="nav-item"><a class="nav-link {% if ns == 'comercial' %}active{% endif %}" href="{% url 'comercial:propuestas' %}"><i class="bi bi-calculator"></i> Administrativo</a></li>
   {% endif %}
@@ -57,6 +58,7 @@
 {% elif user.es_financiera %}{# área financiera: pagos de las compras y facturas #}
   <li class="menu-grupo">Área financiera</li>
   <li class="nav-item"><a class="nav-link {% if u == 'financiera' %}active{% endif %}" href="{% url 'inventario:financiera' %}"><i class="bi bi-cash-stack"></i> Financiera{% if compras_por_pagar %} <span class="badge text-bg-danger ms-auto" title="Órdenes de compra por pagar">{{ compras_por_pagar }}</span>{% endif %}</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'viaticos' %}active{% endif %}" href="{% url 'cronograma:viaticos' %}"><i class="bi bi-wallet2"></i> Viáticos</a></li>
 {% elif user.es_central %}
   <li class="menu-grupo">Central de atención</li>
   <li class="nav-item"><a class="nav-link {% if u == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>

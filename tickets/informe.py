@@ -21,7 +21,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Image as ImagenPDF
 from reportlab.platypus import KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from comercial.pdf import BORDE, E, E_DERECHA, E_ETIQUETA, E_SECCION, GRIS, LINEAS_EMPRESA, PIE, TINTE_VERDE, VERDE, _esc, _logo, _p
+from comercial.pdf import BORDE, E, E_ETIQUETA, E_SECCION, GRIS, OLIVA, TINTE_VERDE, VERDE, _esc, _p
 
 from .models import ActaSoporte, EquipoActa, InformeBorrador
 
@@ -184,11 +184,23 @@ GARANTIA = ("Vida útil: la vida útil de los equipos es de un (1) año, contado
             "uno nuevo de las mismas características del inicialmente entregado.")
 
 
+def es_instalacion(ticket):
+    """¿El ticket es una instalación? Solo las instalaciones llevan informe de entrega del proyecto."""
+    from .models import Ticket
+
+    if ticket.tipo == Ticket.Tipo.INSTALACION or (ticket.categoria_id and ticket.categoria.nombre.startswith("Instalación")):
+        return True
+    # La actividad del acta es una lista «Soporte , Instalación»; «Desinstalación» no cuenta
+    return any(x.strip().lower() == "instalación" for a in ticket.actas.all() for x in a.actividad.split(","))
+
+
 def tipo_sugerido(ticket):
-    """Estudio si es un levantamiento para la propuesta; si no, informe de la visita."""
+    """Estudio si es un levantamiento para la propuesta; entrega del proyecto si es una instalación; si no, visita."""
     from .models import Ticket
 
     ficha = getattr(ticket, "ficha", None)
+    if ticket.actas.exists() and es_instalacion(ticket) and not (ficha is not None and ficha.etapa == "levantamiento"):
+        return InformeBorrador.Tipo.ENTREGA
     if ficha is not None and ficha.etapa == "levantamiento":
         return InformeBorrador.Tipo.ESTUDIO
     if ticket.tipo == Ticket.Tipo.REQUERIMIENTO and not (ficha and ficha.versiones.exists()):
@@ -245,6 +257,60 @@ def textos_estudio(ticket):
     }
 
 
+def instalados(ticket):
+    """Lo que quedó instalado, en líneas de la tabla («cantidad descripción | referencia | marca»): lo usado de la
+    propuesta en el acta y, si no hay propuesta, los materiales y equipos utilizados del acta."""
+    from .models import MaterialPropuestaActa
+
+    lineas = []
+    for m in MaterialPropuestaActa.objects.filter(acta__ticket=ticket, usado__gt=0).order_by("acta__fecha", "pk"):
+        linea = f"{m.usado.normalize():f} {m.descripcion}"
+        if m.referencia or m.marca:
+            linea += f" | {m.referencia} | {m.marca}"
+        lineas.append(linea)
+    if lineas:
+        return lineas
+    for a in actas_del_ticket(ticket):
+        for e in a.equipos.all():
+            if e.clase == EquipoActa.Clase.UTILIZADO and e.equipo.strip():
+                linea = f"{(e.cantidad or '1').strip()} {e.equipo.strip()}"
+                if e.referencia or e.marca:
+                    linea += f" | {e.referencia.strip()} | {e.marca.strip()}"
+                lineas.append(linea)
+    return lineas
+
+
+def textos_entrega(ticket):
+    """Informe de entrega del proyecto (solo instalaciones): lo que se instaló, cómo quedó y la garantía. Es el que se
+    le envía al cliente con la entrega."""
+    datos = textos(ticket)
+    ficha = getattr(ticket, "ficha", None)
+    version = ficha.versiones.filter(estado="aprobada").exclude(codigo="").order_by("-numero").first() if ficha else None
+    propuesta = version.codigo.rsplit("-V", 1)[0] if version else ""
+    actas = actas_del_ticket(ticket)
+    a0 = actas[0]
+    sede = a0.lugar or (str(ticket.sede) if ticket.sede else "")
+    sistemas = _sistemas(actas) or "seguridad electrónica"
+    fechas = _y([_fecha_larga(timezone.localtime(a.fecha)) for a in actas])
+    datos["asunto"] = f"Entrega del proyecto: instalación del sistema de {sistemas} · sede {sede}"
+    datos["introduccion"] = (
+        f"En atención a la solicitud {ticket.radicado}" + (f" y a la propuesta {propuesta} aprobada" if propuesta else "")
+        + f", JANOTEC S.A.S. hace entrega del proyecto de instalación del sistema de {sistemas} en la sede {sede} de "
+        f"{ticket.empresa}, ejecutado el {fechas}. El presente informe documenta las actividades realizadas, los equipos y "
+        "materiales instalados y las evidencias fotográficas de la entrega.")
+    datos["conclusiones"] = "\n".join([
+        f"Se entrega el sistema de {sistemas} instalado, configurado y en funcionamiento.",
+        "Los equipos y materiales instalados son los relacionados en la tabla de este informe.",
+        "Se realizó el registro fotográfico de la instalación como soporte de la entrega."])
+    datos["recomendaciones"] = "\n".join(["Informar de cualquier novedad presentada en el sistema para su verificación.",
+                                         f"Realizar mantenimiento preventivo del sistema de {sistemas} cada seis meses.",
+                                         *[l for a in actas for l in InformeBorrador.lineas(a.observaciones)]])
+    datos["garantia"] = GARANTIA
+    datos["suministros"] = "\n".join(instalados(ticket))
+    datos["justificacion"] = ""
+    return datos
+
+
 def _zonas_desde_actas(borrador):
     """Cada equipo del acta con fotos se vuelve una zona del estudio (el técnico la renombra si hace falta)."""
     from .models import FotoZona, ZonaInforme
@@ -284,20 +350,23 @@ def generar(ticket, autor, borrador=None, tipo=None):
     Al volver a redactar se reemplaza el texto, pero se conservan las zonas, fotos, equipos y servicios ya escritos.
     """
     tipo = tipo or (borrador.tipo if borrador else tipo_sugerido(ticket))
-    datos = textos_estudio(ticket) if tipo == InformeBorrador.Tipo.ESTUDIO else textos(ticket)
+    entrega = tipo == InformeBorrador.Tipo.ENTREGA
+    datos = (textos_estudio(ticket) if tipo == InformeBorrador.Tipo.ESTUDIO
+             else textos_entrega(ticket) if entrega else textos(ticket))
     # Lo que el técnico anotó como «requerido» en el acta llena la tabla de equipos y materiales requeridos
-    if not datos.get("suministros"):
+    if not datos.get("suministros") and not entrega:
         datos["suministros"] = "\n".join(requeridos_de_actas(ticket))
     # Un informe con equipos o servicios requeridos también dice qué se propone y su alcance
     con_requeridos = datos["suministros"].strip() or (borrador is not None and (borrador.suministros.strip()
                                                                                 or borrador.servicios.strip()))
-    if con_requeridos and ALCANCE not in datos["conclusiones"]:
+    if con_requeridos and not entrega and ALCANCE not in datos["conclusiones"]:
         datos["conclusiones"] += "\n" + ALCANCE
     if borrador is None:
         borrador = InformeBorrador.objects.create(ticket=ticket, creado_por=autor, tipo=tipo, **datos)
     else:
+        cambia_tipo = borrador.tipo != tipo  # al pasar a (o desde) la entrega la tabla cambia de sentido
         for campo, valor in datos.items():
-            if campo in ("suministros", "servicios") and getattr(borrador, campo).strip():
+            if campo in ("suministros", "servicios") and getattr(borrador, campo).strip() and not cambia_tipo:
                 continue
             setattr(borrador, campo, valor)
         borrador.tipo = tipo
@@ -323,17 +392,18 @@ def vigente(ticket):
 # PDF
 # ----------------------------------------------------------------------------
 E_TEXTO = ParagraphStyle("texto", parent=E, fontSize=9.5, leading=13.5, alignment=TA_JUSTIFY)
-E_TITULO = ParagraphStyle("titulo_inf", parent=E_ETIQUETA, fontSize=10.5, leading=14, spaceBefore=10, spaceAfter=4)
 E_PIE_FOTO = ParagraphStyle("pie_foto", parent=E, fontSize=7.5, leading=9.5, alignment=TA_CENTER, textColor=GRIS)
+E_CENTRO = ParagraphStyle("centro_inf", parent=E, alignment=TA_CENTER)
 
 
-def _foto(foto, ancho):
+def _foto(foto, ancho, alto_max=None):
     """La foto reducida (y enderezada según el celular) para que el PDF no pese demasiado."""
-    return _imagen(foto.archivo, ancho)
+    return _imagen(foto.archivo, ancho, alto_max)
 
 
-def _imagen(archivo, ancho):
-    """La imagen de un archivo guardado, reducida para el PDF; None si no se puede leer."""
+def _imagen(archivo, ancho, alto_max=None):
+    """La imagen de un archivo guardado, reducida para el PDF y encajada en ancho × alto_max (sin deformarla);
+    None si no se puede leer."""
     try:
         with archivo.open("rb") as f:
             img = ImageOps.exif_transpose(Image.open(f)).convert("RGB")
@@ -343,8 +413,8 @@ def _imagen(archivo, ancho):
     salida = BytesIO()
     img.save(salida, "JPEG", quality=72)
     salida.seek(0)
-    alto = min(ancho * img.height / img.width, ancho * 1.25)
-    return ImagenPDF(salida, width=alto * img.width / img.height, height=alto)
+    escala = min(ancho / img.width, (alto_max or ancho * 1.25) / img.height)
+    return ImagenPDF(salida, width=img.width * escala, height=img.height * escala)
 
 
 def _vinetas(texto):
@@ -399,18 +469,84 @@ def _tabla_equipos(titulo, filas, ancho, borrador=None):
     REFERENCIA. Cada fila es {cantidad, descripcion, referencia, marca}; la mano de obra («servicio») solo lleva la
     cantidad y la descripción."""
     imagenes = imagenes_de_la_tabla(borrador, [f["descripcion"] for f in filas if not f.get("servicio")])
-    cuerpo = [[_p(x, E_ETIQUETA) for x in ("NUM", "CANT", "DESCRIPCIÓN", "REFERENCIA", "MARCA", "IMAGEN DE REFERENCIA")]]
+    # Encabezado alineado a la izquierda y con estos nombres: así lo lee de vuelta lectura_informe.leer_pdf
+    blanco = ParagraphStyle("cab_tabla", parent=E_ETIQUETA, textColor=colors.white, fontSize=8)
+    cuerpo = [[Paragraph(x, blanco) for x in ("NUM", "CANT", "DESCRIPCIÓN", "REFERENCIA", "MARCA", "IMAGEN DE REFERENCIA")]]
     for i, f in enumerate(filas, 1):
         if f.get("servicio"):
-            cuerpo.append([_p(i), _p("1"), _p(f["descripcion"]), "", "", ""])
+            cuerpo.append([_p(i, E_CENTRO), _p("1", E_CENTRO), _p(f["descripcion"]), "", "", ""])
             continue
-        imagen = _imagen(imagenes[f["descripcion"]], ancho * 0.16) if f["descripcion"] in imagenes else None
-        cuerpo.append([_p(i), _p(f["cantidad"] or "1"), _p(f["descripcion"]), _p(f["referencia"] or "N/A"),
+        imagen = _imagen(imagenes[f["descripcion"]], ancho * 0.16, 22 * mm) if f["descripcion"] in imagenes else None
+        cuerpo.append([_p(i, E_CENTRO), _p(f["cantidad"] or "1", E_CENTRO), _p(f["descripcion"]), _p(f["referencia"] or "N/A"),
                        _p(f["marca"] or "N/A"), imagen or ""])
-    tabla = Table(cuerpo, colWidths=[ancho * x for x in (0.06, 0.07, 0.33, 0.2, 0.14, 0.2)], repeatRows=1)
-    tabla.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, BORDE), ("BACKGROUND", (0, 0), (-1, 0), TINTE_VERDE),
-                               ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (5, 1), (5, -1), "CENTER")]))
-    return [Spacer(1, 10), _barra(titulo, ancho), tabla]
+    tabla = Table(cuerpo, colWidths=[ancho * x for x in (0.06, 0.08, 0.36, 0.18, 0.14, 0.18)], repeatRows=1)
+    tabla.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, BORDE), ("BACKGROUND", (0, 0), (-1, 0), OLIVA),
+                               ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, TINTE_VERDE]),
+                               ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (5, 1), (5, -1), "CENTER"),
+                               ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    return [_seccion(titulo, ancho), tabla]
+
+
+def _seccion(titulo, ancho):
+    """Título de sección como en la propuesta: barra oliva con el texto en blanco."""
+    estilo = ParagraphStyle("sec_inf", parent=E_ETIQUETA, fontSize=9.5, leading=12, textColor=colors.white)
+    barra = Table([[Paragraph(_esc(titulo), estilo)]], colWidths=[ancho])
+    barra.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), OLIVA), ("LEFTPADDING", (0, 0), (-1, -1), 7),
+                               ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
+    # Va pegada a lo que sigue (sin KeepTogether: anidado dentro del cierre forzaría un salto de página)
+    barra.spaceBefore, barra.spaceAfter, barra.keepWithNext = 12, 5, True
+    return barra
+
+
+def _datos_informe(borrador, actas, ancho):
+    """Cuadro con los datos del informe (cliente, sede, ciudad, fecha, ticket, actas…), como el de la propuesta."""
+    t = borrador.ticket
+    ciudad = next((a.ciudad for a in actas if a.ciudad), "") or (t.sede.ciudad if t.sede else "")
+    fecha = timezone.localtime(borrador.aprobado_en or timezone.now())
+    tecnicos = ", ".join(dict.fromkeys(a.tecnico_texto for a in actas if a.tecnico_texto)) or "—"
+    numeros = ", ".join(f"N° {a.numero}" for a in actas) or "—"
+    filas = [("Cliente", str(t.empresa), "NIT", t.empresa.nit or "—"),
+             ("Sede", (actas[0].lugar if actas else "") or str(t.sede or "—"), "Ciudad", ciudad or "—"),
+             ("Dirigido a", borrador.destinatario, "Fecha", _fecha_larga(fecha)),
+             ("Ticket", t.radicado, "Acta(s)", numeros),
+             ("Técnico(s)", tecnicos, "Sistema", _sistema_ticket(t, actas))]
+    ficha = getattr(t, "ficha", None)
+    if borrador.es_entrega and ficha:
+        version = ficha.versiones.filter(estado="aprobada").exclude(codigo="").order_by("-numero").first()
+        if version:
+            filas.insert(1, ("Propuesta", version.codigo.rsplit("-V", 1)[0], "Aprobada",
+                             _fecha_larga(timezone.localtime(version.respondida)) if version.respondida else "—"))
+    cuerpo = [[_p(a, E_ETIQUETA), _p(b), _p(c, E_ETIQUETA), _p(d)] for a, b, c, d in filas]
+    tabla = Table(cuerpo, colWidths=[ancho * x for x in (0.14, 0.38, 0.12, 0.36)])
+    tabla.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, BORDE), ("BACKGROUND", (0, 0), (0, -1), TINTE_VERDE),
+                               ("BACKGROUND", (2, 0), (2, -1), TINTE_VERDE), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                               ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    return tabla
+
+
+def _anexo_fotos(celdas, ancho):
+    """Las fotos en una cuadrícula de tres, cada una en su marco del mismo tamaño y con «Foto N.» y su descripción."""
+    col = ancho / 3
+    alto = 52 * mm
+    marcos = []
+    for n, (foto, pie) in enumerate(celdas, 1):
+        imagen = _foto(foto, col - 12, alto)
+        if imagen is None:
+            continue
+        marco = Table([[imagen], [Paragraph(f"<b>Foto {len(marcos) + 1}.</b> {_esc(pie[:150])}", E_PIE_FOTO)]],
+                      colWidths=[col - 6], rowHeights=[alto + 6, None])
+        marco.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.6, BORDE), ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                                   ("VALIGN", (0, 0), (0, 0), "MIDDLE"), ("BACKGROUND", (0, 1), (-1, 1), TINTE_VERDE),
+                                   ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+        marcos.append(marco)
+    if not marcos:
+        return None
+    filas = [marcos[i:i + 3] + [""] * (3 - len(marcos[i:i + 3])) for i in range(0, len(marcos), 3)]
+    tabla = Table(filas, colWidths=[col] * 3)
+    tabla.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                               ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+                               ("BOTTOMPADDING", (0, 0), (-1, -1), 7)]))
+    return tabla
 
 
 def firmante(borrador):
@@ -452,81 +588,87 @@ def _bloque_firma(usuario, ancho):
 
 
 def pdf(borrador, definitivo=False):
-    """(nombre, bytes). Sin ``definitivo`` lleva la marca de agua BORRADOR (en revisión de dirección ya sale en limpio)."""
+    """(nombre, bytes) del informe con el membrete y la estética de la propuesta: título, cuadro de datos, secciones
+    numeradas en barras oliva, tabla de equipos, fotos en marcos iguales y la firma junto al cierre.
+    Sin ``definitivo`` lleva la marca de agua BORRADOR (en revisión de dirección ya sale en limpio)."""
+    from django.conf import settings
+
     t = borrador.ticket
     actas = actas_del_ticket(t)
     buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=14 * mm,
-                            bottomMargin=18 * mm, title=f"Informe técnico {t.radicado}")
+    doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=31 * mm,
+                            bottomMargin=27 * mm, title=f"{borrador.titulo_documento.capitalize()} {t.radicado}",
+                            author="JANOTEC S.A.S.")
     ancho = doc.width
-    logo = _logo()
-    encabezado = Table([[logo or "", Paragraph("<br/>".join(LINEAS_EMPRESA), E_DERECHA)]], colWidths=[ancho * 0.45, ancho * 0.55])
-    encabezado.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
-    ciudad = next((a.ciudad for a in actas if a.ciudad), "") or (t.sede.ciudad if t.sede else "")
-    fecha = borrador.aprobado_en or timezone.now()
-    h = [encabezado, Spacer(1, 10),
-         _p(f"{ciudad.upper() + ', ' if ciudad else ''}{_fecha_larga(timezone.localtime(fecha)).upper()}", E_ETIQUETA), Spacer(1, 8),
-         _p(f"SEÑORES: {borrador.destinatario.upper()}", E_ETIQUETA), Spacer(1, 6),
-         Paragraph(f"<b>ASUNTO:</b> {'INFORME DE REQUERIMIENTOS TÉCNICOS' if borrador.es_estudio else 'INFORME DE VISITA TÉCNICA'}<br/>"
-                   f"{_esc(borrador.asunto.upper())}", E_TEXTO),
-         Paragraph(f"Ticket {t.radicado}", ParagraphStyle("rad", parent=E, textColor=GRIS)),
-         Paragraph("INTRODUCCIÓN", E_TITULO), Paragraph(_esc(borrador.introduccion), E_TEXTO),
-         Paragraph("ACTIVIDADES REALIZADAS", E_TITULO), *_vinetas(borrador.actividades)]
+    titulo = ParagraphStyle("titulo_doc", parent=E_ETIQUETA, fontSize=15, leading=19, alignment=TA_CENTER, textColor=OLIVA)
+    subtitulo = ParagraphStyle("subtitulo_doc", parent=E, fontSize=9.5, leading=12.5, alignment=TA_CENTER, textColor=GRIS)
+    h = [Paragraph(borrador.titulo_documento, titulo), Spacer(1, 3), Paragraph(_esc(borrador.asunto), subtitulo),
+         Spacer(1, 10), _datos_informe(borrador, actas, ancho)]
 
     # Orden fijo de JANOTEC: introducción, actividades realizadas (lo que dice el acta), tabla de equipos y materiales
-    # requeridos (lo que se propone), justificación, anexo de evidencias fotográficas y conclusiones (con el alcance).
-    # Un informe solo informativo (sin equipos, materiales ni mano de obra que proponer) no lleva esta sección
-    requeridas = borrador.filas_requeridas()
-    if requeridas:
-        h += _tabla_equipos("TABLA DE EQUIPOS Y MATERIALES REQUERIDOS", requeridas, ancho, borrador)
+    # (requeridos, o instalados en la entrega), justificación, anexo fotográfico y conclusiones.
+    n = 0
 
+    def seccion(texto):
+        nonlocal n
+        n += 1
+        return _seccion(f"{n}. {texto}", ancho)
+
+    h += [seccion("INTRODUCCIÓN"), Paragraph(_esc(borrador.introduccion), E_TEXTO),
+          seccion("ACTIVIDADES REALIZADAS"), *_vinetas(borrador.actividades)]
+    filas = borrador.filas_requeridas()
+    if filas:
+        nombre = "EQUIPOS Y MATERIALES INSTALADOS" if borrador.es_entrega else "EQUIPOS Y MATERIALES REQUERIDOS"
+        n += 1
+        h += _tabla_equipos(f"{n}. {nombre}", filas, ancho, borrador)
     if borrador.justificacion.strip():
-        h += [Paragraph("JUSTIFICACIÓN", E_TITULO), Paragraph(_esc(borrador.justificacion), E_TEXTO)]
+        h += [seccion("JUSTIFICACIÓN"), Paragraph(_esc(borrador.justificacion), E_TEXTO)]
 
-    # Anexo fotográfico, tres fotos por fila con su descripción: la visual de cada zona y lo registrado en el acta
+    # Anexo fotográfico: la visual de cada zona y lo registrado en el acta (equipos y evidencias del trabajo)
     celdas = []
     for z in borrador.zonas.prefetch_related("fotos"):
         pie = z.nombre + (f": {z.descripcion.strip()}" if z.descripcion.strip() else "")
-        for foto in z.fotos.all():
-            imagen = _foto(foto, ancho / 3 - 8)
-            if imagen:
-                celdas.append([imagen, Paragraph(_esc(pie[:160]), E_PIE_FOTO)])
+        celdas += [(foto, pie) for foto in z.fotos.all()]
     for a in ([] if borrador.es_estudio else actas):  # en el estudio las fotos del acta ya son las zonas
         for e in a.equipos.all():
-            for foto in e.fotos.all():
-                imagen = _foto(foto, ancho / 3 - 8)
-                if imagen:
-                    pie = " ".join(x for x in (e.equipo, e.marca, e.referencia) if x)
-                    celdas.append([imagen, Paragraph(_esc(pie), E_PIE_FOTO)])
-        for ev in a.evidencias.all():  # el trabajo en sí: durante y cómo quedó
-            imagen = _foto(ev, ancho / 3 - 8) if ev.es_imagen else None
-            if imagen:
-                celdas.append([imagen, Paragraph(_esc(ev.get_etapa_display()), E_PIE_FOTO)])
-    if celdas:
-        h.append(Paragraph("ANEXO DE EVIDENCIAS FOTOGRÁFICAS", E_TITULO))
-        filas = [celdas[i:i + 3] + [""] * (3 - len(celdas[i:i + 3])) for i in range(0, len(celdas), 3)]
-        anexo = Table(filas, colWidths=[ancho / 3] * 3)
-        anexo.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                                   ("BOTTOMPADDING", (0, 0), (-1, -1), 8)]))
-        h.append(anexo)
+            celdas += [(foto, " ".join(x for x in (e.equipo, e.marca, e.referencia) if x)) for foto in e.fotos.all()]
+        celdas += [(ev, ev.get_etapa_display()) for ev in a.evidencias.all() if ev.es_imagen]
+    anexo = _anexo_fotos(celdas, ancho)
+    if anexo is not None:
+        h += [seccion("ANEXO DE EVIDENCIAS FOTOGRÁFICAS"), anexo]
 
-    # Conclusiones: qué se hizo, qué se propone y su alcance; dentro van las recomendaciones y la garantía
-    h += [Paragraph("CONCLUSIONES", E_TITULO), *_vinetas(borrador.conclusiones)]
+    # Cierre: conclusiones, recomendaciones y garantía; la última parte va junto a la firma para que no quede sola
+    h += [seccion("CONCLUSIONES"), *_vinetas(borrador.conclusiones)]
+    cierre = []
     if borrador.recomendaciones.strip():
-        h += [Spacer(1, 4), Paragraph("<b>Recomendaciones:</b>", E_TEXTO), *_vinetas(borrador.recomendaciones)]
+        h += [seccion("RECOMENDACIONES")]
+        cierre = _vinetas(borrador.recomendaciones)
     if borrador.garantia.strip():
-        h += [Spacer(1, 4), Paragraph(f"<b>Garantía y vida útil:</b> {_esc(borrador.garantia)}", E_TEXTO)]
-
-    # Firma al final, centrada: la del coordinador del área técnica (su firma escaneada, la línea, nombre y cargo).
+        h += cierre
+        cierre = [seccion("GARANTÍA Y VIDA ÚTIL"), Paragraph(_esc(borrador.garantia), E_TEXTO)]
+    if borrador.es_entrega:
+        recibio = next((a for a in reversed(actas) if a.recibio), None)
+        if recibio:
+            cierre += [Spacer(1, 6), Paragraph(
+                f"La entrega quedó firmada a satisfacción por <b>{_esc(recibio.recibio)}</b>"
+                + (f" ({_esc(recibio.cargo_recibio)})" if recibio.cargo_recibio else "")
+                + f" en el acta de soporte N° {recibio.numero}.", E_TEXTO)]
+    # Firma: la del coordinador del área técnica (su firma escaneada o la línea con nombre y cargo).
     # La aprobación de dirección queda registrada en la plataforma (quién y cuándo), no en el documento.
-    h += [Spacer(1, 26), KeepTogether(_bloque_firma(firmante(borrador), ancho))]
+    h.append(KeepTogether(cierre + [Spacer(1, 10), Paragraph("Cordialmente,", E_TEXTO), Spacer(1, 4),
+                                    _bloque_firma(firmante(borrador), ancho)]))
+
+    marca = settings.BASE_DIR / "static" / "img" / "marca"
 
     def pagina(canvas, documento):
-        """Pie de página en cada hoja y, mientras no esté aprobado, la marca de agua «BORRADOR»."""
+        """El membrete de JANOTEC en cada hoja (como la propuesta), el número de página y, mientras no esté aprobado,
+        la marca de agua «BORRADOR»."""
         canvas.saveState()
-        canvas.setFont("Helvetica", 7)
+        canvas.drawImage(str(marca / "membrete-inferior.jpg"), 1.5, -9.84, width=609.9, height=540.84)
+        canvas.drawImage(str(marca / "membrete-superior.jpg"), -0.55, 651.7, width=612.55, height=150.75)
+        canvas.setFont("Helvetica", 7.5)
         canvas.setFillColor(GRIS)
-        canvas.drawCentredString(letter[0] / 2, 9 * mm, PIE)
+        canvas.drawRightString(letter[0] - 28 * mm, letter[1] - 27 * mm, f"{t.radicado} · Página {documento.page}")
         if not definitivo:
             canvas.setFont("Helvetica-Bold", 90)
             canvas.setFillColor(colors.Color(0.8, 0.1, 0.1, alpha=0.12))
@@ -537,7 +679,8 @@ def pdf(borrador, definitivo=False):
 
     doc.build(h, onFirstPage=pagina, onLaterPages=pagina)
     sufijo = "" if definitivo else "_BORRADOR"
-    return f"Informe_tecnico_{t.radicado}{sufijo}.pdf", buf.getvalue()
+    base = "Informe_de_entrega" if borrador.es_entrega else "Informe_tecnico"
+    return f"{base}_{t.radicado}{sufijo}.pdf", buf.getvalue()
 
 
 def enviar_a_direccion(borrador, usuario):

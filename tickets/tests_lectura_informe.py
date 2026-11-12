@@ -66,9 +66,9 @@ class LeerTablaTests(TestCase):
                  {"cantidad": "1", "descripcion": "Dos días 2 técnicos para la instalación de las cámaras", "servicio": True}]
         buf = BytesIO()
         doc = SimpleDocTemplate(buf, pagesize=letter)
-        doc.build([Paragraph("INTRODUCCIÓN", inf.E_TITULO), Paragraph("Texto.", inf.E_TEXTO),
+        doc.build([inf._seccion("1. INTRODUCCIÓN", doc.width), Paragraph("Texto.", inf.E_TEXTO),
                    *inf._tabla_equipos("TABLA DE EQUIPOS Y MATERIALES REQUERIDOS", filas, doc.width),
-                   Paragraph("JUSTIFICACIÓN", inf.E_TITULO), Paragraph("1 2 no es de la tabla", inf.E_TEXTO)])
+                   inf._seccion("4. JUSTIFICACIÓN", doc.width), Paragraph("1 2 no es de la tabla", inf.E_TEXTO)])
         leidas = lectura.leer(BytesIO(buf.getvalue()), "Informe.PDF")
         self.assertEqual(leidas[0], {"cantidad": "5", "descripcion": filas[0]["descripcion"],
                                      "referencia": "DS-2XS2T47G1-LDH/4G/C18S40", "marca": "HIKVISION", "servicio": False})

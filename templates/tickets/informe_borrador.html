@@ -67,11 +67,17 @@
   <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
     <span><i class="bi bi-file-earmark-text"></i> {{ borrador.get_tipo_display }}</span>
     {% if not borrador.aprobado and en_informe %}
-      {% if borrador.es_estudio %}
-        <button class="btn btn-link btn-sm p-0" name="accion" value="redactar" formnovalidate onclick="this.form.tipo.value='visita'; return confirm('Se redacta como informe de visita (soporte, mantenimiento, instalación, reubicación o desmonte). ¿Continuar?')">Cambiar a informe de visita</button>
-      {% else %}
+      <span class="d-flex flex-wrap gap-3">
+      {% if es_instalacion and not borrador.es_entrega %}
+        <button class="btn btn-link btn-sm p-0" name="accion" value="redactar" formnovalidate onclick="this.form.tipo.value='entrega'; return confirm('Se redacta como informe de entrega del proyecto (lo instalado y la garantía; es el que va al cliente). ¿Continuar?')">Cambiar a informe de entrega</button>
+      {% endif %}
+      {% if not borrador.tipo == 'visita' %}
+        <button class="btn btn-link btn-sm p-0" name="accion" value="redactar" formnovalidate onclick="this.form.tipo.value='visita'; return confirm('Se redacta como informe de visita (soporte, mantenimiento, reubicación o desmonte). ¿Continuar?')">Cambiar a informe de visita</button>
+      {% endif %}
+      {% if not borrador.es_estudio %}
         <button class="btn btn-link btn-sm p-0" name="accion" value="redactar" formnovalidate onclick="this.form.tipo.value='estudio'; return confirm('Se redacta como informe de requerimientos técnicos (zonas con fotos y equipos a suministrar). ¿Continuar?')">Cambiar a informe de requerimientos</button>
       {% endif %}
+      </span>
     {% endif %}
   </div>
   <input type="hidden" name="tipo" value="">

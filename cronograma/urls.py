@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import views, viaticos
 
 app_name = "cronograma"
 
@@ -29,6 +29,11 @@ urlpatterns = [
     path("autorizacion/<str:token>/", views.autorizacion, name="autorizacion"),
     path("documentos/", views.documentos, name="documentos"),
     path("horas-extras/", views.horas_extras, name="horas_extras"),
+    path("viaticos/", viaticos.lista, name="viaticos"),
+    path("viaticos/nueva/", viaticos.nueva, name="viaticos_nueva"),
+    path("viaticos/<int:pk>/gestionar/", viaticos.gestionar, name="viaticos_gestionar"),
+    path("viaticos/<int:pk>/soporte/", viaticos.soporte, name="viaticos_soporte"),
+    path("horas-extras/<int:pk>/foto/<str:cual>/", views.horas_extras_foto, name="horas_extras_foto"),
     path("documentos/mios/", views.documentos_tecnico, name="mis_documentos"),
     path("documentos/<int:pk>/", views.documentos_tecnico, name="documentos_tecnico"),
     path("documentos/archivo/<int:pk>/", views.documento_descargar, name="documento"),

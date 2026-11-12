@@ -403,13 +403,33 @@ class ConfiguracionEnvio(models.Model):
         return cls.objects.get_or_create(pk=1)[0]
 
 
+def ruta_evidencia_horas(instancia, nombre):
+    """Las fotos de las horas extras van por mes: horas_extras/2026/11/<archivo>."""
+    hoy = timezone.localdate()
+    return f"horas_extras/{hoy:%Y/%m}/{nombre}"
+
+
 class ReporteHorasExtra(models.Model):
-    """Auto reporte de salida a campo (antes un Google Forms): quién salió, a qué hora salió y llegó, y a qué cliente."""
+    """Auto reporte de salida a campo (antes un Google Forms), en dos momentos y con una foto en cada uno:
+
+    * **Inicio**: el conductor cuenta desde que le entregan las llaves para el alistamiento (pre operación) del vehículo;
+      el acompañante, desde que llega a la sede del cliente e inicia la operación.
+    * **Regreso**: la hora de llegada, con su foto. Hasta que no se cierre, el reporte no suma horas.
+    """
+
+    class Rol(models.TextChoices):
+        CONDUCTOR = "conductor", "Conductor (desde la entrega de llaves y el alistamiento del vehículo)"
+        ACOMPANANTE = "acompanante", "Acompañante (desde la llegada a la sede del cliente)"
 
     colaborador = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="horas_extras")
     fecha = models.DateField(default=timezone.localdate)
-    hora_salida = models.TimeField("hora de salida")
-    hora_llegada = models.TimeField("hora de llegada")
+    rol = models.CharField("en esta salida fue", max_length=12, choices=Rol.choices, blank=True)
+    hora_salida = models.TimeField("hora de inicio")
+    evidencia_salida = models.ImageField("foto del inicio", upload_to=ruta_evidencia_horas, blank=True,
+                                         help_text="Conductor: las llaves o el vehículo en alistamiento. Acompañante: la llegada a la sede.")
+    hora_llegada = models.TimeField("hora de llegada", null=True, blank=True)
+    evidencia_llegada = models.ImageField("foto del regreso", upload_to=ruta_evidencia_horas, blank=True)
+    cerrado_en = models.DateTimeField("regreso registrado", null=True, blank=True)
     cliente = models.CharField("cliente al que se dirige", max_length=200)
     registrado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
                                        related_name="+")
@@ -424,7 +444,19 @@ class ReporteHorasExtra(models.Model):
         return f"{self.colaborador} · {self.fecha:%d/%m/%Y} · {self.cliente}"
 
     @property
+    def abierto(self):
+        """Salió pero todavía no registró el regreso."""
+        return self.hora_llegada is None
+
+    @property
+    def rol_corto(self):
+        return {"conductor": "Conductor", "acompanante": "Acompañante"}.get(self.rol, "—")
+
+    @property
     def minutos(self):
+        """Minutos del inicio al regreso; 0 mientras esté abierto."""
+        if self.hora_llegada is None:
+            return 0
         salida = self.hora_salida.hour * 60 + self.hora_salida.minute
         llegada = self.hora_llegada.hour * 60 + self.hora_llegada.minute
         return (llegada - salida) % (24 * 60)  # si llega después de medianoche, sigue contando
@@ -432,3 +464,70 @@ class ReporteHorasExtra(models.Model):
     @property
     def duracion(self):
         return f"{self.minutos // 60}:{self.minutos % 60:02d}"
+
+
+class SolicitudViaticos(models.Model):
+    """Viáticos que necesita el personal para ir a la sede de un cliente (alimentación, transporte, gasolina u otros).
+    Los gestiona por completo el área financiera: le llega el aviso, los entrega y la marca como gestionada.
+
+    Se pide al programar la actividad en el cronograma (casillas «Viáticos SST/SGI» y «Viáticos técnicos») o desde el
+    ticket. Puede ser para el personal SST/SGI, para el personal técnico o para los dos."""
+
+    class Estado(models.TextChoices):
+        PENDIENTE = "pendiente", "Pendiente de financiera"
+        GESTIONADA = "gestionada", "Gestionada por financiera"
+        CANCELADA = "cancelada", "Cancelada (ya no se necesitan)"
+
+    CONCEPTOS = (("alimentacion", "Alimentación"), ("transporte", "Transporte"), ("gasolina", "Gasolina"), ("otros", "Otros"))
+
+    ticket = models.ForeignKey("tickets.Ticket", on_delete=models.SET_NULL, null=True, blank=True, related_name="viaticos")
+    actividad = models.OneToOneField(Actividad, on_delete=models.SET_NULL, null=True, blank=True, related_name="solicitud_viaticos")
+    fecha = models.DateField("fecha del desplazamiento")
+    destino = models.CharField("cliente y sede", max_length=300)
+    para_sst = models.BooleanField("personal SST / SGI", default=False)
+    para_tecnicos = models.BooleanField("personal técnico", default=False)
+    personas = models.CharField("quiénes van", max_length=500, blank=True)
+    alimentacion = models.BooleanField("alimentación", default=False)
+    transporte = models.BooleanField("transporte", default=False)
+    gasolina = models.BooleanField("gasolina", default=False)
+    otros = models.BooleanField("otros", default=False)
+    detalle = models.CharField("detalle u otros conceptos", max_length=300, blank=True)
+    estado = models.CharField(max_length=12, choices=Estado.choices, default=Estado.PENDIENTE, db_index=True)
+    solicitada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="+")
+    creado = models.DateTimeField(auto_now_add=True)
+    # Lo que registra financiera al gestionarla
+    valor_entregado = models.DecimalField("valor entregado", max_digits=12, decimal_places=2, null=True, blank=True)
+    nota_financiera = models.CharField("nota de financiera", max_length=300, blank=True)
+    soporte = models.FileField("soporte (opcional)", upload_to="viaticos/%Y/%m/", blank=True)
+    gestionada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    gestionada_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["fecha", "pk"]
+        verbose_name = "solicitud de viáticos"
+        verbose_name_plural = "solicitudes de viáticos"
+
+    def __str__(self):
+        return f"Viáticos {self.numero} · {self.destino}"
+
+    @property
+    def numero(self):
+        return f"VI-{self.pk:05d}" if self.pk else "VI-nueva"
+
+    def get_absolute_url(self):
+        from django.urls import reverse
+
+        return reverse("cronograma:viaticos") + f"#vi-{self.pk}"
+
+    @property
+    def para_texto(self):
+        """«Personal SST/SGI y personal técnico», «Personal técnico»…"""
+        partes = [x for x, si in (("personal SST/SGI", self.para_sst), ("personal técnico", self.para_tecnicos)) if si]
+        texto = " y ".join(partes)
+        return (texto[0].upper() + texto[1:]) if texto else "Sin definir"
+
+    @property
+    def conceptos_texto(self):
+        nombres = [n for c, n in self.CONCEPTOS if getattr(self, c)]
+        texto = ", ".join(nombres) or "Por definir"
+        return texto + (f" ({self.detalle})" if self.detalle else "")

@@ -17,12 +17,21 @@ def tecnicos_queryset():
 
 class ActividadForm(BootstrapMixin, forms.ModelForm):
     ticket = forms.ModelChoiceField(queryset=Ticket.objects.all(), required=False, widget=forms.HiddenInput)
+    # Viáticos: no son de la actividad sino de la solicitud que le llega a financiera (cronograma/viaticos.py)
+    via_sst = forms.BooleanField(label="Viáticos SST / SGI", required=False)
+    via_tecnicos = forms.BooleanField(label="Viáticos técnicos", required=False)
+    via_alimentacion = forms.BooleanField(label="Alimentación", required=False)
+    via_transporte = forms.BooleanField(label="Transporte", required=False)
+    via_gasolina = forms.BooleanField(label="Gasolina", required=False)
+    via_otros = forms.BooleanField(label="Otros", required=False)
+    via_detalle = forms.CharField(label="Detalle", required=False, max_length=300,
+                                  widget=forms.TextInput(attrs={"placeholder": "Ej.: peajes, hospedaje una noche"}))
 
     class Meta:
         model = Actividad
         fields = ["ticket", "fecha", "hora_inicio", "hora_fin", "cliente", "sede", "actividad", "tipo", "linea",
                   "encargados", "insumos", "notificar_a", "trabajo_alturas", "sst", "sst_persona",
-                  "sst_trabajo", "sst_duracion", "vehiculo", "viaticos"]
+                  "sst_trabajo", "sst_duracion", "vehiculo"]
         widgets = {
             "fecha": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "hora_inicio": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
@@ -55,6 +64,9 @@ class ActividadForm(BootstrapMixin, forms.ModelForm):
     def clean_notificar_a(self):
         return " ; ".join(validar_correos(self.cleaned_data["notificar_a"]))
 
+    def clean_via_detalle(self):
+        return self.cleaned_data.get("via_detalle", "").strip()
+
     def clean(self):
         datos = super().clean()
         inicio, fin = datos.get("hora_inicio"), datos.get("hora_fin")
@@ -72,6 +84,11 @@ class ActividadForm(BootstrapMixin, forms.ModelForm):
                                  "tickets recepcionados o pendientes de nueva visita.")
         if not datos.get("sst_duracion"):
             datos["sst_duracion"] = "medio día"
+        if (datos.get("via_sst") or datos.get("via_tecnicos")) and not any(
+                datos.get(f"via_{c}") for c in ("alimentacion", "transporte", "gasolina", "otros")):
+            self.add_error(None, "Viáticos: marque al menos un concepto (alimentación, transporte, gasolina u otros).")
+        if datos.get("via_otros") and not datos.get("via_detalle"):
+            self.add_error(None, "Viáticos: escriba en el detalle cuáles son los otros conceptos.")
         return datos
 
 
@@ -149,13 +166,16 @@ class ImportarForm(forms.Form):
 
 
 class ReporteHorasExtraForm(BootstrapMixin, forms.ModelForm):
+    """Primer momento de las horas extras: el inicio, con su foto obligatoria."""
+
     class Meta:
         model = ReporteHorasExtra
-        fields = ["colaborador", "fecha", "hora_salida", "hora_llegada", "cliente"]
+        fields = ["colaborador", "rol", "fecha", "hora_salida", "cliente", "evidencia_salida"]
         widgets = {
+            "rol": forms.RadioSelect,
             "fecha": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "hora_salida": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
-            "hora_llegada": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
+            "evidencia_salida": forms.ClearableFileInput(attrs={"accept": "image/*", "capture": "environment"}),
         }
 
     def __init__(self, *args, usuario=None, **kwargs):
@@ -167,6 +187,27 @@ class ReporteHorasExtraForm(BootstrapMixin, forms.ModelForm):
             self.fields["colaborador"].initial = usuario.pk if tecnicos_queryset().filter(pk=usuario.pk).exists() else None
         else:
             del self.fields["colaborador"]
+        self.fields["rol"].required = True
+        self.fields["rol"].choices = ReporteHorasExtra.Rol.choices
+        self.fields["evidencia_salida"].required = True
         self.fields["cliente"].widget = ConSugerencias(Empresa.objects.filter(activa=True).order_by("razon_social").values_list("razon_social", flat=True),
                                                        attrs={"placeholder": "Escriba o elija el cliente"})
+        self._aplicar_estilos()
+
+
+class CierreHorasExtraForm(BootstrapMixin, forms.ModelForm):
+    """Segundo momento: la hora de llegada y la foto del regreso, las dos obligatorias."""
+
+    class Meta:
+        model = ReporteHorasExtra
+        fields = ["hora_llegada", "evidencia_llegada"]
+        widgets = {
+            "hora_llegada": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
+            "evidencia_llegada": forms.ClearableFileInput(attrs={"accept": "image/*", "capture": "environment"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["hora_llegada"].required = True
+        self.fields["evidencia_llegada"].required = True
         self._aplicar_estilos()

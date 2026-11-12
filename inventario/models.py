@@ -752,6 +752,21 @@ class OrdenCompra(models.Model):
         return f"OC-{self.pk:05d}" if self.pk else "OC-nueva"
 
     @property
+    def proyecto(self):
+        """El ticket para el que se compra (directo o por la solicitud de material); None si es stock de bodega."""
+        return self.ticket or (self.solicitud.ticket if self.solicitud_id else None)
+
+    @property
+    def propuesta_codigo(self):
+        """Número de la propuesta aprobada del proyecto (PE-AAAA-MM-NNN, sin la versión); "" si no hay."""
+        t = self.proyecto
+        ficha = getattr(t, "ficha", None) if t else None
+        if not ficha:
+            return ""
+        v = ficha.versiones.filter(estado="aprobada").exclude(codigo="").order_by("-numero").first()
+        return v.codigo.rsplit("-V", 1)[0] if v else ""
+
+    @property
     def siguiente_paso(self):
         """Lo que sigue con la orden y quién lo hace, para la columna «Siguiente paso»: (texto, quién) o None."""
         E = self.Estado

@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Viáticos{% endblock %}
+{% block contenido %}
+{# Solicitudes de viáticos (alimentación, transporte, gasolina, otros) para el personal SST/SGI y técnico. Las gestiona financiera. #}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div><h1 class="h3 page-title mb-1">Viáticos</h1>
+    <p class="text-muted-jn mb-0">Lo que necesita el personal para ir a las sedes de los clientes. Se piden al programar en el cronograma o desde el ticket; financiera los entrega y los marca como gestionados.</p></div>
+  <a class="btn btn-outline-primary btn-sm" href="{% url 'cronograma:viaticos_nueva' %}"><i class="bi bi-plus-lg"></i> Solicitud sin ticket</a>
+</div>
+<div class="card mb-4 border-warning"><div class="card-header"><i class="bi bi-wallet2"></i> Pendientes de financiera <span class="badge text-bg-warning">{{ pendientes|length }}</span></div>
+  <div class="list-group list-group-flush">
+  {% for v in pendientes %}
+    <div class="list-group-item" id="vi-{{ v.pk }}">
+      <div class="d-flex flex-wrap justify-content-between gap-2">
+        <div><span class="radicado">{{ v.numero }}</span> · <b>{{ v.fecha|date:"D d/m/Y" }}</b>{% if v.fecha < hoy %} <span class="badge text-bg-danger">Ya pasó</span>{% endif %} · {{ v.destino }}
+          {% if v.ticket %}· <a href="{{ v.ticket.get_absolute_url }}">{{ v.ticket.radicado }}</a>{% endif %}
+          <div class="small"><b>{{ v.para_texto }}</b> · {{ v.conceptos_texto }}</div>
+          {% if v.personas %}<div class="small text-muted-jn"><i class="bi bi-people"></i> {{ v.personas }}</div>{% endif %}
+          <div class="small text-muted-jn">Pidió {{ v.solicitada_por.get_full_name|default:v.solicitada_por.username|default:"—" }} el {{ v.creado|date:"d/m/Y H:i" }}{% if v.actividad %} · desde el cronograma{% endif %}</div></div>
+        {% if gestiona %}<form method="post" action="{% url 'cronograma:viaticos_gestionar' v.pk %}" enctype="multipart/form-data" class="d-flex flex-wrap gap-2 align-items-end" style="max-width:520px">{% csrf_token %}
+          <div><label class="form-label small mb-0">Valor entregado</label><input name="valor_entregado" class="form-control form-control-sm" inputmode="numeric" placeholder="$" style="width:8rem"></div>
+          <div class="flex-grow-1"><label class="form-label small mb-0">Nota</label><input name="nota_financiera" maxlength="300" class="form-control form-control-sm" placeholder="Transferencia a…, efectivo…"></div>
+          <div><label class="form-label small mb-0">Soporte (opcional)</label><input type="file" name="soporte" class="form-control form-control-sm" style="width:12rem"></div>
+          <button class="btn btn-success btn-sm"><i class="bi bi-check2"></i> Gestionada</button></form>{% endif %}
+      </div>
+    </div>
+  {% empty %}<div class="list-group-item text-muted-jn small">No hay viáticos pendientes.</div>{% endfor %}
+  </div></div>
+<div class="card"><div class="card-header"><i class="bi bi-clock-history"></i> Gestionadas y canceladas</div>
+  <div class="table-responsive"><table class="table table-tickets mb-0">
+    <thead><tr><th>N.º</th><th>Fecha</th><th>Cliente y sede</th><th>Para</th><th>Conceptos</th><th class="text-end">Valor</th><th>Estado</th></tr></thead>
+    <tbody>{% for v in gestionadas %}<tr id="vi-{{ v.pk }}"><td class="radicado">{{ v.numero }}</td><td>{{ v.fecha|date:"d/m/Y" }}</td><td class="small">{{ v.destino }}{% if v.ticket %} · {{ v.ticket.radicado }}{% endif %}</td>
+      <td class="small">{{ v.para_texto }}</td><td class="small">{{ v.conceptos_texto }}</td><td class="text-end">{% if v.valor_entregado %}{{ v.valor_entregado|pesos }}{% else %}—{% endif %}</td>
+      <td class="small"><span class="badge text-bg-{% if v.estado == 'gestionada' %}success{% else %}secondary{% endif %}">{{ v.get_estado_display }}</span>
+        {% if v.nota_financiera %}<div class="text-muted-jn">{{ v.nota_financiera }}</div>{% endif %}
+        {% if v.soporte %}<a href="{% url 'cronograma:viaticos_soporte' v.pk %}" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i> Soporte</a>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="7" class="text-muted-jn small">Aún no hay solicitudes gestionadas.</td></tr>{% endfor %}</tbody>
+  </table></div></div>
+{% endblock %}

@@ -140,6 +140,12 @@ def orden_compra_pdf(orden):
         [_p("Contacto", E_ETIQUETA), _p(_contacto_proveedor(pr)),
          _p("Entregar en", E_ETIQUETA), _p("Bodega JANOTEC · Carrera 40A N.º 16-21, Villavicencio")],
     ]
+    proyecto = orden.proyecto
+    if proyecto:
+        datos.insert(0, [_p("Propuesta", E_ETIQUETA), _p(orden.propuesta_codigo or "—"),
+                         _p("Cliente", E_ETIQUETA), _p(str(proyecto.empresa))])
+        datos.insert(1, [_p("Ticket", E_ETIQUETA), _p(proyecto.radicado),
+                         _p("Sede", E_ETIQUETA), _p(str(proyecto.sede) if proyecto.sede_id else "—")])
     tabla_datos = Table(datos, colWidths=[ancho * 0.16, ancho * 0.34, ancho * 0.18, ancho * 0.32])
     tabla_datos.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, BORDE), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
 
@@ -166,13 +172,8 @@ def orden_compra_pdf(orden):
     historia += [Spacer(1, 8), _p("Forma de pago: " + pago + " Enviar la factura electrónica con el despacho.")]
     if orden.notas:
         historia += [Spacer(1, 4), _p("Condiciones: " + orden.notas)]
-    proyecto = orden.ticket or (orden.solicitud.ticket if orden.solicitud else None)
-    if proyecto:
-        version = (proyecto.ficha.versiones.filter(estado="aprobada").exclude(codigo="").order_by("-numero").first()
-                   if hasattr(proyecto, "ficha") else None)
-        partes = [f"Proyecto {version.codigo.rsplit('-V', 1)[0]}" if version else "", orden.solicitud.numero if orden.solicitud else "",
-                  proyecto.radicado]
-        historia += [Spacer(1, 4), _p("Referencia interna: " + " · ".join(x for x in partes if x))]
+    if orden.solicitud:
+        historia += [Spacer(1, 4), _p("Referencia interna: " + orden.solicitud.numero)]
     historia += [Spacer(1, 18), _firmas_orden(ancho, [orden])]
     doc.build(historia)
     return f"Orden_de_compra_{orden.numero}.pdf", buf.getvalue()

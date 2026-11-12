@@ -11,6 +11,7 @@
   <div class="col-6 col-md"><a class="kpi {% if por_pagar %}alerta{% endif %}" href="#por-pagar"><div class="valor">{{ por_pagar|length }}</div><div class="etiqueta">Por pagar (contado o anticipo)</div></a></div>
   <div class="col-6 col-md"><a class="kpi {% if saldos %}aviso{% endif %}" href="#saldos"><div class="valor">{{ saldos|length }}</div><div class="etiqueta">Saldos de anticipos</div></a></div>
   <div class="col-6 col-md"><a class="kpi" href="#sin-factura"><div class="valor">{{ sin_factura|length }}</div><div class="etiqueta">Esperando factura</div></a></div>
+  <div class="col-6 col-md"><a class="kpi {% if viaticos %}aviso{% endif %}" href="{% url 'cronograma:viaticos' %}"><div class="valor">{{ viaticos }}</div><div class="etiqueta">Viáticos por gestionar</div></a></div>
   <div class="col-6 col-md"><a class="kpi {% if con_diferencia %}alerta{% endif %}" href="#diferencia"><div class="valor">{{ con_diferencia|length }}</div><div class="etiqueta">Facturas con diferencia</div></a></div>
 </div>
 

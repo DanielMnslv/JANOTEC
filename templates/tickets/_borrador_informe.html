@@ -7,13 +7,16 @@
           {% if tipo_sugerido == 'estudio' %}
             <button class="btn btn-primary btn-sm" name="tipo" value="estudio"><i class="bi bi-file-earmark-plus"></i> Generar borrador del informe de requerimientos</button>
             <button class="btn btn-outline-primary btn-sm" name="tipo" value="visita">Informe de visita</button>
+          {% elif tipo_sugerido == 'entrega' %}
+            <button class="btn btn-primary btn-sm" name="tipo" value="entrega"><i class="bi bi-file-earmark-check"></i> Generar el informe de entrega del proyecto</button>
+            <button class="btn btn-outline-primary btn-sm" name="tipo" value="visita">Informe de visita</button>
           {% else %}
             <button class="btn btn-primary btn-sm" name="tipo" value="visita"><i class="bi bi-file-earmark-plus"></i> Generar borrador del informe</button>
             <button class="btn btn-outline-primary btn-sm" name="tipo" value="estudio">Informe de requerimientos</button>
           {% endif %}
           <input type="hidden" name="accion" value="generar">
         </form>
-        <div class="form-text">Visita: soporte, mantenimiento, instalación, reubicación o desmonte (equipos y fotos del acta). Requerimientos: zonas con la visual de cada punto y la tabla de equipos a suministrar para la propuesta.</div>
+        <div class="form-text">Visita: soporte, mantenimiento, reubicación o desmonte (equipos y fotos del acta). Requerimientos: zonas con la visual de cada punto y la tabla de equipos a suministrar para la propuesta.{% if es_instalacion %} <b>Entrega del proyecto</b>: solo para instalaciones; es el que se le envía al cliente, con lo instalado (lo usado de la propuesta en el acta) y la garantía.{% endif %}</div>
       {% elif borrador.aprobado %}
         <p class="small mb-2"><span class="badge text-bg-success">Aprobado</span> por {{ borrador.aprobado_por.get_full_name|default:borrador.aprobado_por.username }} el {{ borrador.aprobado_en|date:"d/m/Y H:i" }}. {% if es_levantamiento %}Al devolver el levantamiento se adjunta este PDF y el informe del requerimiento ya viene lleno con sus equipos y servicios.{% else %}Al entregar se adjunta este PDF; no hace falta subir otro.{% endif %}</p>
         <a class="btn btn-outline-primary btn-sm" href="{% url 'informe_borrador_pdf' ticket.radicado %}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> Ver informe aprobado</a>

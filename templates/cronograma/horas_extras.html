@@ -2,23 +2,39 @@
 {% block titulo %}Horas extras{% endblock %}
 {% block contenido %}
 <h1 class="h3 page-title mb-1">Horas extras</h1>
-<p class="text-muted-jn mb-4">Auto reporte de salida a campo: registre la hora en que salió, la hora en que llegó y el cliente que visitó.</p>
+<p class="text-muted-jn mb-4">Auto reporte de salida a campo en dos momentos, cada uno con su foto: al <b>iniciar</b> y al <b>regresar</b>.
+  El <b>conductor</b> cuenta desde que le entregan las llaves para el alistamiento del vehículo; el <b>acompañante</b>, desde que llega a la sede del cliente e inicia la operación.</p>
 <div class="row g-4">
   <div class="col-lg-4">
-    <div class="card">
-      <div class="card-header"><i class="bi bi-plus-circle"></i> Registrar salida a campo</div>
+    {% for r, cierre in abiertos %}
+    <div class="card mb-3 border-warning">
+      <div class="card-header"><i class="bi bi-hourglass-split"></i> Falta el regreso{% if user.es_supervisor %} · {{ r.colaborador.get_full_name|default:r.colaborador.username }}{% endif %}</div>
       <div class="card-body">
-        <form method="post">{% csrf_token %}
+        <p class="small mb-2">{{ r.fecha|date:"d/m/Y" }} · {{ r.rol_corto }} · inició {{ r.hora_salida|time:"H:i" }} · {{ r.cliente }}
+          {% if r.evidencia_salida %}· <a href="{% url 'cronograma:horas_extras_foto' r.pk 'salida' %}" target="_blank" rel="noopener">foto del inicio</a>{% endif %}</p>
+        <form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="accion" value="cerrar"><input type="hidden" name="reporte" value="{{ r.pk }}">
+          {% include "tickets/_campo.html" with campo=cierre.hora_llegada %}
+          {% include "tickets/_campo.html" with campo=cierre.evidencia_llegada %}
+          <button class="btn btn-warning w-100"><i class="bi bi-house-check"></i> Registrar regreso</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+    <div class="card">
+      <div class="card-header"><i class="bi bi-play-circle"></i> Iniciar salida a campo</div>
+      <div class="card-body">
+        <form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="accion" value="iniciar">
           {% for e in form.non_field_errors %}<div class="text-danger small mb-2">{{ e }}</div>{% endfor %}
           {% if form.colaborador %}{% include "tickets/_campo.html" with campo=form.colaborador %}
           {% else %}<p class="small mb-3"><span class="text-muted-jn">Colaborador:</span> <b>{{ user.get_full_name|default:user.username }}</b></p>{% endif %}
+          <div class="mb-3"><div class="form-label fw-medium">{{ form.rol.label|capfirst }} <span class="text-danger">*</span></div>
+            {% for op in form.rol %}<div class="form-check">{{ op.tag }} <label class="form-check-label small" for="{{ op.id_for_label }}">{{ op.choice_label }}</label></div>{% endfor %}
+            {% for e in form.rol.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}</div>
           {% include "tickets/_campo.html" with campo=form.fecha %}
-          <div class="row">
-            {% include "tickets/_campo.html" with campo=form.hora_salida clase="col-6" %}
-            {% include "tickets/_campo.html" with campo=form.hora_llegada clase="col-6" %}
-          </div>
+          {% include "tickets/_campo.html" with campo=form.hora_salida %}
           {% include "tickets/_campo.html" with campo=form.cliente %}
-          <button class="btn btn-primary w-100"><i class="bi bi-check2-circle"></i> Registrar horas</button>
+          {% include "tickets/_campo.html" with campo=form.evidencia_salida %}
+          <button class="btn btn-primary w-100"><i class="bi bi-check2-circle"></i> Registrar inicio</button>
         </form>
       </div>
     </div>
@@ -41,11 +57,14 @@
     <div class="card">
       <div class="table-responsive">
         <table class="table table-tickets mb-0">
-          <thead><tr>{% if user.es_supervisor %}<th>Colaborador</th>{% endif %}<th>Fecha</th><th>Salida</th><th>Llegada</th><th class="text-end">Horas</th><th>Cliente</th></tr></thead>
+          <thead><tr>{% if user.es_supervisor %}<th>Colaborador</th>{% endif %}<th>Fecha</th><th>Fue</th><th>Inicio</th><th>Llegada</th><th class="text-end">Horas</th><th>Cliente</th></tr></thead>
           {% for r in reportes %}
-            <tr>{% if user.es_supervisor %}<td>{{ r.colaborador.get_full_name|default:r.colaborador.username }}</td>{% endif %}<td>{{ r.fecha|date:"d/m/Y" }}</td><td>{{ r.hora_salida|time:"H:i" }}</td><td>{{ r.hora_llegada|time:"H:i" }}</td><td class="text-end">{{ r.duracion }}</td><td class="small">{{ r.cliente }}</td></tr>
+            <tr>{% if user.es_supervisor %}<td>{{ r.colaborador.get_full_name|default:r.colaborador.username }}</td>{% endif %}<td>{{ r.fecha|date:"d/m/Y" }}</td><td class="small">{{ r.rol_corto }}</td>
+              <td>{{ r.hora_salida|time:"H:i" }}{% if r.evidencia_salida %} <a href="{% url 'cronograma:horas_extras_foto' r.pk 'salida' %}" target="_blank" rel="noopener" title="Foto del inicio"><i class="bi bi-camera"></i></a>{% endif %}</td>
+              <td>{% if r.abierto %}<span class="badge text-bg-warning">En curso</span>{% else %}{{ r.hora_llegada|time:"H:i" }}{% if r.evidencia_llegada %} <a href="{% url 'cronograma:horas_extras_foto' r.pk 'llegada' %}" target="_blank" rel="noopener" title="Foto del regreso"><i class="bi bi-camera"></i></a>{% endif %}{% endif %}</td>
+              <td class="text-end">{{ r.duracion }}</td><td class="small">{{ r.cliente }}</td></tr>
           {% empty %}
-            <tr><td colspan="6" class="text-center text-muted-jn py-4">No hay horas registradas en este mes.</td></tr>
+            <tr><td colspan="7" class="text-center text-muted-jn py-4">No hay horas registradas en este mes.</td></tr>
           {% endfor %}
         </table>
       </div>

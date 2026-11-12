@@ -176,10 +176,19 @@ class PropuestaYOrdenRealesTests(BaseComercial):
         self.cotizar(t, self.filas_reales())
         self.enviar_y_aprobar(t)
         self.client.force_login(self.bodega)
+        lista = self.client.get(reverse("inventario:ordenes"))
+        self.assertContains(lista, "Propuestas aprobadas con compras pendientes")
+        self.assertContains(lista, reverse("inventario:orden_proyecto", args=[t.radicado]))
         ordenar = reverse("inventario:orden_proyecto_ordenar", args=[t.radicado])
         # SYSCOM: la bala y el cable (el NVR sale de bodega)
         self.client.post(ordenar, {"proveedor": self.syscom.pk})
         syscom = OrdenCompra.objects.get(proveedor=self.syscom)
+        # La orden muestra el número de la propuesta, el cliente y la sede
+        codigo = t.ficha.versiones.get(estado="aprobada").codigo.rsplit("-V", 1)[0]
+        self.assertEqual(syscom.propuesta_codigo, codigo)
+        ficha_oc = self.client.get(syscom.get_absolute_url())
+        self.assertContains(ficha_oc, codigo)
+        self.assertContains(ficha_oc, t.empresa.razon_social)
         self.assertEqual(sorted(l.descripcion for l in syscom.lineas.all()), sorted([BALA, CABLE]))
         self.assertEqual(syscom.ticket, t)
         self.assertEqual(syscom.lineas.get(descripcion=BALA).referencia, "DS-2CD1047G3-LIU")
@@ -251,3 +260,29 @@ class PropuestaYOrdenRealesTests(BaseComercial):
         self.assertEqual(self.client.get(reverse("inventario:orden_proyecto", args=[t.radicado])).status_code, 403)
         self.assertIsInstance(Cotizacion.objects.first(), Cotizacion)
         self.assertTrue(Ticket.objects.exists())
+
+    def test_el_acta_de_instalacion_trae_la_propuesta_con_usado_y_sobrante(self):
+        from tickets import material_propuesta
+        from tickets.models import ActaSoporte
+
+        t = self.requerimiento()
+        self.cotizar(t, self.filas_reales())
+        self.assertEqual(material_propuesta.de_la_propuesta(t), [], "sin aprobar no trae nada")
+        self.enviar_y_aprobar(t)
+        lista = material_propuesta.de_la_propuesta(t)
+        self.assertEqual([f["descripcion"] for f in lista], [NVR, PT, BALA, CABLE])  # sin la mano de obra
+        self.assertEqual(material_propuesta.iniciales(lista)[3]["usado_texto"], "380")
+        _, errores = material_propuesta.leer({"prop_usado_0": "x"}, material_propuesta.de_la_propuesta(t))
+        self.assertTrue(errores)
+        datos = {"prop_usado_0": "1", "prop_sobra_0": "0", "prop_usado_1": "1", "prop_usado_2": "3",
+                 "prop_usado_3": "350", "prop_sobra_3": "30"}
+        filas, errores = material_propuesta.leer(datos, material_propuesta.de_la_propuesta(t))
+        self.assertEqual(errores, [])
+        acta = ActaSoporte.objects.create(numero=5001, fecha=timezone.now(), empresa=t.empresa, sede=t.sede, ticket=t,
+                                          tecnico=self.bodega, diagnostico="Instalación", resultado="solucionado")
+        mail.outbox.clear()
+        sobrantes = material_propuesta.guardar(acta, filas, self.bodega)
+        self.assertEqual([m.descripcion for m in sobrantes], [CABLE])
+        self.assertEqual(acta.material_propuesta.get(descripcion=CABLE).usado, Decimal(350))
+        self.assertTrue(any("Material sobrante" in m.subject and "aleja@janotec.test" in m.to for m in mail.outbox))
+        self.assertTrue(t.seguimientos.filter(mensaje__contains="Sobró material").exists())

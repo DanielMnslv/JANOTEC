@@ -1045,22 +1045,46 @@ class EnlaceCompartidoTests(BaseCronograma):
 class HorasExtrasTests(BaseCronograma):
     """El auto reporte de salida a campo que antes se hacía en Google Forms."""
 
-    def test_el_tecnico_registra_sus_horas_y_solo_ve_las_suyas(self):
+    @staticmethod
+    def foto(nombre="foto.png"):
+        from io import BytesIO
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        png = BytesIO()
+        Image.new("RGB", (20, 20), "red").save(png, "PNG")
+        return SimpleUploadedFile(nombre, png.getvalue(), content_type="image/png")
+
+    def test_el_tecnico_inicia_con_foto_cierra_con_foto_y_solo_ve_lo_suyo(self):
         from .models import ReporteHorasExtra
 
         url = reverse("cronograma:horas_extras")
         self.client.force_login(self.tec)
         self.assertNotContains(self.client.get(url), 'name="colaborador"')  # siempre queda a su nombre
-        r = self.client.post(url, {"colaborador": self.tec2.pk, "fecha": "2026-11-03", "hora_salida": "18:30",
-                                   "hora_llegada": "21:15", "cliente": "LLANOGAS"})
-        self.assertRedirects(r, url)
+        datos = {"accion": "iniciar", "colaborador": self.tec2.pk, "rol": "conductor", "fecha": "2026-11-03",
+                 "hora_salida": "18:30", "cliente": "LLANOGAS"}
+        self.client.post(url, datos)  # sin foto no se registra
+        self.assertFalse(ReporteHorasExtra.objects.exists())
+        self.assertRedirects(self.client.post(url, {**datos, "evidencia_salida": self.foto()}), url)
         reporte = ReporteHorasExtra.objects.get()
-        self.assertEqual((reporte.colaborador, reporte.registrado_por, reporte.duracion), (self.tec, self.tec, "2:45"))
-        ReporteHorasExtra.objects.create(colaborador=self.tec2, fecha=date(2026, 11, 3), hora_salida="22:00",
-                                         hora_llegada="01:30", cliente="Otro cliente")
+        self.assertEqual((reporte.colaborador, reporte.rol, reporte.minutos), (self.tec, "conductor", 0))
+        self.assertContains(self.client.get(url), "Falta el regreso")
+        cierre = {"accion": "cerrar", "reporte": reporte.pk, f"c{reporte.pk}-hora_llegada": "21:15"}
+        self.client.post(url, cierre)  # sin la foto del regreso sigue abierto
+        reporte.refresh_from_db()
+        self.assertTrue(reporte.abierto)
+        self.client.post(url, {**cierre, f"c{reporte.pk}-evidencia_llegada": self.foto()})
+        reporte.refresh_from_db()
+        self.assertEqual((reporte.duracion, reporte.abierto), ("2:45", False))
+        self.assertIsNotNone(reporte.cerrado_en)
+        self.assertEqual(self.client.get(reverse("cronograma:horas_extras_foto", args=[reporte.pk, "llegada"])).status_code, 200)
+        otro = ReporteHorasExtra.objects.create(colaborador=self.tec2, fecha=date(2026, 11, 3), hora_salida="22:00",
+                                                hora_llegada="01:30", cliente="Otro cliente")
         lista = self.client.get(url + "?mes=2026-11")
         self.assertContains(lista, "LLANOGAS")
         self.assertNotContains(lista, "Otro cliente")
+        self.assertEqual(self.client.get(reverse("cronograma:horas_extras_foto", args=[otro.pk, "salida"])).status_code, 404)
         self.assertEqual(self.client.get(url + "?mes=2026-11&formato=excel")["Content-Type"], "text/html; charset=utf-8")
 
     def test_el_coordinador_ve_todo_registra_por_otro_y_descarga_el_excel(self):
@@ -1068,10 +1092,14 @@ class HorasExtrasTests(BaseCronograma):
 
         url = reverse("cronograma:horas_extras")
         self.client.force_login(self.coord)
-        self.client.post(url, {"colaborador": self.tec2.pk, "fecha": "2026-11-03", "hora_salida": "22:00",
-                               "hora_llegada": "01:30", "cliente": "Otro cliente"})
+        self.client.post(url, {"accion": "iniciar", "colaborador": self.tec2.pk, "rol": "acompanante", "fecha": "2026-11-03",
+                               "hora_salida": "22:00", "cliente": "Otro cliente", "evidencia_salida": self.foto()})
         reporte = ReporteHorasExtra.objects.get()
-        self.assertEqual((reporte.colaborador, reporte.registrado_por, reporte.duracion), (self.tec2, self.coord, "3:30"))
+        self.assertEqual((reporte.colaborador, reporte.registrado_por), (self.tec2, self.coord))
+        self.client.post(url, {"accion": "cerrar", "reporte": reporte.pk, f"c{reporte.pk}-hora_llegada": "01:30",
+                               f"c{reporte.pk}-evidencia_llegada": self.foto()})
+        reporte.refresh_from_db()
+        self.assertEqual(reporte.duracion, "3:30")
         lista = self.client.get(url + "?mes=2026-11")
         self.assertContains(lista, "Total del mes por colaborador")
         self.assertContains(lista, "3:30 h")
@@ -1098,3 +1126,68 @@ class AceptarVisitaConUnClicTests(BaseCronograma):
         a.refresh_from_db()
         self.ticket.refresh_from_db()
         self.assertEqual((a.autorizacion, self.ticket.estado), (A.ACEPTADA, E.AUTORIZADO))
+
+
+class ViaticosTests(BaseCronograma):
+    """Viáticos SST/SGI y técnicos: se piden al programar o desde el ticket y le llegan a financiera."""
+
+    def setUp(self):
+        super().setUp()
+        self.fin = Usuario.objects.create_user("fin", "fin@janotec.test", "Clave-segura-1", rol="financiera")
+
+    def test_al_programar_con_viaticos_le_llega_a_financiera_y_al_quitarlos_se_cancela(self):
+        from .models import SolicitudViaticos
+
+        martes = proximo(1)
+        mail.outbox.clear()
+        r = self.programar(martes, via_tecnicos="on", via_sst="on")  # sin conceptos no se guarda
+        self.assertContains(r, "marque al menos un concepto")
+        self.assertFalse(Actividad.objects.exists())
+        self.programar(martes, via_tecnicos="on", via_alimentacion="on", via_gasolina="on")
+        a = Actividad.objects.get()
+        v = SolicitudViaticos.objects.get()
+        self.assertTrue(a.viaticos)
+        self.assertEqual((v.actividad, v.ticket, v.para_tecnicos, v.para_sst, v.estado), (a, self.ticket, True, False, "pendiente"))
+        self.assertEqual(v.conceptos_texto, "Alimentación, Gasolina")
+        self.assertIn("Freyder Gordillo", v.personas)
+        aviso = [m for m in mail.outbox if "fin@janotec.test" in m.to]
+        self.assertEqual(len(aviso), 1)
+        self.assertIn(self.ticket.radicado, aviso[0].subject)
+        # Financiera lo ve en su día y en la bandeja; lo marca gestionado
+        self.client.force_login(self.fin)
+        self.assertContains(self.client.get(reverse("mi_dia")), v.numero)
+        self.assertContains(self.client.get(reverse("cronograma:viaticos")), v.numero)
+        self.client.post(reverse("cronograma:viaticos_gestionar", args=[v.pk]), {"valor_entregado": "150.000", "nota_financiera": "Nequi"})
+        v.refresh_from_db()
+        self.assertEqual((v.estado, v.valor_entregado, v.gestionada_por), ("gestionada", 150000, self.fin))
+        # Otra actividad: al desmarcar, la pendiente se cancela y financiera sabe
+        otro = Ticket.objects.create(empresa=self.emp, solicitante=self.cli, categoria=self.cat, asunto="x", descripcion="x",
+                                     estado=E.RECEPCIONADO, contacto_email="a@llano.co")
+        self.programar(martes, "13:00", "15:00", ticket=otro, via_sst="on", via_transporte="on")
+        a2 = Actividad.objects.get(ticket=otro)
+        mail.outbox.clear()
+        datos = {"ticket": otro.pk, "fecha": martes.isoformat(), "hora_inicio": "13:00", "hora_fin": "15:00", "cliente": "Grupo del Llano",
+                 "sede": "Manare", "actividad": "x", "tipo": "mantenimiento", "linea": "CCTV", "encargados": [self.tec.pk],
+                 "notificar_a": "a@llano.co", "sst_duracion": "medio día"}
+        self.client.force_login(self.coord)
+        self.client.post(reverse("cronograma:editar", args=[a2.pk]), datos)
+        self.assertEqual(SolicitudViaticos.objects.get(actividad=a2).estado, "cancelada")
+        self.assertTrue(any("Ya no se requieren" in m.subject for m in mail.outbox))
+
+    def test_desde_el_ticket_y_permisos(self):
+        from .models import SolicitudViaticos
+
+        url = reverse("cronograma:viaticos_nueva") + f"?ticket={self.ticket.radicado}"
+        self.client.force_login(self.tec)
+        self.assertContains(self.client.get(url), "Grupo del Llano · Manare")
+        r = self.client.post(url, {"ticket": self.ticket.radicado, "fecha": "2026-11-20", "destino": "Grupo del Llano · Manare",
+                                   "para_sst": "on", "para_tecnicos": "on", "otros": "on"})
+        self.assertContains(r, "Diga cuáles son los otros conceptos")
+        self.client.post(url, {"ticket": self.ticket.radicado, "fecha": "2026-11-20", "destino": "Grupo del Llano · Manare",
+                               "para_sst": "on", "otros": "on", "detalle": "Peajes"})
+        v = SolicitudViaticos.objects.get()
+        self.assertEqual((v.ticket, v.para_texto, v.solicitada_por), (self.ticket, "Personal SST/SGI", self.tec))
+        self.assertEqual(self.client.get(reverse("cronograma:viaticos")).status_code, 403)  # el técnico no ve la bandeja
+        self.assertEqual(self.client.post(reverse("cronograma:viaticos_gestionar", args=[v.pk])).status_code, 403)
+        self.client.force_login(self.cli)
+        self.assertEqual(self.client.get(url).status_code, 403)

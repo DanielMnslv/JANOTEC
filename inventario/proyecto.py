@@ -211,6 +211,23 @@ def hoja(ticket):
     }
 
 
+def por_ordenar(limite=30):
+    """Proyectos con la propuesta aprobada a los que aún les falta ordenar algo: [{ticket, codigo, pendientes, proveedores}].
+    Es lo que bodega ve arriba en «Órdenes de compra» para generarlas desde la propuesta."""
+    tickets = (Ticket.objects.filter(ficha__versiones__estado="aprobada").exclude(estado__in=Ticket.ESTADOS_FINALES)
+               .select_related("empresa", "sede", "ficha").distinct().order_by("-pk")[:limite])
+    resultado = []
+    for t in tickets:
+        cotizacion, version, aprobada = propuesta_del_proyecto(t.ficha)
+        if not aprobada:
+            continue
+        lista = [f for f in filas(t, cotizacion) if f["pendiente"] > 0]
+        if lista:
+            resultado.append({"ticket": t, "codigo": (version.codigo or "").rsplit("-V", 1)[0], "pendientes": len(lista),
+                              "proveedores": len({f["proveedor"].pk if f["proveedor"] else None for f in lista})})
+    return resultado
+
+
 # --- Preparar la orden de un proveedor desde la hoja -------------------------------------------------
 @transaction.atomic
 def preparar_orden(ticket, proveedor, autor):

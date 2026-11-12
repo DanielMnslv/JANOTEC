@@ -155,7 +155,20 @@
             <div class="form-check">{{ form.trabajo_alturas }} <label class="form-check-label" for="{{ form.trabajo_alturas.id_for_label }}">Trabajo en alturas</label></div>
             <div class="form-check">{{ form.sst }} <label class="form-check-label" for="{{ form.sst.id_for_label }}">Acompañamiento SST (HSE)</label></div>
             <div class="form-check">{{ form.vehiculo }} <label class="form-check-label" for="{{ form.vehiculo.id_for_label }}">Requiere vehículo</label></div>
-            <div class="form-check">{{ form.viaticos }} <label class="form-check-label" for="{{ form.viaticos.id_for_label }}">Requiere viáticos</label></div>
+            <div class="form-check">{{ form.via_sst }} <label class="form-check-label" for="{{ form.via_sst.id_for_label }}">Viáticos SST / SGI</label></div>
+            <div class="form-check">{{ form.via_tecnicos }} <label class="form-check-label" for="{{ form.via_tecnicos.id_for_label }}">Viáticos técnicos</label></div>
+          </div>
+          <div class="col-12" id="bloque-viaticos" hidden>
+            <div class="row g-2 p-2 rounded" style="background:#eef6f0">
+              <div class="col-12 d-flex flex-wrap gap-3 small">
+                <div class="form-check">{{ form.via_alimentacion }} <label class="form-check-label" for="{{ form.via_alimentacion.id_for_label }}">{{ form.via_alimentacion.label }}</label></div>
+                <div class="form-check">{{ form.via_transporte }} <label class="form-check-label" for="{{ form.via_transporte.id_for_label }}">{{ form.via_transporte.label }}</label></div>
+                <div class="form-check">{{ form.via_gasolina }} <label class="form-check-label" for="{{ form.via_gasolina.id_for_label }}">{{ form.via_gasolina.label }}</label></div>
+                <div class="form-check">{{ form.via_otros }} <label class="form-check-label" for="{{ form.via_otros.id_for_label }}">{{ form.via_otros.label }}</label></div>
+              </div>
+              <div class="col-12"><label class="form-label small mb-1">Detalle</label>{{ form.via_detalle }}</div>
+              <div class="col-12 small text-muted-jn"><i class="bi bi-wallet2"></i> Al guardar, a financiera le llega la solicitud de viáticos para gestionarlos.</div>
+            </div>
           </div>
           <div class="col-12" id="bloque-sst">
             <div class="row g-2 p-2 rounded" style="background:#fff8e6">
@@ -214,8 +227,9 @@
   const csrf = form.querySelector('[name=csrfmiddlewaretoken]').value;
   const campo = function (n) { return form.querySelector('[name=' + n + ']'); };
   const textos = ['fecha', 'hora_inicio', 'hora_fin', 'cliente', 'sede', 'actividad', 'tipo', 'linea', 'insumos', 'notificar_a',
-                  'sst_persona', 'sst_trabajo', 'sst_duracion'];
-  const casillas = ['trabajo_alturas', 'sst', 'vehiculo', 'viaticos'];
+                  'sst_persona', 'sst_trabajo', 'sst_duracion', 'via_detalle'];
+  const casillas = ['trabajo_alturas', 'sst', 'vehiculo', 'via_sst', 'via_tecnicos', 'via_alimentacion', 'via_transporte',
+                    'via_gasolina', 'via_otros'];
 
   function llenar(v, titulo) {
     form.reset();
@@ -239,6 +253,7 @@
     form.dataset.bodega = v.bodega ? '1' : '';
     modoInsumos();
     sst();
+    viaticos();
     modal.show();
   }
   function nuevaDesdeTicket(id, fecha) {
@@ -247,6 +262,7 @@
     llenar(v, 'Programar ' + v.radicado);
   }
   function sst() { document.getElementById('bloque-sst').hidden = !campo('sst').checked; }
+  function viaticos() { document.getElementById('bloque-viaticos').hidden = !(campo('via_sst').checked || campo('via_tecnicos').checked); }
   // Los insumos dependen del tipo de visita: la 1.ª visita no pide a bodega y la instalación lleva lo ya entregado
   function modoInsumos() {
     const tipo = campo('tipo').value, caja = campo('insumos');
@@ -262,6 +278,8 @@
   }
   campo('tipo').addEventListener('change', modoInsumos);
   campo('sst').addEventListener('change', sst);
+  campo('via_sst').addEventListener('change', viaticos);
+  campo('via_tecnicos').addEventListener('change', viaticos);
 
   document.querySelectorAll('.agregar-destino').forEach(function (b) {
     b.addEventListener('click', function () {

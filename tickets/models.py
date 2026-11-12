@@ -922,6 +922,32 @@ class FotoEquipo(models.Model):
         verbose_name_plural = "fotos del equipo"
 
 
+class MaterialPropuestaActa(models.Model):
+    """En el acta de instalación: cada material o equipo de la propuesta aprobada, con lo que el técnico realmente
+    usó y lo que sobró. Lo que sobra queda en poder del técnico y bodega recibe el aviso para recibirle la devolución."""
+
+    acta = models.ForeignKey(ActaSoporte, on_delete=models.CASCADE, related_name="material_propuesta")
+    descripcion = models.CharField(max_length=300)
+    marca = models.CharField(max_length=80, blank=True)
+    referencia = models.CharField(max_length=80, blank=True)
+    propuesta = models.DecimalField("cantidad en la propuesta", max_digits=12, decimal_places=2)
+    usado = models.DecimalField("cantidad usada", max_digits=12, decimal_places=2, default=0)
+    sobrante = models.DecimalField("cantidad que sobró", max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ["pk"]
+        verbose_name = "material de la propuesta en el acta"
+        verbose_name_plural = "material de la propuesta en el acta"
+
+    def __str__(self):
+        return f"{self.descripcion}: usó {self.usado:g} de {self.propuesta:g}"
+
+    @property
+    def diferencia(self):
+        """Lo que no cuadra: propuesta − usado − sobrante (positivo: falta explicar; negativo: usó de más)."""
+        return self.propuesta - self.usado - self.sobrante
+
+
 class EvidenciaActa(models.Model):
     """Fotos, videos o documentos del trabajo en sí: cómo se hizo y cómo quedó (no de un equipo en particular)."""
 
@@ -1009,6 +1035,8 @@ class InformeBorrador(models.Model):
         El valor «estudio» se conserva por los borradores ya guardados."""
         VISITA = "visita", "Informe de visita (soporte, mantenimiento, instalación, reubicación o desmonte)"
         ESTUDIO = "estudio", "Informe de requerimientos técnicos (para la propuesta)"
+        # Solo en las instalaciones: es el que se le envía al cliente al entregar el proyecto
+        ENTREGA = "entrega", "Informe de entrega del proyecto (instalación)"
 
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="informes_borrador")
     tipo = models.CharField(max_length=10, choices=Tipo.choices, default=Tipo.VISITA)
@@ -1061,6 +1089,17 @@ class InformeBorrador(models.Model):
     def es_estudio(self):
         """Si es un informe de estudio (levantamiento)."""
         return self.tipo == self.Tipo.ESTUDIO
+
+    @property
+    def es_entrega(self):
+        """Si es el informe de entrega del proyecto (solo instalaciones; va al cliente)."""
+        return self.tipo == self.Tipo.ENTREGA
+
+    @property
+    def titulo_documento(self):
+        """El título del PDF según el tipo."""
+        return {self.Tipo.ESTUDIO: "INFORME DE REQUERIMIENTOS TÉCNICOS", self.Tipo.ENTREGA: "INFORME DE ENTREGA DEL PROYECTO"}.get(
+            self.tipo, "INFORME DE VISITA TÉCNICA")
 
     @staticmethod
     def _fila(linea):

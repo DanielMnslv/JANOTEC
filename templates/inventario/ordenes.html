@@ -1,18 +1,26 @@
 {% extends "base.html" %}{% load inventario_extras %}
 {% block titulo %}Órdenes de compra{% endblock %}
 {% block contenido %}
-{% include "inventario/_acciones.html" with titulo="Órdenes de compra" subtitulo="Lo que ya se decidió comprar: proveedor, costo y fecha estimada de llegada (la ve coordinación en la lista de alistamiento). Para preguntar precios use una solicitud de cotización." %}
+{% include "inventario/_acciones.html" with titulo="Órdenes de compra" subtitulo="Lo que ya se decidió comprar: proveedor, costo y fecha estimada de llegada (la ve coordinación en la lista de alistamiento)." %}
 <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
   <div class="etiquetas-filtro">
     {% for e in etiquetas %}<a class="etiqueta-filtro {% if estado == e.valor %}activa{% elif not e.n %}vacia{% endif %}" href="?estado={{ e.valor }}">{{ e.nombre }} <span class="n">{{ e.n }}</span></a>{% endfor %}
   </div>
   <form method="post" action="{% url 'inventario:orden_nueva' %}">{% csrf_token %}<button class="btn btn-accent btn-sm"><i class="bi bi-plus-lg"></i> Nueva orden de compra</button></form>
 </div>
+{% if proyectos %}<div class="card mb-3 border-primary"><div class="card-header"><i class="bi bi-briefcase"></i> Propuestas aprobadas con compras pendientes
+  <span class="small text-muted-jn">· la orden de cada proveedor sale con los materiales y equipos de la propuesta</span></div>
+  <div class="list-group list-group-flush">{% for p in proyectos %}
+    <div class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div><strong>{{ p.codigo|default:p.ticket.radicado }}</strong> · {{ p.ticket.empresa }}{% if p.ticket.sede %} · {{ p.ticket.sede }}{% endif %}
+        <div class="small text-muted-jn">{{ p.ticket.radicado }} · {{ p.pendientes }} ítem{{ p.pendientes|pluralize }} por ordenar con {{ p.proveedores }} proveedor{{ p.proveedores|pluralize:"es" }}</div></div>
+      <a class="btn btn-sm btn-accent" href="{% url 'inventario:orden_proyecto' p.ticket.radicado %}"><i class="bi bi-table"></i> Generar órdenes desde la propuesta</a>
+    </div>{% endfor %}</div></div>{% endif %}
 <div class="card"><div class="table-responsive"><table class="table table-tickets mb-0">
   <thead><tr><th>Orden</th><th>Proveedor</th><th>Para</th><th>Llega</th><th class="text-end">Total</th><th>Estado</th><th>Siguiente paso</th></tr></thead>
   <tbody>{% for o in ordenes %}{% with t=o.totales %}
     <tr class="fila-click" data-href="{{ o.get_absolute_url }}"><td class="radicado"><a href="{{ o.get_absolute_url }}">{{ o.numero }}</a></td><td class="small">{{ o.proveedor|default:"—" }}</td>
-      <td class="small">{% if o.solicitud %}{{ o.solicitud.numero }} · {{ o.solicitud.ticket.radicado }}{% else %}Stock de bodega{% endif %}</td>
+      <td class="small">{% with p=o.proyecto %}{% if p %}{% with pc=o.propuesta_codigo %}{% if pc %}<strong>{{ pc }}</strong> · {% endif %}{% endwith %}{{ p.empresa }}{% if p.sede %} · {{ p.sede }}{% endif %}<div class="text-muted-jn">{{ p.radicado }}</div>{% else %}Stock de bodega{% endif %}{% endwith %}</td>
       <td class="small {% if o.atrasada %}text-danger fw-semibold{% endif %}">{{ o.fecha_estimada|date:"d/m/Y"|default:"—" }}{% if o.atrasada %} · atrasada{% endif %}</td>
       <td class="text-end">{{ t.total|pesos }}</td><td><span class="badge text-bg-{{ o.color_estado }}">{{ o.get_estado_display }}</span></td>
       <td class="small">{% with sp=o.siguiente_paso %}{% if sp %}{{ sp.0 }} <span class="text-muted-jn">· {{ sp.1 }}</span>{% else %}<span class="text-muted-jn">—</span>{% endif %}{% endwith %}</td></tr>

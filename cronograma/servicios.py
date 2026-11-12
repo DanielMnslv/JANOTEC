@@ -151,6 +151,8 @@ def quitar(actividad, autor):
     """Elimina la actividad; si el ticket ya no tiene otra, vuelve a «Recepcionado» para reprogramarlo."""
     ticket = actividad.ticket
     avisar_tecnicos(actividad, list(actividad.tecnicos()), False, quedan=[])
+    from .viaticos import desde_actividad as viaticos_de
+    viaticos_de(actividad, {}, autor)  # si tenía viáticos pendientes, financiera sabe que ya no van
     actividad.delete()
     if ticket and not ticket.actividades.exists() and ticket.estado in (E.EN_CRONOGRAMA, E.AUTORIZADO):
         ticket.visita_programada = None
@@ -189,7 +191,9 @@ def aplazar_visita(ticket, autor, motivo, detalle, informar_cliente=False):
         aplazamiento = Aplazamiento.objects.create(
             ticket=ticket, numero=numero, motivo=motivo, detalle=detalle, visita_aplazada=visita,
             programacion=programacion[:500], informado_cliente=informar_cliente, autor=autor)
+        from .viaticos import desde_actividad as viaticos_de
         for a in actividades:
+            viaticos_de(a, {}, autor)  # viáticos pendientes: se cancelan y se le avisa a financiera
             a.delete()
         ticket.visita_programada = None
         ticket.veces_aplazado = numero

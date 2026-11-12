@@ -85,7 +85,7 @@ def ordenes(request):
 
     abiertas = ["borrador", "por_revisar", "revision", "por_pagar", "lista", "enviada"]
     estado = request.GET.get("estado", "abiertas")
-    qs = OrdenCompra.objects.select_related("proveedor", "solicitud", "solicitud__ticket").prefetch_related("lineas")
+    qs = OrdenCompra.objects.select_related("proveedor", "solicitud", "solicitud__ticket", "ticket__empresa", "ticket__sede").prefetch_related("lineas")
     if estado == "abiertas":
         qs = qs.filter(estado__in=abiertas)
     elif estado in OrdenCompra.Estado.values:
@@ -94,7 +94,10 @@ def ordenes(request):
     conteo = dict(OrdenCompra.objects.values_list("estado").annotate(n=Count("id")))
     etiquetas = [{"valor": "abiertas", "nombre": "Abiertas", "n": sum(conteo.get(e, 0) for e in abiertas)}]
     etiquetas += [{"valor": v, "nombre": nombre, "n": conteo.get(v, 0)} for v, nombre in OrdenCompra.Estado.choices]
-    return render(request, "inventario/ordenes.html", {"ordenes": qs[:200], "estado": estado, "etiquetas": etiquetas})
+    from .proyecto import por_ordenar
+
+    return render(request, "inventario/ordenes.html", {"ordenes": qs[:200], "estado": estado, "etiquetas": etiquetas,
+                                                       "proyectos": por_ordenar()})
 
 
 @login_required

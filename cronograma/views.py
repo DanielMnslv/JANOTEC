@@ -18,11 +18,12 @@ from accounts.models import Usuario
 from tickets.models import Ticket
 from tickets.permisos import personal_requerido, supervisor_requerido, tickets_visibles
 
-from . import herramientas, semanal, servicios
+from . import herramientas, semanal, servicios, viaticos
 from .forms import (
     ActividadForm, ConfiguracionEnvioForm, ContactoForm, DocumentoForm, ImportarForm, tecnicos_queryset,
 )
-from .models import Actividad, ConfiguracionEnvio, Contacto, DocumentoPersonal, EnlaceCronograma, ProgramacionSemana
+from .models import (Actividad, ConfiguracionEnvio, Contacto, DocumentoPersonal, EnlaceCronograma, ProgramacionSemana,
+                     SolicitudViaticos)
 
 DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
@@ -47,7 +48,7 @@ def semana(request):
     lunes = _lunes(request)
     domingo = lunes + timedelta(days=6)
     actividades = (Actividad.objects.filter(fecha__range=(lunes, domingo))
-                   .select_related("ticket", "ticket__empresa").prefetch_related("encargados"))
+                   .select_related("ticket", "ticket__empresa", "solicitud_viaticos").prefetch_related("encargados"))
     editable = request.user.es_supervisor
     if not editable:
         actividades = actividades.filter(encargados=request.user).distinct()
@@ -81,7 +82,7 @@ def semana(request):
                               restricciones=t.resumen_no_disponible + (f" · {t.restricciones}" if t.restricciones else ""))
                    for t in programables}
         campos = ["fecha", "hora_inicio", "hora_fin", "cliente", "sede", "actividad", "tipo", "linea", "insumos",
-                  "notificar_a", "trabajo_alturas", "sst", "sst_persona", "sst_trabajo", "sst_duracion", "vehiculo", "viaticos"]
+                  "notificar_a", "trabajo_alturas", "sst", "sst_persona", "sst_trabajo", "sst_duracion", "vehiculo"]
         actividades_json = {}
         for d in dias:
             for a in d["actividades"]:
@@ -89,7 +90,8 @@ def semana(request):
                 datos.update(fecha=a.fecha.isoformat(), hora_inicio=a.hora_inicio.strftime("%H:%M"),
                              hora_fin=a.hora_fin.strftime("%H:%M"), ticket=a.ticket_id or "",
                              radicado=a.ticket.radicado if a.ticket else "",
-                             encargados=[u.pk for u in a.encargados.all()], bodega=a.material_de_bodega is not None)
+                             encargados=[u.pk for u in a.encargados.all()], bodega=a.material_de_bodega is not None,
+                             **viaticos.campos_actividad(getattr(a, "solicitud_viaticos", None)))
                 actividades_json[a.pk] = datos
         cambio = semanal.cambios(lunes)
         contexto["cambios_pendientes"] = bool(cambio and cambio["hay"])
@@ -127,7 +129,11 @@ def guardar(request, pk=None):
             actividad.creado_por = request.user
         actividad.save()
         form.save_m2m()
+        antes = getattr(SolicitudViaticos.objects.filter(actividad=actividad).first(), "estado", None)
+        solicitud = viaticos.desde_actividad(actividad, form.cleaned_data, request.user)
         servicios.guardar(actividad, request.user, horario_anterior=anterior, tecnicos_antes=tecnicos_antes)
+    if solicitud and solicitud.estado == SolicitudViaticos.Estado.PENDIENTE and antes != solicitud.estado:
+        messages.info(request, f"Viáticos {solicitud.numero} enviados a financiera.")
     if actividad.choque:
         messages.error(request, f"¡Atención! {actividad.cliente}: {actividad.choque} La actividad quedó resaltada en rojo.")
     elif not actividad.correos and not actividad.es_interna:
@@ -574,15 +580,37 @@ def horas_extras(request):
     from .forms import ReporteHorasExtraForm
     from .models import ReporteHorasExtra
 
-    form = ReporteHorasExtraForm(request.POST or None, usuario=request.user)
-    if request.method == "POST" and form.is_valid():
+    from .forms import CierreHorasExtraForm
+
+    es_inicio = request.method == "POST" and request.POST.get("accion", "iniciar") == "iniciar"
+    form = ReporteHorasExtraForm(request.POST if es_inicio else None, request.FILES if es_inicio else None, usuario=request.user)
+    if es_inicio and form.is_valid():
         reporte = form.save(commit=False)
         if not request.user.es_supervisor:
             reporte.colaborador = request.user
         reporte.registrado_por = request.user
         reporte.save()
-        messages.success(request, f"Horas registradas: {reporte.duracion} h en {reporte.cliente}.")
+        messages.success(request, f"Inicio registrado a las {reporte.hora_salida:%H:%M} en {reporte.cliente}. "
+                                  "Al regresar, registre la llegada con su foto.")
         return redirect("cronograma:horas_extras")
+    if request.method == "POST" and request.POST.get("accion") == "cerrar":
+        reporte = get_object_or_404(ReporteHorasExtra, pk=request.POST.get("reporte"), hora_llegada__isnull=True)
+        if reporte.colaborador_id != request.user.pk and not request.user.es_supervisor:
+            raise Http404
+        cierre = CierreHorasExtraForm(request.POST, request.FILES, instance=reporte, prefix=f"c{reporte.pk}")
+        if cierre.is_valid():
+            reporte = cierre.save(commit=False)
+            reporte.cerrado_en = timezone.now()
+            reporte.save()
+            messages.success(request, f"Regreso registrado: {reporte.duracion} h en {reporte.cliente}.")
+        else:
+            messages.error(request, "Para cerrar el reporte ponga la hora de llegada y la foto del regreso.")
+        return redirect("cronograma:horas_extras")
+
+    abiertos = ReporteHorasExtra.objects.filter(hora_llegada__isnull=True).select_related("colaborador")
+    if not request.user.es_supervisor:
+        abiertos = abiertos.filter(colaborador=request.user)
+    abiertos = [(r, CierreHorasExtraForm(instance=r, prefix=f"c{r.pk}")) for r in abiertos]
 
     hoy = timezone.localdate()
     try:
@@ -606,13 +634,13 @@ def horas_extras(request):
         libro = Workbook()
         hoja = libro.active
         hoja.title = "Horas extras"
-        hoja.append(["Colaborador", "Fecha", "Hora de salida", "Hora de llegada", "Horas", "Cliente", "Registró"])
+        hoja.append(["Colaborador", "Fecha", "Fue", "Hora de inicio", "Hora de llegada", "Horas", "Cliente", "Registró"])
         for r in sorted(reportes, key=lambda x: (x.fecha, x.hora_salida)):
-            hoja.append([r.colaborador.get_full_name() or r.colaborador.username, r.fecha, r.hora_salida.strftime("%H:%M"),
-                         r.hora_llegada.strftime("%H:%M"), round(r.minutos / 60, 2), r.cliente,
+            hoja.append([r.colaborador.get_full_name() or r.colaborador.username, r.fecha, r.rol_corto, r.hora_salida.strftime("%H:%M"),
+                         r.hora_llegada.strftime("%H:%M") if r.hora_llegada else "Sin regreso", round(r.minutos / 60, 2), r.cliente,
                          (r.registrado_por.get_full_name() or r.registrado_por.username) if r.registrado_por else ""])
             hoja.cell(hoja.max_row, 2).number_format = "DD/MM/YYYY"
-        for col, ancho in zip("ABCDEFG", (34, 12, 14, 14, 8, 40, 30)):
+        for col, ancho in zip("ABCDEFGH", (34, 12, 14, 14, 14, 8, 40, 30)):
             hoja.column_dimensions[col].width = ancho
         respuesta = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         respuesta["Content-Disposition"] = f'attachment; filename="horas_extras_{anio}-{mes:02d}.xlsx"'
@@ -620,5 +648,23 @@ def horas_extras(request):
         return respuesta
 
     return render(request, "cronograma/horas_extras.html", {
-        "form": form, "reportes": reportes, "totales": totales, "mes": f"{anio}-{mes:02d}",
+        "form": form, "reportes": reportes, "totales": totales, "mes": f"{anio}-{mes:02d}", "abiertos": abiertos,
     })
+
+
+@login_required
+@personal_requerido
+def horas_extras_foto(request, pk, cual):
+    """La foto de inicio o de regreso de un reporte de horas extras: la ve quien lo hizo y la coordinación."""
+    from .models import ReporteHorasExtra
+
+    reporte = get_object_or_404(ReporteHorasExtra, pk=pk)
+    if reporte.colaborador_id != request.user.pk and not request.user.es_supervisor:
+        raise Http404
+    archivo = {"salida": reporte.evidencia_salida, "llegada": reporte.evidencia_llegada}.get(cual)
+    if not archivo:
+        raise Http404
+    try:
+        return FileResponse(archivo.open("rb"), as_attachment=False)
+    except FileNotFoundError:
+        raise Http404("La foto ya no está disponible.")

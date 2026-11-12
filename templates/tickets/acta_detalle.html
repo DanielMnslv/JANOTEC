@@ -34,6 +34,10 @@
     </div>
     {% include "tickets/_tabla_equipos_acta.html" with lista=acta.equipos_intervenidos titulo="Equipos intervenidos" icono="bi-wrench-adjustable" %}
     {% include "tickets/_tabla_equipos_acta.html" with lista=acta.equipos_utilizados titulo="Materiales y equipos utilizados" icono="bi-box-seam" %}
+    {% with mp=acta.material_propuesta.all %}{% if mp %}<div class="card mb-4"><div class="card-header"><i class="bi bi-clipboard-check"></i> Material de la propuesta aprobada: usado y sobrante</div>
+      <div class="table-responsive"><table class="table table-sm mb-0 small"><thead><tr><th>Material o equipo</th><th class="text-end">Propuesta</th><th class="text-end">Usó</th><th class="text-end">Sobró</th></tr></thead>
+      <tbody>{% for m in mp %}<tr><td>{{ m.descripcion }}{% if m.referencia %} <span class="text-muted-jn">· {{ m.referencia }}</span>{% endif %}</td><td class="text-end">{{ m.propuesta|floatformat:"-2" }}</td>
+        <td class="text-end">{{ m.usado|floatformat:"-2" }}</td><td class="text-end {% if m.sobrante %}fw-semibold text-warning-emphasis{% endif %}">{{ m.sobrante|floatformat:"-2" }}</td></tr>{% endfor %}</tbody></table></div></div>{% endif %}{% endwith %}
     {% include "tickets/_tabla_equipos_acta.html" with lista=acta.equipos_retirados titulo="Equipos retirados" icono="bi-box-arrow-left" %}
     {% include "tickets/_tabla_equipos_acta.html" with lista=acta.equipos_requeridos titulo="Materiales y equipos requeridos" icono="bi-cart-plus" %}
     {% include "inventario/_acta_detalle_materiales.html" %}

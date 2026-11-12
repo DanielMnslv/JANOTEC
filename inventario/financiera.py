@@ -532,7 +532,10 @@ def bandeja(request):
     con_diferencia = list(base.filter(factura_valor__isnull=False, factura_validada_en__isnull=True))
     cerradas = [o for o in base.filter(estado=E.RECIBIDA, factura_validada_en__isnull=False, pagada_en__isnull=False)
                 .order_by("-factura_validada_en")[:30] if o.pagada][:15]
+    from cronograma.models import SolicitudViaticos
+
+    viaticos = SolicitudViaticos.objects.filter(estado=SolicitudViaticos.Estado.PENDIENTE).count()
     return render(request, "inventario/financiera.html", {
         "por_pagar": por_pagar, "saldos": saldos, "sin_factura": sin_factura, "con_diferencia": con_diferencia,
-        "cerradas": cerradas, "hoy": timezone.localdate(),
+        "cerradas": cerradas, "hoy": timezone.localdate(), "viaticos": viaticos,
     })

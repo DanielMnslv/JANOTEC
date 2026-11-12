@@ -741,6 +741,24 @@ class ActaBase(BaseTickets):
 
 
 class ActaEnPlataformaTests(ActaBase):
+    def test_el_acta_muestra_el_historial_del_cliente_y_la_sede(self):
+        from django.utils import timezone
+
+        from .models import ActaSoporte, EquipoActa
+        anterior = ActaSoporte.objects.create(numero=100700, fecha=timezone.now(), empresa=self.emp_a, sede=self.sede_a,
+                                              tecnico_texto="Freyder", actividad="Instalación", diagnostico="Se instaló el NVR",
+                                              resultado="solucionado")
+        EquipoActa.objects.create(acta=anterior, clase=EquipoActa.Clase.UTILIZADO, equipo="NVR 16 canales", marca="Hikvision",
+                                  referencia="DS-7616", cantidad="1", propiedad=EquipoActa.Propiedad.CLIENTE)
+        self.client.force_login(self.agente)
+        r = self.client.get(reverse("acta_nueva", args=[self.ticket.radicado]))
+        self.assertContains(r, "Historial de")
+        self.assertContains(r, "100700")
+        self.assertContains(r, "NVR 16 canales")
+        h = r.context["historial"]
+        self.assertEqual([a.numero for a in h["actas"]], [100700])
+        self.assertEqual(h["registrados"][0]["referencia"], "DS-7616")
+
     def test_encargado_diligencia_acta_y_resuelve(self):
         from .models import ActaSoporte
         self.client.force_login(self.agente)
@@ -1852,6 +1870,32 @@ class InformeBorradorTests(BaseTickets):
         self.assertEqual(r["Content-Type"], "application/pdf")
         self.assertTrue(r.content.startswith(b"%PDF"))
         self.assertIn("BORRADOR", r["Content-Disposition"])
+
+    def test_solo_la_instalacion_lleva_informe_de_entrega(self):
+        from . import informe
+        from .models import EquipoActa, InformeBorrador
+        self.client.force_login(self.agente)
+        # Un desmonte no es instalación: no se puede pedir el informe de entrega
+        self.assertEqual(informe.tipo_sugerido(self.ticket), InformeBorrador.Tipo.VISITA)
+        self.client.post(self.url, {"accion": "generar", "tipo": "entrega"})
+        self.assertIsNone(informe.vigente(self.ticket))
+        acta = self.ticket.actas.get()
+        acta.actividad = "Instalación"
+        acta.save()
+        EquipoActa.objects.create(acta=acta, clase=EquipoActa.Clase.UTILIZADO, equipo="Cámara bala IP 4 MP",
+                                  marca="Hikvision", referencia="DS-2CD1043", cantidad="3")
+        self.assertEqual(informe.tipo_sugerido(self.ticket), InformeBorrador.Tipo.ENTREGA)
+        self.assertContains(self.client.get(self.ticket.get_absolute_url()), "Generar el informe de entrega del proyecto")
+        self.client.post(self.url, {"accion": "generar", "tipo": "entrega"})
+        b = informe.vigente(self.ticket)
+        self.assertTrue(b.es_entrega)
+        self.assertIn("hace entrega del proyecto", b.introduccion)
+        self.assertEqual(b.filas_requeridas()[0]["descripcion"], "Cámara bala IP 4 MP")  # lo instalado, no lo requerido
+        self.assertNotIn(informe.ALCANCE, b.conclusiones)
+        self.assertTrue(b.garantia)
+        r = self.client.get(reverse("informe_borrador_pdf", args=[self.ticket.radicado]))
+        self.assertIn("Informe_de_entrega", r["Content-Disposition"])
+        self.assertTrue(r.content.startswith(b"%PDF"))
 
     def test_el_informe_se_titula_segun_lo_que_se_hizo(self):
         from . import informe
