@@ -1210,3 +1210,71 @@ class DetalleAuditoria(models.Model):
     def estado_registrado_display(self):
         """Nombre legible del estado que tenía registrado la herramienta."""
         return dict(Herramienta.Estado.choices).get(self.estado_registrado, self.estado_registrado)
+
+
+class CompraHistorica(models.Model):
+    """Una fila del Excel «Compras y facturas» que llevaban compras y financiera antes de la plataforma.
+
+    Es solo historial para consultar en la ficha del proveedor: no mueve inventario ni órdenes de compra. Cada
+    importación reemplaza todo lo anterior, porque el Excel es el que manda mientras se siga llenando.
+    """
+    proveedor = models.ForeignKey(Proveedor, on_delete=models.SET_NULL, null=True, blank=True, related_name="compras_historicas")
+    nit = models.CharField("NIT", max_length=30, blank=True)
+    razon_social = models.CharField("razón social (como está en el Excel)", max_length=200, blank=True)
+    hoja = models.CharField(max_length=80)
+    fila = models.PositiveIntegerField()
+    fecha = models.DateField("fecha de la cotización", null=True, blank=True)
+    cotizacion = models.CharField("n.º de cotización", max_length=120, blank=True)
+    valor_cotizacion = models.DecimalField("valor de la cotización", max_digits=14, decimal_places=2, null=True, blank=True)
+    fecha_factura = models.DateField("fecha de la factura", null=True, blank=True)
+    factura = models.CharField("n.º de factura", max_length=60, blank=True)
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    iva = models.DecimalField("IVA", max_digits=14, decimal_places=2, null=True, blank=True)
+    retencion = models.DecimalField("retención", max_digits=14, decimal_places=2, null=True, blank=True)
+    valor_a_pagar = models.DecimalField("valor a pagar", max_digits=14, decimal_places=2, null=True, blank=True)
+    saldo_a_favor = models.DecimalField("saldo a favor", max_digits=14, decimal_places=2, null=True, blank=True)
+    valor_factura = models.DecimalField("valor de la factura", max_digits=14, decimal_places=2, null=True, blank=True)
+    anticipo = models.BooleanField(default=False)
+    llego_pedido = models.CharField("llegó el pedido", max_length=40, blank=True)
+    estado_factura = models.CharField("estado de la factura", max_length=200, blank=True)
+    fecha_pago = models.DateField("fecha de pago", null=True, blank=True)
+    comprobante = models.CharField("comprobante contable", max_length=80, blank=True)
+    enlace_cotizacion = models.CharField(max_length=500, blank=True)
+    enlace_orden = models.CharField("enlace de la orden de compra", max_length=500, blank=True)
+    enlace_factura = models.CharField(max_length=500, blank=True)
+    destino = models.TextField("para qué fue la compra", blank=True)
+    observaciones = models.TextField(blank=True)
+    importado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    importado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+        verbose_name = "compra del Excel"
+        verbose_name_plural = "compras del Excel"
+
+    def __str__(self):
+        return f"{self.razon_social} · {self.numero or 'sin número'}"
+
+    @property
+    def fecha_vista(self):
+        """La fecha que se muestra: la de la cotización y, si no hay, la de la factura."""
+        return self.fecha or self.fecha_factura
+
+    @property
+    def numero(self):
+        """El documento que identifica la compra: la factura si ya llegó, si no la cotización."""
+        return self.factura or self.cotizacion
+
+    @property
+    def valor(self):
+        """Lo que costó: la factura, lo que se pagó o, mientras tanto, la cotización."""
+        for v in (self.valor_factura, self.valor_a_pagar, self.valor_cotizacion):
+            if v:
+                return v
+        return None
+
+    @property
+    def enlaces(self):
+        """Los documentos de Drive que tiene la fila, con su nombre corto."""
+        return [(n, u) for n, u in (("Cotización", self.enlace_cotizacion), ("Orden", self.enlace_orden),
+                                    ("Factura", self.enlace_factura)) if u.startswith("http")]

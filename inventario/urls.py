@@ -54,6 +54,7 @@ urlpatterns = [
     path("cliente/<int:empresa_pk>/encargado/<int:pk>/", clientes.encargado_form, name="encargado_editar"),
     path("cliente/<int:empresa_pk>/sede/nueva/", clientes.sede_form, name="sede_nueva"),
     path("cliente/<int:empresa_pk>/sede/<int:pk>/", clientes.sede_form, name="sede_editar"),
+    path("proveedores/importar-compras/", proveedores.importar_compras, name="importar_compras"),
     path("proveedor/<int:pk>/", proveedores.proveedor, name="proveedor"),
     path("proveedor/<int:proveedor_pk>/asesor/nuevo/", proveedores.asesor_form, name="asesor_nuevo"),
     path("proveedor/<int:proveedor_pk>/asesor/<int:pk>/", proveedores.asesor_form, name="asesor_editar"),

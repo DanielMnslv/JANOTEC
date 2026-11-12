@@ -1,0 +1,71 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Importar compras del Excel{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Importar compras del Excel" subtitulo="Proveedores e historial de compras desde el Excel «Compras y facturas»." %}
+<a href="{% url 'inventario:contactos' %}?tipo=proveedores" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Proveedores</a>
+
+{% if not plan %}
+<div class="row g-4 mt-1">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-file-earmark-spreadsheet"></i> 1. Suba el Excel</div>
+      <div class="card-body">
+        <form method="post" enctype="multipart/form-data">{% csrf_token %}
+          <input class="form-control mb-2" type="file" name="archivo" accept=".xlsx" required aria-label="Excel de compras">
+          <div class="form-text mb-3">En Google Sheets: <strong>Archivo → Descargar → Microsoft Excel (.xlsx)</strong>. Primero se muestra qué se va a hacer; nada se guarda hasta que usted confirme.</div>
+          <button class="btn btn-primary"><i class="bi bi-search"></i> Revisar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card small">
+      <div class="card-header"><i class="bi bi-info-circle"></i> Qué hace</div>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item">Crea los proveedores a los que se les ha comprado y que aún no están, y les pone el NIT a los que no lo tienen.</li>
+        <li class="list-group-item">Guarda cada compra en el historial de la ficha del proveedor: fecha, cotización, factura, valor, para qué fue y si se pagó, con los enlaces a Drive.</li>
+        <li class="list-group-item"><strong>Puede subirlo cuantas veces quiera:</strong> el historial se reemplaza completo con el Excel nuevo, no se repite nada.</li>
+        <li class="list-group-item">No mueve inventario ni crea órdenes de compra.</li>
+        <li class="list-group-item text-muted-jn">{% if ultima %}Última importación: {{ ultima.importado_en|date:"d/m/Y H:i" }}{% if ultima.importado_por %} por {{ ultima.importado_por.get_full_name|default:ultima.importado_por.username }}{% endif %} · {{ total_anterior }} compras.{% else %}Aún no se ha importado.{% endif %}</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card mt-3">
+  <div class="card-header"><i class="bi bi-clipboard-check"></i> 2. Revise antes de importar · <span class="text-muted-jn">{{ nombre_archivo }}</span></div>
+  <div class="card-body">
+    <div class="row g-3 text-center mb-3">
+      <div class="col-6 col-md-3"><div class="border rounded p-2"><div class="h4 mb-0">{{ plan.compras }}</div><div class="small text-muted-jn">compras al historial</div></div></div>
+      <div class="col-6 col-md-3"><div class="border rounded p-2"><div class="h4 mb-0">{{ plan.nuevos|length }}</div><div class="small text-muted-jn">proveedores nuevos</div></div></div>
+      <div class="col-6 col-md-3"><div class="border rounded p-2"><div class="h4 mb-0">{{ plan.con_nit|length }}</div><div class="small text-muted-jn">se les pone el NIT</div></div></div>
+      <div class="col-6 col-md-3"><div class="border rounded p-2"><div class="h4 mb-0">{{ plan.existentes|length }}</div><div class="small text-muted-jn">ya estaban</div></div></div>
+    </div>
+    <p class="small mb-1"><strong>Hojas leídas:</strong> {% for h, n in plan.hojas.items %}{{ h }} ({{ n }}){% if not forloop.last %} · {% endif %}{% endfor %}</p>
+    {% if plan.anteriores %}<p class="small text-warning-emphasis"><i class="bi bi-arrow-repeat"></i> Las {{ plan.anteriores }} compras de la importación anterior se reemplazan por estas.</p>{% endif %}
+
+    {% if plan.nuevos %}
+    <h2 class="h6 mt-3">Proveedores que se van a crear</h2>
+    <div class="table-responsive" style="max-height:320px"><table class="table table-sm small mb-0">
+      <thead><tr><th>Proveedor</th><th>NIT</th><th class="text-end">Compras</th></tr></thead>
+      <tbody>{% for x in plan.nuevos %}<tr><td>{{ x.razon_social }}</td><td class="radicado">{{ x.nit|default:"—" }}</td><td class="text-end">{{ x.compras }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% endif %}
+    {% if plan.con_nit %}
+    <h2 class="h6 mt-3">Proveedores a los que se les pone el NIT</h2>
+    <ul class="small">{% for x in plan.con_nit %}<li>{{ x.proveedor.razon_social }} → <span class="radicado">{{ x.nit }}</span></li>{% endfor %}</ul>
+    {% endif %}
+    {% if plan.ignoradas %}
+    <h2 class="h6 mt-3 text-warning-emphasis">Filas que no entran ({{ plan.ignoradas|length }})</h2>
+    <ul class="small">{% for hoja, fila, motivo in plan.ignoradas %}<li>{{ hoja }}, fila {{ fila }}: {{ motivo }}.</li>{% endfor %}</ul>
+    {% endif %}
+
+    <form method="post" class="d-flex flex-wrap gap-2 mt-3">{% csrf_token %}
+      <input type="hidden" name="token" value="{{ token }}">
+      <button class="btn btn-accent" name="accion" value="importar"><i class="bi bi-check2-circle"></i> Importar</button>
+      <a class="btn btn-light border" href="{% url 'inventario:importar_compras' %}">Cancelar</a>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

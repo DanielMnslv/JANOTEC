@@ -12,10 +12,11 @@ from django.contrib import messages
 from django.contrib.admin.models import ADDITION, CHANGE
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 from tickets.forms import BootstrapMixin
 
-from .models import Activo, AsesorProveedor, MovimientoActivo, MovimientoInsumo, Proveedor, normalizar
+from .models import Activo, AsesorProveedor, CompraHistorica, MovimientoActivo, MovimientoInsumo, Proveedor, normalizar
 from .productos import _clave, _registro
 from .views import gestion_requerida, inventario_requerido
 
@@ -73,6 +74,7 @@ def listado(q=""):
         compras[normalizar(texto)] += 1
         vendidas[normalizar(texto)].add(marca.strip())
     buscado, lista = normalizar(q), []
+    del_excel = Counter(CompraHistorica.objects.exclude(proveedor=None).values_list("proveedor_id", flat=True))
     for p in Proveedor.objects.prefetch_related("asesores", "marcas"):
         clave = normalizar(p.razon_social)
         unidas = {normalizar(m): m for m in vendidas[clave]}
@@ -80,7 +82,7 @@ def listado(q=""):
         p.marcas_vista = sorted(m for k, m in unidas.items() if k not in SIN_MARCA)
         lugares = [clave, p.nit] + [normalizar(a.nombre) for a in p.asesores.all()] + list(unidas)
         if not buscado or any(buscado in (x or "") for x in lugares):
-            lista.append((p, compras[clave]))
+            lista.append((p, compras[clave] + del_excel[p.pk]))
     return sorted(lista, key=lambda x: (-x[1], x[0].razon_social))[:800]
 
 
@@ -123,9 +125,24 @@ class AsesorForm(BootstrapMixin, forms.ModelForm):
 def proveedor(request, pk):
     p = get_object_or_404(Proveedor.objects.prefetch_related("asesores", "marcas"), pk=pk)
     equipos, materiales = compras_de(p)
-    return render(request, "inventario/proveedor.html", {
-        "p": p, "equipos": equipos, "materiales": materiales, "marcas": marcas_de(p, equipos, materiales),
-        "ordenes": p.ordenes.order_by("-creado")[:5]})
+    contexto = {"p": p, "equipos": equipos, "materiales": materiales, "marcas": marcas_de(p, equipos, materiales),
+                "ordenes": p.ordenes.order_by("-creado")[:5]}
+    if ve_compras_del_excel(request.user):
+        contexto.update(historial_de(p, todas=request.GET.get("historial") == "todo"))
+    return render(request, "inventario/proveedor.html", contexto)
+
+
+def ve_compras_del_excel(usuario):
+    """El historial trae valores y pagos: lo ven bodega, dirección y financiera, no los técnicos."""
+    return usuario.gestiona_inventario or usuario.ve_financiera
+
+
+def historial_de(proveedor, todas=False):
+    """Las compras del Excel «Compras y facturas» a este proveedor, con lo comprado y lo que figura sin pagar."""
+    compras = list(proveedor.compras_historicas.all())
+    total = sum((c.valor or 0) for c in compras)
+    return {"historial": compras if todas else compras[:30], "historial_total": total, "historial_n": len(compras),
+            "historial_pagadas": sum(1 for c in compras if c.fecha_pago)}
 
 
 @login_required
@@ -140,3 +157,72 @@ def asesor_form(request, proveedor_pk, pk=None):
         messages.success(request, f"Se guardó el asesor {guardado.nombre}.")
         return redirect("inventario:proveedor", p.pk)
     return render(request, "inventario/asesor_form.html", {"form": form, "p": p, "asesor": asesor if pk else None})
+
+
+TEMPORALES = "janotec_importaciones"
+
+
+def _ruta_temporal(token):
+    import tempfile
+    from pathlib import Path
+
+    carpeta = Path(tempfile.gettempdir()) / TEMPORALES
+    carpeta.mkdir(exist_ok=True)
+    return carpeta / f"compras_{token}.xlsx"
+
+
+@login_required
+def importar_compras(request):
+    """Sube el Excel «Compras y facturas»: primero muestra qué haría y solo guarda cuando se confirma.
+
+    Entre la revisión y la confirmación el archivo queda en la carpeta temporal del servidor (no en media, que es
+    pública), y se borra al importar.
+    """
+    import re
+    import uuid
+
+    from django.core.exceptions import PermissionDenied
+
+    from . import importar_compras as imp
+
+    if not ve_compras_del_excel(request.user):
+        raise PermissionDenied
+    ultima = CompraHistorica.objects.select_related("importado_por").order_by("-importado_en").first()
+    contexto = {"ultima": ultima, "total_anterior": CompraHistorica.objects.count()}
+    if request.method == "POST" and request.POST.get("accion") == "importar":
+        token = request.POST.get("token", "")
+        ruta = _ruta_temporal(token) if re.fullmatch(r"[0-9a-f]{32}", token) else None
+        if not ruta or not ruta.exists():
+            messages.error(request, "El archivo revisado ya no está. Súbalo otra vez.")
+            return redirect("inventario:importar_compras")
+        try:
+            resumen = imp.aplicar(imp.leer(ruta), request.user)
+        finally:
+            ruta.unlink(missing_ok=True)
+        messages.success(request, f"Listo: {resumen['compras']} compras en el historial, {len(resumen['nuevos'])} "
+                                  f"proveedores nuevos y {len(resumen['con_nit'])} con el NIT completado.")
+        return redirect(f"{reverse('inventario:contactos')}?tipo=proveedores")
+    if request.method == "POST":
+        archivo = request.FILES.get("archivo")
+        if not archivo or not archivo.name.lower().endswith(".xlsx"):
+            messages.error(request, "Suba el Excel en formato .xlsx (en Google Sheets: Archivo → Descargar → Microsoft Excel).")
+        elif archivo.size > 15 * 1024 * 1024:
+            messages.error(request, "El archivo pesa más de 15 MB.")
+        else:
+            token = uuid.uuid4().hex
+            ruta = _ruta_temporal(token)
+            with open(ruta, "wb") as destino:
+                for trozo in archivo.chunks():
+                    destino.write(trozo)
+            try:
+                datos = imp.leer(ruta)
+            except Exception:  # archivo dañado o que no es un libro de Excel
+                ruta.unlink(missing_ok=True)
+                messages.error(request, "No se pudo leer el archivo. Revise que sea el Excel de compras en .xlsx.")
+            else:
+                if not datos.filas:
+                    ruta.unlink(missing_ok=True)
+                    messages.error(request, "No se encontró ninguna hoja con las columnas NIT y RAZÓN SOCIAL.")
+                else:
+                    contexto.update(plan=imp.plan(datos), token=token, nombre_archivo=archivo.name)
+    return render(request, "inventario/importar_compras.html", contexto)

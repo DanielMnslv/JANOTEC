@@ -77,6 +77,27 @@
       {% empty %}<tr><td colspan="5" class="text-center py-3 text-muted-jn">No hay compras de materiales a este proveedor.</td></tr>{% endfor %}
       </tbody>
     </table></div></div>
+    {% if historial_n %}
+    <h2 class="h6" id="historial">Historial de compras del Excel ({{ historial_n }})</h2>
+    <p class="small text-muted-jn mb-2">Del Excel «Compras y facturas». Comprado: <strong>{{ historial_total|pesos }}</strong> · Con fecha de pago: {{ historial_pagadas }} de {{ historial_n }}.</p>
+    <div class="card mb-4"><div class="table-responsive"><table class="table table-hover mb-0 align-middle small">
+      <thead><tr><th>Fecha</th><th>Cotización / factura</th><th>Para qué</th><th class="text-end">Valor</th><th>Pago</th><th>Documentos</th></tr></thead>
+      <tbody>
+      {% for c in historial %}
+        <tr>
+          <td class="text-nowrap">{{ c.fecha_vista|date:"d/m/Y"|default:"—" }}</td>
+          <td>{% if c.cotizacion %}<div>{{ c.cotizacion|truncatechars:30 }}</div>{% endif %}{% if c.factura %}<div class="fw-semibold">Fact. {{ c.factura }}</div>{% endif %}{% if not c.numero %}—{% endif %}</td>
+          <td>{{ c.destino|truncatechars:70|default:"—" }}{% if c.observaciones %}<div class="text-muted-jn" title="{{ c.observaciones }}">{{ c.observaciones|truncatechars:60 }}</div>{% endif %}</td>
+          <td class="text-end text-nowrap">{{ c.valor|pesos }}{% if c.retencion %}<div class="text-muted-jn">Ret. {{ c.retencion|pesos }}</div>{% endif %}</td>
+          <td class="text-nowrap">{% if c.fecha_pago %}<span class="badge text-bg-success fw-normal">{{ c.fecha_pago|date:"d/m/Y" }}</span>{% else %}—{% endif %}{% if c.anticipo %}<div class="text-muted-jn">Anticipo</div>{% endif %}{% if c.comprobante %}<div class="text-muted-jn">{{ c.comprobante }}</div>{% endif %}</td>
+          <td class="text-nowrap">{% for nombre, url in c.enlaces %}<a href="{{ url }}" target="_blank" rel="noopener" class="me-1">{{ nombre }}</a>{% empty %}—{% endfor %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% if historial|length < historial_n %}<div class="card-footer small"><a href="?historial=todo#historial">Ver las {{ historial_n }} compras</a></div>{% endif %}
+    </div>
+    {% endif %}
     {% if ordenes %}
     <h2 class="h6">Órdenes de compra recientes</h2>
     <ul class="list-group small">{% for o in ordenes %}<a class="list-group-item list-group-item-action d-flex justify-content-between" href="{{ o.get_absolute_url }}"><span class="radicado">{{ o.numero }}</span><span class="text-muted-jn">{{ o.creado|date:"d/m/Y" }} · {{ o.get_estado_display }}</span></a>{% endfor %}</ul>
