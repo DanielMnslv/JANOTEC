@@ -7,7 +7,7 @@ Por cada persona (Yuri y Tatiana) crea, con el cliente PRUEBA:
     1. Armar la propuesta ............ requerimiento con informe, «Por armar» en Administrativo
     2. Propuesta devuelta ............ dirección la devolvió: «PRUEBA suba el margen a 25»
     3. Cambios del cliente ........... propuesta enviada; el cliente pidió quitar el botón de salida
-    4. Cotizar con proveedores ....... informe con elementos que no están en el catálogo (en rojo)
+    4. Elementos sin precio .......... informe con elementos que no están en el catálogo (en rojo)
     5. Validar y comprar lo que falta  propuesta aprobada: material por validar, faltan la terminal y el botón
     6. Entregar al técnico ........... material validado y con las firmas: listo para entregar
     Orden devuelta (proveedor «PRUEBA PROVEEDOR <NOMBRE>»): dirección pidió 4 cajas con anticipo del 50 %
@@ -306,10 +306,10 @@ class Command(BaseCommand):
         f.refresh_from_db()
         srv.solicitar_cambios(f, self.cliente or self.autor, "PRUEBA quitar el botón de salida")
         r.append(f"{nombre} · 3. Cambios del cliente ....... {f.ticket.radicado} (El cliente pidió cambios)")
-        # 4. Cotizar con proveedores para armar la propuesta (elementos que no están en el catálogo)
-        f = self._requerimiento(nombre, 4, "Cotizar con proveedores", f"2 PRUEBA Sensor magnético de puerta {nombre}\n"
-                                                                     f"1 PRUEBA Sirena de 30 W {nombre}")
-        r.append(f"{nombre} · 4. Cotizar con proveedores ... {f.ticket.radicado} (Tickets para propuesta)")
+        # 4. Elementos que no están en el catálogo: el precio se consulta con el proveedor (WhatsApp o su web)
+        f = self._requerimiento(nombre, 4, "Elementos sin precio", f"2 PRUEBA Sensor magnético de puerta {nombre}\n"
+                                                                  f"1 PRUEBA Sirena de 30 W {nombre}")
+        r.append(f"{nombre} · 4. Elementos sin precio ...... {f.ticket.radicado} (Por armar)")
         # 5. Material por validar, falta la terminal y el botón
         f = self._requerimiento(nombre, 5, "Validar y comprar lo que falta", texto_base)
         s = self._aprobada(f, [(TERMINAL, "1"), (CABLE, "10"), (BOTON, "1"), (SERVICIO, "1")])

@@ -878,11 +878,10 @@ class CotizadorTests(BaseComercial):
         self.assertIn("La arma el área administrativa", html)
         self.assertNotIn('name="propuesta"', html)  # no sube el PDF a mano
         self.assertEqual(self.client.get(reverse("comercial:nuevo")).status_code, 200)
-        # Administrativa (bodega con «también administrativa»): arma la propuesta y cotiza con proveedores
+        # Administrativa (bodega con «también administrativa»): arma la propuesta
         self.client.force_login(administrativa)
         self.assertEqual(self.client.get(url).status_code, 200)
         self.assertEqual(self.client.get(reverse("comercial:catalogo")).status_code, 200)
-        self.assertEqual(self.client.get(reverse("inventario:cotizaciones")).status_code, 200)
         # Mientras arma la propuesta, la solicitud está en «En el área administrativa», no en lo de comercial
         self.assertContains(self.client.get(reverse("comercial:bandeja") + "?vista=administrativa"), t.radicado)
         self.assertNotContains(self.client.get(reverse("comercial:bandeja")), t.radicado)

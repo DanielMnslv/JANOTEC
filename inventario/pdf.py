@@ -124,49 +124,6 @@ def _contacto_proveedor(pr):
     return " · ".join(x for x in contacto if x) or "—"
 
 
-def solicitud_cotizacion_pdf(cotizacion):
-    """(nombre, bytes) de la solicitud para un proveedor: solo lo que se le pregunta a él, sin valores ni compromiso."""
-    return solicitud_pdf(cotizacion.solicitud, cotizacion.proveedor)
-
-
-def solicitud_pdf(pedido, pr):
-    """(nombre, bytes) de la solicitud de cotización para un proveedor, solo con sus elementos.
-
-    Cada proveedor tiene la suya (cámara a uno y cable a otro = dos PDF), lista para el correo o para WhatsApp.
-    """
-    lineas = pedido.lineas_para(pr)
-    buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=16 * mm, rightMargin=16 * mm, topMargin=14 * mm,
-                            bottomMargin=16 * mm, title=f"Solicitud de cotización {pedido.numero}")
-    ancho = doc.width
-    datos = [
-        [_p("Fecha", E_ETIQUETA), _p(timezone.localdate().strftime("%d/%m/%Y")),
-         _p("Responder antes del", E_ETIQUETA), _p(pedido.fecha_limite.strftime("%d/%m/%Y") if pedido.fecha_limite else "Lo antes posible")],
-        [_p("Proveedor", E_ETIQUETA), _p(pr.razon_social), _p("NIT", E_ETIQUETA), _p(pr.nit or "—")],
-        [_p("Contacto", E_ETIQUETA), _p(_contacto_proveedor(pr)),
-         _p("Entregar en", E_ETIQUETA), _p("Bodega JANOTEC · Carrera 40A N.º 16-21, Villavicencio")],
-    ]
-    tabla_datos = Table(datos, colWidths=[ancho * 0.16, ancho * 0.34, ancho * 0.18, ancho * 0.32])
-    tabla_datos.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, BORDE), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    cuerpo = [[_p(x, E_ETIQUETA) for x in ("N.º", "Cant.", "Tipo", "Descripción", "Valor unit.", "IVA")]]
-    for i, l in enumerate(lineas, 1):
-        cuerpo.append([_p(i), _p(format(l.total.normalize(), "f")), _p(l.get_tipo_display()), _p(l.descripcion), "", ""])
-    tabla = Table(cuerpo, colWidths=[ancho * 0.06, ancho * 0.09, ancho * 0.11, ancho * 0.46, ancho * 0.16, ancho * 0.12],
-                  repeatRows=1)
-    tabla.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, BORDE), ("BACKGROUND", (0, 0), (-1, 0), TINTE_VERDE),
-                               ("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    historia = _cabecera_compra(ancho, f"SOLICITUD DE COTIZACIÓN · {pedido.numero}") + [
-        tabla_datos, Spacer(1, 8), _p("Le pedimos cotizar los siguientes productos, con precio, IVA y fecha de entrega. "
-                                      "Este documento no es una orden de compra ni compromete a JANOTEC S.A.S."),
-        Spacer(1, 8), tabla]
-    if pedido.notas:
-        historia += [Spacer(1, 8), _p("Observaciones: " + pedido.notas)]
-    historia += [Spacer(1, 30), Table([["_" * 40], [_p("Bodega, inventario y logística · JANOTEC S.A.S.")]], colWidths=[ancho / 2])]
-    doc.build(historia)
-    proveedor = re.sub(r"[^A-Za-z0-9]+", "_", pr.razon_social).strip("_")[:40]
-    return f"Solicitud_de_cotizacion_{pedido.numero}_{proveedor}.pdf", buf.getvalue()
-
-
 def orden_compra_pdf(orden):
     """(nombre, bytes) de la orden de compra para enviarle al proveedor."""
     from decimal import Decimal

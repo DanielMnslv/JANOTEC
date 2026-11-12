@@ -502,9 +502,11 @@ class ItemSolicitud(models.Model):
 
 
 class SolicitudCotizacion(models.Model):
-    """Lo que se le pregunta a uno o varios proveedores: cuánto cuesta y cuándo llega. No compromete a JANOTEC.
+    """RETIRADO el 12/11/2026: solicitud de cotización (SC) a proveedores. Solo queda como historial.
 
-    Cada proveedor responde con su cotización; la que se elija se convierte en la orden de compra, que es el compromiso.
+    En JANOTEC las cotizaciones se piden por WhatsApp o se consultan en la web del proveedor, así que con el proveedor
+    lo único que se hace en la plataforma es la orden de compra. Las pantallas se quitaron; la tabla se conserva para no
+    perder lo que se registró.
     """
 
     class Estado(models.TextChoices):
@@ -534,10 +536,6 @@ class SolicitudCotizacion(models.Model):
 
     def __str__(self):
         return self.numero
-
-    def get_absolute_url(self):
-        """Ficha de la solicitud de cotización."""
-        return reverse("inventario:cotizacion", args=[self.pk])
 
     @property
     def numero(self):
@@ -618,9 +616,6 @@ class CotizacionProveedor(models.Model):
     def __str__(self):
         return f"{self.solicitud.numero} · {self.proveedor}"
 
-    def get_absolute_url(self):
-        """Pantalla para registrar la respuesta de este proveedor."""
-        return reverse("inventario:cotizacion_respuesta", args=[self.solicitud_id, self.pk])
 
 
 class PrecioCotizado(models.Model):

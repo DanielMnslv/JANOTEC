@@ -144,8 +144,6 @@ def orden_detalle(request, pk):
         if accion == "cancelar" and cancelable:  # lo que llega se recibe con la factura (orden_recibir)
             orden.estado = OrdenCompra.Estado.CANCELADA
             orden.save(update_fields=["estado", "actualizado"])
-            from .cotizaciones import reabrir
-            reabrir(orden)
             if orden.solicitud:
                 from . import solicitudes as sol
                 sol._nota(orden.solicitud, request.user, f"orden de compra {orden.numero}: cancelada.")
@@ -155,8 +153,6 @@ def orden_detalle(request, pk):
             with transaction.atomic():
                 form.save()
                 lineas.save()
-                from .cotizaciones import reabrir
-                reabrir(orden)
             # Bodega la pasa a dirección (o, si es urgente, sigue con el motivo); dirección la aprueba
             if accion in ("a_direccion", "aprobar"):
                 from django.core.exceptions import ValidationError

@@ -92,12 +92,6 @@
         <span class="form-text ms-1">Uno por línea, con cantidad (con el código del inventario entre corchetes si lo tiene).</span>
       </form></details>
     {% endif %}
-    {% if s.estado == 'compra' and user.gestiona_inventario or s.cotizaciones.exists %}
-    <div class="card mb-4"><div class="card-header d-flex justify-content-between align-items-center"><span><i class="bi bi-chat-left-quote"></i> Cotizaciones a proveedores</span>
-      {% if s.estado == 'compra' and user.gestiona_inventario %}<form method="post" action="{% url 'inventario:cotizacion_nueva' %}">{% csrf_token %}<input type="hidden" name="solicitud" value="{{ s.pk }}"><button class="btn btn-sm btn-accent"><i class="bi bi-plus-lg"></i> Cotizar lo que falta</button></form>{% endif %}</div>
-      <ul class="list-group list-group-flush small">{% for c in s.cotizaciones.all %}<li class="list-group-item d-flex justify-content-between"><span>{% if user.gestiona_inventario %}<a href="{{ c.get_absolute_url }}">{{ c.numero }}</a>{% else %}{{ c.numero }}{% endif %}</span><span class="badge text-bg-{{ c.color_estado }}">{{ c.get_estado_display }}</span></li>{% empty %}<li class="list-group-item text-muted-jn">Aún no se ha pedido cotización.</li>{% endfor %}</ul>
-    </div>
-    {% endif %}
     {% if s.estado == 'compra' and user.gestiona_inventario or s.ordenes_compra.exists %}
     <div class="card mb-4"><div class="card-header d-flex justify-content-between align-items-center"><span><i class="bi bi-receipt"></i> Órdenes de compra</span>
       {% if s.ticket.ficha %}<a class="btn btn-sm btn-light border" href="{% url 'inventario:orden_proyecto' s.ticket.radicado %}"><i class="bi bi-table"></i> Orden de compra del proyecto</a>{% endif %}

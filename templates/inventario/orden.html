@@ -10,7 +10,6 @@
     {% if orden.solicitud %}<span class="small ms-2">Para <a href="{{ orden.solicitud.get_absolute_url }}">{{ orden.solicitud.numero }}</a> · {{ orden.solicitud.ticket.radicado }} · {{ orden.solicitud.ticket.empresa }}</span>
     {% elif orden.ticket %}<span class="small ms-2">Para {{ orden.ticket.radicado }} · {{ orden.ticket.empresa }}</span>{% endif %}
     {% if orden.ticket and orden.ticket.ficha %}<a class="small ms-2" href="{% url 'inventario:orden_proyecto' orden.ticket.radicado %}"><i class="bi bi-table"></i> Orden de compra del proyecto</a>{% endif %}
-    {% if orden.cotizacion %}<span class="small ms-2">De la cotización <a href="{{ orden.cotizacion.solicitud.get_absolute_url }}">{{ orden.cotizacion.solicitud.numero }}</a>{% if orden.cotizacion.referencia %} · {{ orden.cotizacion.referencia }}{% endif %}</span>{% endif %}
   </div>
   <div class="d-flex gap-2"><a class="btn btn-outline-primary btn-sm" href="{% url 'inventario:orden_archivo' orden.pk 'pdf' %}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> PDF para el proveedor</a>
     {% if orden.soporte %}<a class="btn btn-light border btn-sm" href="{% url 'inventario:orden_archivo' orden.pk 'soporte' %}" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i> Cotización del proveedor</a>{% endif %}</div>

@@ -35,7 +35,7 @@ USUARIOS = [
     ("prueba.tecnico", "Técnico", "agente", {},
      "Va a la visita: devuelve el levantamiento, recibe el material y diligencia el acta."),
     ("prueba.administrativa", "Administrativa", "administrativo", {},
-     "Arma la propuesta en el cotizador, el catálogo y la cotización con proveedores."),
+     "Arma la propuesta en el cotizador y el catálogo."),
     ("prueba.coordinadora", "Coordinadora administrativa", "administrativo", {"revisa_compras": True},
      "Hace de Yuri: revisa las órdenes de compra antes de dirección (Revisó)."),
     ("prueba.bodega", "Bodega", "bodega", {},

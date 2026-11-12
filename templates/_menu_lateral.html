@@ -54,7 +54,6 @@
   <li class="menu-grupo">Área administrativa</li>
   <li class="nav-item"><a class="nav-link {% if u == 'asignados' %}active{% endif %}" href="{% url 'asignados' %}"><i class="bi bi-person-check"></i> Asignados a mí</a></li>
   <li class="nav-item"><a class="nav-link {% if ns == 'comercial' %}active{% endif %}" href="{% url 'comercial:propuestas' %}"><i class="bi bi-calculator"></i> Administrativo</a></li>
-  <li class="nav-item"><a class="nav-link {% if ns == 'inventario' %}active{% endif %}" href="{% url 'inventario:cotizaciones' %}"><i class="bi bi-envelope-paper"></i> Cotizar con proveedores</a></li>
 {% elif user.es_financiera %}{# área financiera: pagos de las compras y facturas #}
   <li class="menu-grupo">Área financiera</li>
   <li class="nav-item"><a class="nav-link {% if u == 'financiera' %}active{% endif %}" href="{% url 'inventario:financiera' %}"><i class="bi bi-cash-stack"></i> Financiera{% if compras_por_pagar %} <span class="badge text-bg-danger ms-auto" title="Órdenes de compra por pagar">{{ compras_por_pagar }}</span>{% endif %}</a></li>

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import clientes, cotizaciones, factura_proveedor, financiera, productos, proveedores, proyecto, views
+from . import clientes, factura_proveedor, financiera, productos, proveedores, proyecto, views
 
 app_name = "inventario"
 urlpatterns = [
@@ -23,13 +23,6 @@ urlpatterns = [
     path("compra/", views.compra, name="compra"),
     path("compra/factura/", factura_proveedor.ingreso_factura, name="ingreso_factura"),
     path("stock-minimo/", views.stock_minimo, name="stock_minimo"),
-    path("compras/cotizaciones/", cotizaciones.listado, name="cotizaciones"),
-    path("compras/cotizaciones/nueva/", cotizaciones.nueva, name="cotizacion_nueva"),
-    path("compras/cotizaciones/<int:pk>/", cotizaciones.detalle, name="cotizacion"),
-    path("compras/cotizaciones/<int:pk>/<int:cot_pk>/respuesta/", cotizaciones.respuesta, name="cotizacion_respuesta"),
-    path("compras/cotizaciones/<int:pk>/<int:cot_pk>/pdf/", cotizaciones.pdf, name="cotizacion_pdf"),
-    path("compras/cotizaciones/<int:pk>/<int:cot_pk>/archivo/", cotizaciones.archivo, name="cotizacion_archivo"),
-    path("compras/cotizaciones/<int:pk>/<int:cot_pk>/ordenar/", cotizaciones.ordenar, name="cotizacion_ordenar"),
     path("compras/", views.ordenes, name="ordenes"),
     path("compras/proyecto/<str:radicado>/", proyecto.proyecto, name="orden_proyecto"),
     path("compras/proyecto/<str:radicado>/pdf/", proyecto.proyecto_pdf, name="orden_proyecto_pdf"),

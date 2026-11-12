@@ -126,8 +126,8 @@ class Usuario(AbstractUser):
     )
     tambien_administrativo = models.BooleanField(
         "también área administrativa", default=False,
-        help_text="Además de su rol (p. ej. bodega y logística), arma las propuestas: cotizador, catálogo de precios, "
-                  "cotización con proveedores y envío a dirección para su aprobación.",
+        help_text="Además de su rol (p. ej. bodega y logística), arma las propuestas: cotizador, catálogo de precios "
+                  "y envío a dirección para su aprobación.",
     )
     tambien_financiera = models.BooleanField(
         "también área financiera", default=False,
@@ -228,7 +228,7 @@ class Usuario(AbstractUser):
 
     @property
     def arma_propuestas(self):
-        """Cotizador, catálogo de precios y cotización con proveedores: administrativa y dirección."""
+        """Cotizador y catálogo de precios: administrativa y dirección."""
         return self.es_administrativo or self.es_direccion
 
     @property
