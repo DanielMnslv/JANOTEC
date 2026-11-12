@@ -67,6 +67,7 @@ MENU_BODEGA = [
         ("Solicitudes de cotización", "inventario:cotizaciones", "", "bi-chat-left-quote"),
         ("Órdenes de compra", "inventario:ordenes", "", "bi-receipt"),
         ("Listado de compras (facturas)", "inventario:facturas", "", "bi-journal-text"),
+        ("Ingreso desde la factura (sin orden)", "inventario:ingreso_factura", "", "bi-file-earmark-arrow-down"),
         ("Compra suelta (sin orden)", "inventario:compra", "", "bi-cart-plus"),
         ("Proveedores", "inventario:contactos", "?tipo=proveedores", "bi-truck-front"),
     ]),

@@ -200,19 +200,42 @@ def orden_recibir(request, pk):
         messages.error(request, f"{orden.numero} está {orden.get_estado_display().lower()}: se recibe cuando ya está aprobada"
                                 " (y pagada, si es de pago anticipado).")
         return redirect(orden)
+    from . import factura_proveedor as fp
+    from .lectura_factura import emparejar
+
     inicial = {"proveedor": orden.proveedor.razon_social if orden.proveedor else "", "factura": orden.factura,
                "fecha": orden.fecha_factura or servicios.timezone.localdate()}
-    cabecera = recepcion.RecepcionForm(request.POST or None, request.FILES or None, initial=inicial)
-    filas = recepcion.FilasRecepcion(request.POST or None, initial=None if request.POST else recepcion.filas_iniciales(orden),
-                                     prefix="filas")
-    if request.method == "POST":
+    extra = {}
+    if request.method == "POST" and request.POST.get("accion") == "leer":
+        # Leer la factura solo llena el formulario: nada se guarda hasta «Ingresar todo a bodega»
+        leida = fp.leer_subida(request)
+        filas_leidas = recepcion.filas_iniciales(orden)
+        if leida:
+            factura, token, extension = leida
+            inicial.update({k: v for k, v in fp.cabecera_inicial(factura).items() if v})
+            extra = fp.contexto_lectura(factura, token, extension)
+            extra["repetida"] = fp.ya_ingresada(inicial["factura"], inicial["proveedor"])
+            filas_leidas = emparejar(orden, factura) + [{"clase": "insumo", "iva": factura.tasa_iva}] * 2
+        cabecera = recepcion.RecepcionForm(initial=inicial)
+        filas = recepcion.FilasRecepcion(initial=filas_leidas, prefix="filas")
+    else:
+        cabecera = recepcion.RecepcionForm(request.POST or None, request.FILES or None, initial=inicial)
+        filas = recepcion.FilasRecepcion(request.POST or None, initial=None if request.POST else recepcion.filas_iniciales(orden),
+                                         prefix="filas")
+    if request.method == "POST" and request.POST.get("accion") != "leer":
+        extra = {"factura_token": request.POST.get("factura_token", ""), "factura_ext": request.POST.get("factura_ext", "")}
         if cabecera.is_valid() and filas.is_valid():
             datos = [f.cleaned_data for f in filas.forms if f.cleaned_data and not f.vacia]
             if not any(d.get("clase") != "no" and d.get("cantidad") for d in datos):
                 messages.error(request, "No marcó nada como recibido.")
             else:
-                insumos, placas = recepcion.recibir(orden, cabecera.cleaned_data, datos, request.user,
-                                                    soporte=cabecera.cleaned_data.get("soporte"))
+                soporte, temporal = fp.adjuntar_soporte(request, cabecera.cleaned_data)
+                try:
+                    insumos, placas = recepcion.recibir(orden, cabecera.cleaned_data, datos, request.user, soporte=soporte)
+                finally:
+                    if temporal:
+                        soporte.close()
+                        temporal.unlink(missing_ok=True)
                 orden.refresh_from_db()
                 if orden.estado == OrdenCompra.Estado.RECIBIDA:
                     financiera.recibida(orden)  # financiera valida la factura
@@ -228,7 +251,7 @@ def orden_recibir(request, pk):
         else:
             messages.error(request, "Revise las filas marcadas.")
     return render(request, "inventario/orden_recibir.html", {
-        "orden": orden, "cabecera": cabecera, "filas": filas,
+        "orden": orden, "cabecera": cabecera, "filas": filas, **extra,
         "proveedores": Proveedor.objects.values_list("razon_social", flat=True),
         "insumos": Insumo.objects.filter(activo=True), "codigos": CodigoActivo.objects.all(),
     })

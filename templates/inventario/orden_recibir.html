@@ -1,17 +1,53 @@
 {% extends "base.html" %}{% load inventario_extras %}
-{% block titulo %}Recibir factura · {{ orden.numero }}{% endblock %}
+{% block titulo %}{% if orden %}Recibir factura · {{ orden.numero }}{% else %}Ingreso desde la factura{% endif %}{% endblock %}
 {% block contenido %}
+{% if orden %}
 <a href="{{ orden.get_absolute_url }}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ orden.numero }}</a>
 <h1 class="h4 page-title mt-2 mb-1">Recibir factura · {{ orden.numero }}</h1>
 <p class="text-muted-jn mb-3">Confirme lo que llegó: todo entra a bodega de una vez.
   {% if orden.solicitud %}Lo que era para <a href="{{ orden.solicitud.get_absolute_url }}">{{ orden.solicitud.numero }}</a> ({{ orden.solicitud.ticket.radicado }}) queda apartado para ese ticket; lo adicional queda libre en bodega.{% endif %}</p>
+{% else %}
+<a href="{% url 'inventario:productos' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Inventario</a>
+<h1 class="h4 page-title mt-2 mb-1">Ingreso desde la factura</h1>
+<p class="text-muted-jn mb-3">Para una compra sin orden de compra: suba la factura del proveedor, revise los equipos y materiales que trae y todo entra a bodega de una vez, libre.</p>
+{% endif %}
 
+{# Leer la factura: llena las filas solas. No guarda nada. #}
+<form method="post" enctype="multipart/form-data" class="card mb-3 border-primary-subtle no-imprimir">{% csrf_token %}
+  <div class="card-body py-2 d-flex flex-wrap align-items-center gap-2">
+    <i class="bi bi-file-earmark-arrow-up fs-4 text-primary"></i>
+    <div class="flex-grow-1 small"><strong>{% if lectura %}Leer otra factura{% else %}Leer la factura del proveedor{% endif %}</strong> · PDF, o el XML o ZIP de la factura electrónica (el XML es el más exacto). Se llenan las filas; usted las revisa antes de ingresar.</div>
+    <input class="form-control form-control-sm" style="max-width:320px" type="file" name="factura_archivo" accept=".pdf,.xml,.zip" required aria-label="Factura del proveedor">
+    <button class="btn btn-sm btn-primary" name="accion" value="leer"><i class="bi bi-magic"></i> Leer</button>
+  </div>
+</form>
+
+{% if lectura %}
+<div class="card mb-3 {% if lectura.cuadra is False %}border-warning{% else %}border-success{% endif %}">
+  <div class="card-body py-2 small">
+    <div class="d-flex flex-wrap gap-3 align-items-center">
+      <span><i class="bi bi-check2-circle text-success"></i> Se leyó la factura ({{ lectura.formato }}): <strong>{{ lectura.items|length }} ítem{{ lectura.items|length|pluralize }}</strong>.</span>
+      {% if lectura.subtotal %}<span>Subtotal {{ lectura.subtotal|pesos }}</span>{% endif %}
+      {% if lectura.iva %}<span>IVA {{ lectura.iva|pesos }}</span>{% endif %}
+      {% if lectura.retencion %}<span>Retención {{ lectura.retencion|pesos }}</span>{% endif %}
+      {% if lectura.total %}<span>Total <strong>{{ lectura.total|pesos }}</strong></span>{% endif %}
+    </div>
+    {% if lectura.cuadra is False %}<div class="text-warning-emphasis mt-1"><i class="bi bi-exclamation-triangle"></i> La suma de los ítems leídos ({{ lectura.suma_items|pesos }}) no da el subtotal de la factura: puede faltar un ítem o haber uno mal leído. Compare con la factura antes de ingresar.</div>
+    {% elif lectura.cuadra %}<div class="text-success mt-1">La suma de los ítems da el subtotal de la factura.</div>{% endif %}
+    {% if repetida %}<div class="text-danger mt-1"><i class="bi bi-exclamation-octagon"></i> <strong>Esta factura ya se había ingresado</strong> (mismo número y proveedor). Revise que no la vaya a ingresar dos veces.</div>{% endif %}
+    <div class="text-muted-jn mt-1">Revise cada fila: si es equipo con placa, escriba el código de placa y los seriales; si es material, elija el código del catálogo o deje el de la factura como nuevo.</div>
+  </div>
+</div>
+{% endif %}
+
+{% if filas %}
 <form method="post" enctype="multipart/form-data">{% csrf_token %}
+  <input type="hidden" name="factura_token" value="{{ factura_token|default:'' }}"><input type="hidden" name="factura_ext" value="{{ factura_ext|default:'' }}">
   <div class="card mb-3"><div class="card-body"><div class="row g-3">
     <div class="col-md-3">{% include "tickets/_campo.html" with campo=cabecera.factura %}</div>
     <div class="col-md-3">{% include "tickets/_campo.html" with campo=cabecera.fecha %}</div>
     <div class="col-md-3">{% include "tickets/_campo.html" with campo=cabecera.proveedor %}</div>
-    <div class="col-md-3">{% include "tickets/_campo.html" with campo=cabecera.soporte %}</div>
+    {% if orden %}<div class="col-md-3">{% include "tickets/_campo.html" with campo=cabecera.soporte %}{% if factura_token %}<div class="form-text">Si no sube otra, queda la factura que se leyó.</div>{% endif %}</div>{% endif %}
   </div></div></div>
 
   {{ filas.management_form }}
@@ -19,9 +55,10 @@
   {% for f in filas %}
   <div class="card mb-2 fila-recepcion">{{ f.linea }}
     <div class="card-body py-2">
+      {% if f.initial.conocido %}<div class="small text-muted-jn mb-1"><i class="bi bi-info-circle"></i> {{ f.initial.conocido }}</div>{% endif %}
       <div class="row g-2 align-items-end">
         <div class="col-md-2"><label class="form-label small mb-1">Llegó como</label>{{ f.clase }}</div>
-        <div class="col-md-4"><label class="form-label small mb-1">Descripción{% if not f.linea.value %} <span class="text-muted-jn">(otro ítem de la factura)</span>{% endif %}</label>{{ f.descripcion }}{% for e in f.descripcion.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+        <div class="col-md-4"><label class="form-label small mb-1">Descripción{% if orden and not f.linea.value %} <span class="text-muted-jn">(otro ítem de la factura)</span>{% endif %}</label>{{ f.descripcion }}{% for e in f.descripcion.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
         <div class="col-4 col-md-2"><label class="form-label small mb-1">Cantidad</label>{{ f.cantidad }}{% for e in f.cantidad.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
         <div class="col-5 col-md-2"><label class="form-label small mb-1">Valor unit. sin IVA</label>{{ f.valor_unitario }}{% for e in f.valor_unitario.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
         <div class="col-3 col-md-2"><label class="form-label small mb-1">IVA %</label>{{ f.iva }}</div>
@@ -39,12 +76,13 @@
     </div>
   </div>
   {% endfor %}
-  <p class="small text-muted-jn">Las últimas filas vacías son para lo que venga en la factura sin estar en la orden (por ejemplo, algo más que pidió logística): entra todo a bodega como adicional.</p>
+  <p class="small text-muted-jn">{% if orden %}Las últimas filas vacías son para lo que venga en la factura sin estar en la orden (por ejemplo, algo más que pidió logística): entra todo a bodega como adicional.{% else %}Las últimas filas vacías son por si la factura trae algo que no se leyó.{% endif %}</p>
   <div class="d-flex justify-content-end gap-2 mb-4">
-    <a href="{{ orden.get_absolute_url }}" class="btn btn-light border">Cancelar</a>
+    <a href="{% if orden %}{{ orden.get_absolute_url }}{% else %}{% url 'inventario:productos' %}{% endif %}" class="btn btn-light border">Cancelar</a>
     <button class="btn btn-success"><i class="bi bi-box-arrow-in-down"></i> Ingresar todo a bodega</button>
   </div>
 </form>
+{% endif %}
 <datalist id="lista-proveedores">{% for p in proveedores %}<option value="{{ p }}">{% endfor %}</datalist>
 <datalist id="lista-insumos">{% for i in insumos %}<option value="{{ i.codigo }} · {{ i.descripcion }}">{% endfor %}</datalist>
 <datalist id="lista-codigos">{% for c in codigos %}<option value="{{ c.codigo }}">{{ c.descripcion }}</option>{% endfor %}</datalist>

@@ -1,9 +1,11 @@
-"""Recibir la factura de una orden de compra: todo lo que llegó entra a bodega de una vez.
+"""Recibir la factura de una orden de compra (o una compra sin orden): todo lo que llegó entra a bodega de una vez.
 
 Cada línea se ingresa como insumo (por cantidad, con su código) o como equipos con placa (placas consecutivas y
 seriales). Lo que la orden pedía para el ticket queda apartado para su solicitud de material (lo hace
 `solicitudes.revisar_compras`); lo adicional queda libre en bodega. También se pueden agregar líneas de la factura que no
 estaban en la orden.
+
+Sin orden (``orden=None``, «Ingreso desde la factura»), cada fila entra a bodega libre, sin apartar nada.
 """
 from decimal import Decimal
 
@@ -40,7 +42,8 @@ class FilaRecepcionForm(BootstrapMixin, forms.Form):
     cantidad = forms.DecimalField(min_value=0, max_digits=12, decimal_places=2, required=False)
     valor_unitario = forms.DecimalField(label="Valor unit. sin IVA", min_value=0, max_digits=14, decimal_places=2, required=False)
     iva = forms.DecimalField(min_value=0, max_digits=5, decimal_places=2, initial=19, required=False)
-    codigo = forms.CharField(label="Código del insumo", max_length=40, required=False,
+    # Sin límite de largo en la casilla: la sugerencia trae «CÓDIGO · descripción» y el código se separa en clean
+    codigo = forms.CharField(label="Código del insumo", max_length=300, required=False,
                              widget=forms.TextInput(attrs={"list": "lista-insumos"}))
     unidad = forms.ChoiceField(choices=Insumo.Unidad.choices, initial=Insumo.Unidad.UNIDAD, required=False)
     prefijo = forms.CharField(label="Código de placa", max_length=36, required=False,
@@ -72,6 +75,8 @@ class FilaRecepcionForm(BootstrapMixin, forms.Form):
             d["codigo"] = (d.get("codigo") or "").split(" · ")[0].strip().upper()
             if not d["codigo"]:
                 self.add_error("codigo", "Elija el insumo o escriba un código nuevo.")
+            elif len(d["codigo"]) > 40:
+                self.add_error("codigo", "El código es de máximo 40 caracteres.")
             elif not Insumo.objects.filter(codigo=d["codigo"]).exists() and not d.get("descripcion"):
                 self.add_error("descripcion", "Es un código nuevo: escriba la descripción.")
         else:
@@ -111,27 +116,32 @@ def filas_iniciales(orden):
 
 @transaction.atomic
 def recibir(orden, cabecera, filas, usuario, soporte=None):
-    """Ingresa a bodega lo que llegó en la factura. Devuelve (insumos, placas) para el mensaje."""
+    """Ingresa a bodega lo que llegó en la factura. Devuelve (insumos, placas) para el mensaje.
+
+    Con ``orden=None`` es una compra sin orden: no hay líneas que marcar ni solicitud que apartar."""
     proveedor, _ = Proveedor.objects.get_or_create(razon_social=cabecera["proveedor"].strip())
     comunes = {"fecha": cabecera["fecha"], "proveedor": proveedor.razon_social, "factura": cabecera["factura"]}
     nombre = usuario.get_full_name() or usuario.username
-    lineas = {l.pk: l for l in orden.lineas.select_related("item", "item__insumo")}
+    lineas = {l.pk: l for l in orden.lineas.select_related("item", "item__insumo")} if orden else {}
+    solicitud = orden.solicitud if orden else None
+    nota = f"Factura {cabecera['factura']}" + (f" · {orden.numero}" if orden else " · ingreso desde la factura")
     insumos, placas = [], []
     for d in filas:
         if d.get("clase") == "no" or not d.get("cantidad"):
             continue
         linea = lineas.get(d.get("linea"))
-        if linea is None:  # vino en la factura sin estar en la orden: se agrega, todo para bodega
+        if linea is None and orden:  # vino en la factura sin estar en la orden: se agrega, todo para bodega
             linea = LineaOrdenCompra.objects.create(orden=orden, descripcion=(d.get("descripcion") or d.get("codigo")
                                                                              or d.get("prefijo"))[:300],
                                                     adicional=d["cantidad"], valor_unitario=d["valor_unitario"], iva=d["iva"])
-        item = linea.item
+        item = linea.item if linea else None
+        descripcion = d.get("descripcion") or (linea.descripcion if linea else "") or d.get("codigo") or d.get("prefijo")
         if d["clase"] == "insumo":
             insumo, _ = Insumo.objects.get_or_create(codigo=d["codigo"], defaults={
-                "descripcion": (d.get("descripcion") or linea.descripcion)[:250], "unidad": d.get("unidad") or Insumo.Unidad.UNIDAD})
+                "descripcion": descripcion[:250], "unidad": d.get("unidad") or Insumo.Unidad.UNIDAD})
             servicios.mover_insumo(insumo, d["cantidad"], MovimientoActivo.Tipo.COMPRA, Lugar.PROVEEDOR, Lugar.BODEGA, usuario,
-                                   valor_unitario=d["valor_unitario"], iva=d["iva"], solicitud=orden.solicitud,
-                                   observaciones=f"Factura {cabecera['factura']} · {orden.numero}", **comunes)
+                                   valor_unitario=d["valor_unitario"], iva=d["iva"], solicitud=solicitud,
+                                   observaciones=nota, **comunes)
             if item and not item.insumo_id:  # lo escrito a mano en la solicitud ya tiene su insumo en bodega
                 item.insumo = insumo
                 item.save(update_fields=["insumo"])
@@ -145,19 +155,22 @@ def recibir(orden, cabecera, filas, usuario, soporte=None):
                     placa=Activo.siguiente_placa(d["prefijo"]), serial=seriales[n] if n < len(seriales) else "",
                     categoria=plantilla.categoria if plantilla else "", tipo=plantilla.tipo if plantilla else "",
                     subtipo=plantilla.subtipo if plantilla else "", marca=d.get("marca") or (plantilla.marca if plantilla else ""),
-                    referencia=referencia, descripcion=(d.get("descripcion") or linea.descripcion)[:300],
+                    referencia=referencia, descripcion=descripcion[:300],
                     fecha_compra=cabecera["fecha"], proveedor=proveedor.razon_social, factura=cabecera["factura"],
                     valor=d["valor_unitario"], iva=d["iva"], responsable_compra=nombre, fecha_ultimo_movimiento=cabecera["fecha"])
                 MovimientoActivo.objects.create(
                     activo=activo, tipo=MovimientoActivo.Tipo.COMPRA, origen=Lugar.PROVEEDOR, destino=Lugar.BODEGA,
                     estado=Activo.Estado.DISPONIBLE, registrado_por=usuario, registrado_por_nombre=nombre,
-                    solicitud=orden.solicitud, observaciones=f"Factura {cabecera['factura']} · {orden.numero}", **comunes)
+                    solicitud=solicitud, observaciones=nota, **comunes)
                 placas.append(activo.placa)
             if item and not item.insumo_id and not item.referencia:  # así la solicitud reconoce los equipos que llegaron
                 item.referencia = referencia[:80]
                 item.save(update_fields=["referencia"])
-        linea.recibido += d["cantidad"]
-        linea.save(update_fields=["recibido"])
+        if linea:
+            linea.recibido += d["cantidad"]
+            linea.save(update_fields=["recibido"])
+    if orden is None:
+        return insumos, placas
     orden.factura, orden.fecha_factura = cabecera["factura"], cabecera["fecha"]
     orden.recibida_por, orden.recibida_en = usuario, timezone.now()
     orden.proveedor = orden.proveedor or proveedor

@@ -159,18 +159,6 @@ def asesor_form(request, proveedor_pk, pk=None):
     return render(request, "inventario/asesor_form.html", {"form": form, "p": p, "asesor": asesor if pk else None})
 
 
-TEMPORALES = "janotec_importaciones"
-
-
-def _ruta_temporal(token):
-    import tempfile
-    from pathlib import Path
-
-    carpeta = Path(tempfile.gettempdir()) / TEMPORALES
-    carpeta.mkdir(exist_ok=True)
-    return carpeta / f"compras_{token}.xlsx"
-
-
 @login_required
 def importar_compras(request):
     """Sube el Excel «Compras y facturas»: primero muestra qué haría y solo guarda cuando se confirma.
@@ -178,20 +166,17 @@ def importar_compras(request):
     Entre la revisión y la confirmación el archivo queda en la carpeta temporal del servidor (no en media, que es
     pública), y se borra al importar.
     """
-    import re
-    import uuid
-
     from django.core.exceptions import PermissionDenied
 
     from . import importar_compras as imp
+    from . import temporales
 
     if not ve_compras_del_excel(request.user):
         raise PermissionDenied
     ultima = CompraHistorica.objects.select_related("importado_por").order_by("-importado_en").first()
     contexto = {"ultima": ultima, "total_anterior": CompraHistorica.objects.count()}
     if request.method == "POST" and request.POST.get("accion") == "importar":
-        token = request.POST.get("token", "")
-        ruta = _ruta_temporal(token) if re.fullmatch(r"[0-9a-f]{32}", token) else None
+        ruta = temporales.ruta(request.POST.get("token", ""), "compras", "xlsx")
         if not ruta or not ruta.exists():
             messages.error(request, "El archivo revisado ya no está. Súbalo otra vez.")
             return redirect("inventario:importar_compras")
@@ -209,11 +194,7 @@ def importar_compras(request):
         elif archivo.size > 15 * 1024 * 1024:
             messages.error(request, "El archivo pesa más de 15 MB.")
         else:
-            token = uuid.uuid4().hex
-            ruta = _ruta_temporal(token)
-            with open(ruta, "wb") as destino:
-                for trozo in archivo.chunks():
-                    destino.write(trozo)
+            token, ruta = temporales.guardar(archivo, "compras", "xlsx")
             try:
                 datos = imp.leer(ruta)
             except Exception:  # archivo dañado o que no es un libro de Excel
