@@ -56,3 +56,27 @@ class InvitarCambioClaveTests(TestCase):
     def test_solo_a_los_usuarios_indicados(self):
         self.correr("--solo", "jguana", "--enviar")
         self.assertEqual([m.to for m in mail.outbox], [["jguana@janotec.test"]])
+
+    def test_superusuario_nombrado_por_correo_si_recibe_el_enlace(self):
+        """Dirección es superusuario: el envío general no le llega, pero nombrándolo (por correo) sí."""
+        call_command("dar_superusuario", "mtibamoso", "jguana", "--aplicar", stdout=StringIO())
+        self.miguel.refresh_from_db()
+        self.assertTrue(self.miguel.is_superuser and self.miguel.is_staff)
+        self.assertNotIn("mtibamoso", self.correr())
+        self.correr("--solo", "MIGUEL@janotec.test", "--enviar")
+        self.assertEqual([m.to for m in mail.outbox], [["miguel@janotec.test"]])
+        self.assertNotIn("admin@", self.correr("--solo", "admin"))  # al administrador nunca
+
+    def test_dar_superusuario_sin_aplicar_no_cambia_y_usuario_inexistente_no_toca_nada(self):
+        from django.core.management.base import CommandError
+        call_command("dar_superusuario", "jguana", stdout=StringIO())
+        self.jguana.refresh_from_db()
+        self.assertFalse(self.jguana.is_superuser)
+        with self.assertRaises(CommandError):
+            call_command("dar_superusuario", "jguana", "noexiste", "--aplicar", stdout=StringIO())
+        self.jguana.refresh_from_db()
+        self.assertFalse(self.jguana.is_superuser)
+        call_command("dar_superusuario", "jguana", "--aplicar", stdout=StringIO())
+        call_command("dar_superusuario", "jguana", "--quitar", "--aplicar", stdout=StringIO())
+        self.jguana.refresh_from_db()
+        self.assertFalse(self.jguana.is_superuser)

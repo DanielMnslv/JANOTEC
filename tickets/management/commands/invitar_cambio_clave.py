@@ -8,14 +8,17 @@ administrador, ve la contraseña que la persona elija.
     python manage.py invitar_cambio_clave --enviar           # envía al personal de JANOTEC
     python manage.py invitar_cambio_clave --con-clientes     # incluye a los usuarios de las empresas cliente
     python manage.py invitar_cambio_clave --solo jguana mtibamoso --enviar
+    python manage.py invitar_cambio_clave --solo direcciontics@janotec.app --enviar
 
-Nunca le llega al superusuario ni a los usuarios de prueba (con «prueba» en el usuario), ni a usuarios
-inactivos o sin correo.
+En el envío general nunca le llega a un superusuario ni a los usuarios de prueba (con «prueba» en el usuario), ni a
+usuarios inactivos o sin correo. Con --solo (por usuario o por correo) sí le llega al superusuario que se nombre,
+salvo a «admin».
 """
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.core.management.base import BaseCommand
+from django.db.models import Q
 from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -58,14 +61,21 @@ def cuerpo(usuario):
 
 
 def destinatarios(con_clientes=False, solo=None):
-    """Usuarios activos con correo, sin el superusuario ni los de prueba; los clientes solo si se piden."""
-    qs = (Usuario.objects.filter(is_active=True, is_superuser=False).exclude(email="").exclude(username="admin")
+    """Usuarios activos con correo, sin «admin» ni los de prueba; los clientes solo si se piden.
+
+    En el envío general se excluyen los superusuarios. Con ``solo`` (nombres de usuario o correos) se incluye a quien
+    se nombre aunque sea superusuario (por ejemplo, dirección)."""
+    qs = (Usuario.objects.filter(is_active=True).exclude(email="").exclude(username="admin")
           .exclude(username__startswith=PREFIJO).exclude(username__icontains="prueba")
           .order_by("rol", "username"))
+    if solo:
+        filtro = Q()
+        for x in solo:
+            filtro |= Q(username__iexact=x.strip()) | Q(email__iexact=x.strip())
+        return list(qs.filter(filtro))
+    qs = qs.filter(is_superuser=False)
     if not con_clientes:
         qs = qs.exclude(rol=Usuario.Rol.CLIENTE)
-    if solo:
-        qs = qs.filter(username__in=solo)
     return list(qs)
 
 
@@ -75,7 +85,8 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--enviar", action="store_true", help="Envía de verdad (sin esto solo muestra la lista).")
         parser.add_argument("--con-clientes", action="store_true", help="Incluye a los usuarios de las empresas cliente.")
-        parser.add_argument("--solo", nargs="+", metavar="USUARIO", help="Solo a estos usuarios (por su nombre de usuario).")
+        parser.add_argument("--solo", nargs="+", metavar="USUARIO_O_CORREO",
+                            help="Solo a estos usuarios (por su nombre de usuario o su correo), aunque sean superusuarios.")
 
     def handle(self, enviar=False, con_clientes=False, solo=None, **opciones):
         usuarios = destinatarios(con_clientes, solo)
