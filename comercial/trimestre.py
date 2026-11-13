@@ -23,6 +23,8 @@ Los pidió la coordinación TIC (12/11/2026). Cada uno sale de lo que ya se regi
 * **Proyectos entregados**: tickets con propuesta aprobada que se cerraron o cuyo informe de entrega se aprobó en el
   trimestre.
 * **Desempeño del área técnica**: actas del trimestre solucionadas ÷ (solucionadas + solucionadas parcialmente).
+* **Mantenimientos a tiempo**: del plan de mantenimiento por sede, los que tocaban en el trimestre y se cerraron a
+  más tardar 30 días después de la fecha.
 
 Lo de prueba (clientes que empiezan por «PRUEBA») y lo cancelado no cuenta.
 """
@@ -347,6 +349,16 @@ def medir(desde, hasta):
     v["parciales"] = actas.filter(resultado=R.PARCIAL).count()
     v["recomendaciones"] = actas.filter(resultado=R.RECOMENDACIONES).count()
     v["desempeno"] = _pct(v["solucionadas"], v["solucionadas"] + v["parciales"])
+
+    # Plan de mantenimiento: los que tocaban en el periodo y se cerraron a más tardar 30 días después
+    from cronograma.models import EjecucionMantenimiento
+    hoy = timezone.localdate()
+    ejecuciones = list(_sin_prueba(EjecucionMantenimiento.objects.filter(fecha_prevista__gte=desde, fecha_prevista__lte=hasta),
+                                   "plan__sede__empresa").exclude(ticket__estado="cancelado").select_related("ticket"))
+    evaluables = [e for e in ejecuciones if e.a_tiempo is not None or e.fecha_prevista + timedelta(days=30) < hoy]
+    v["mantenimientos"] = len(ejecuciones)
+    v["mantenimientos_a_tiempo"] = sum(1 for e in evaluables if e.a_tiempo)
+    v["mantenimiento"] = _pct(v["mantenimientos_a_tiempo"], len(evaluables))
     return v
 
 
@@ -383,7 +395,7 @@ def calcular(trimestre, hoy=None):
     """Los indicadores del trimestre frente al trimestre anterior completo."""
     from django.conf import settings
 
-    metas = {"aprobacion": 40, "margen_utilidad": None, "margen_consolidado": None, "desempeno": None}
+    metas = {"aprobacion": 40, "margen_utilidad": None, "margen_consolidado": None, "desempeno": None, "mantenimiento": 90}
     metas.update({k: v for k, v in getattr(settings, "INDICADORES_METAS", {}).items() if k in metas})
     hasta = min(trimestre.hasta, hoy) if hoy else trimestre.hasta
     v = medir(trimestre.desde, hasta)
@@ -423,6 +435,10 @@ def calcular(trimestre, hoy=None):
                   "Actas solucionadas ÷ (solucionadas + solucionadas parcialmente) del trimestre", metas["desempeno"],
                   anterior=a["desempeno"],
                   detalle=f"{v['solucionadas']} solucionadas · {v['parciales']} parciales de {v['actas']} actas"),
+        Indicador("mantenimiento", "Mantenimientos preventivos a tiempo", v["mantenimiento"], "%",
+                  "Mantenimientos del plan por sede que tocaban en el trimestre y se cerraron a más tardar 30 días después "
+                  "÷ los que ya debían estar hechos", metas["mantenimiento"], anterior=a["mantenimiento"],
+                  detalle=f"{v['mantenimientos_a_tiempo']} a tiempo de {v['mantenimientos']} programados por el plan"),
     ]
     return {"indicadores": indicadores, "valores": v, "anteriores": a, "hasta": hasta}
 

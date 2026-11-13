@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block titulo %}Planes de mantenimiento{% endblock %}
+{% block contenido %}
+{# Plan de mantenimiento preventivo por sede: cada sistema con su frecuencia; los tickets se crean solos. #}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div><h1 class="h3 page-title mb-1">Planes de mantenimiento</h1>
+    <p class="text-muted-jn mb-0">Cada sistema de cada sede con su frecuencia. {{ dias_antes }} días antes de la fecha la plataforma crea sola el ticket de mantenimiento y llega a «Recepción» para programarlo.</p></div>
+  <a class="btn btn-primary" href="{% url 'cronograma:mantenimiento_nuevo' %}"><i class="bi bi-plus-lg"></i> Nuevo plan</a>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md"><div class="kpi"><div class="valor">{{ resumen.planes }}</div><div class="etiqueta">Planes · {{ resumen.sedes }} sedes</div></div></div>
+  <div class="col-6 col-md"><div class="kpi"><div class="valor">{{ resumen.mes }}</div><div class="etiqueta">Tocan en el próximo mes</div></div></div>
+  <div class="col-6 col-md"><div class="kpi"><div class="valor">{{ resumen.en_curso }}</div><div class="etiqueta">Con ticket en curso</div></div></div>
+  <div class="col-6 col-md"><div class="kpi {% if resumen.atrasados %}alerta{% endif %}"><div class="valor">{{ resumen.atrasados }}</div><div class="etiqueta">Atrasados</div></div></div>
+</div>
+
+<form method="get" class="card card-body mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-5"><label class="form-label small mb-1" for="q">Cliente o sede</label><input id="q" name="q" value="{{ q }}" class="form-control" placeholder="Buscar…"></div>
+    <div class="col-md-3"><label class="form-label small mb-1" for="sistema">Sistema</label>
+      <select id="sistema" name="sistema" class="form-select"><option value="">Todos</option>{% for valor, nombre in sistemas %}<option value="{{ valor }}" {% if valor == sistema %}selected{% endif %}>{{ nombre }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><div class="form-check"><input class="form-check-input" type="checkbox" name="inactivos" value="1" id="inactivos" {% if inactivos %}checked{% endif %}><label class="form-check-label small" for="inactivos">Ver inactivos</label></div></div>
+    <div class="col-md-2 d-grid"><button class="btn btn-outline-primary"><i class="bi bi-funnel"></i> Filtrar</button></div>
+  </div>
+</form>
+
+<div class="card"><div class="table-responsive"><table class="table table-tickets mb-0 align-middle">
+  <thead><tr><th>Cliente y sede</th><th>Sistema</th><th>Frecuencia</th><th>Próximo</th><th>Último</th><th>En curso</th><th>Contrato</th></tr></thead>
+  <tbody>{% for f in filas %}{% with p=f.plan %}
+  <tr class="{% if not p.activo %}text-muted-jn{% endif %}">
+    <td><a href="{% url 'cronograma:mantenimiento_detalle' p.pk %}" class="fw-semibold">{{ p.sede.empresa }}</a><div class="small text-muted-jn">{{ p.sede.nombre }}{% if p.sede.ciudad %} · {{ p.sede.ciudad }}{% endif %}</div></td>
+    <td>{{ p.get_sistema_display }}{% if p.detalle %}<div class="small text-muted-jn">{{ p.detalle|truncatechars:60 }}</div>{% endif %}</td>
+    <td>{{ p.get_frecuencia_display }}</td>
+    <td class="text-nowrap">{{ p.proxima|date:"d/m/Y" }}{% if f.atrasado %} <span class="badge text-bg-danger">Atrasado</span>{% endif %}{% if not p.activo %} <span class="badge text-bg-secondary">Inactivo</span>{% endif %}</td>
+    <td class="text-nowrap small">{% if f.ultima %}{{ f.ultima.ticket.fecha_cierre|date:"d/m/Y" }}<div><a href="{{ f.ultima.ticket.get_absolute_url }}">{{ f.ultima.ticket.radicado }}</a></div>{% else %}—{% endif %}</td>
+    <td class="small">{% if f.en_curso %}<a href="{{ f.en_curso.ticket.get_absolute_url }}">{{ f.en_curso.ticket.radicado }}</a><div class="text-muted-jn">{{ f.en_curso.ticket.get_estado_display }}</div>{% else %}—{% endif %}</td>
+    <td class="small">{% if p.con_contrato %}{{ p.contrato|default:"Sí" }}{% if p.contrato_vence %}<div class="{% if p.contrato_vencido %}text-danger fw-semibold{% else %}text-muted-jn{% endif %}">{% if p.contrato_vencido %}Venció{% else %}Hasta{% endif %} {{ p.contrato_vence|date:"d/m/Y" }}</div>{% endif %}{% else %}<span class="text-muted-jn">Por visita</span>{% endif %}</td>
+  </tr>{% endwith %}
+  {% empty %}<tr><td colspan="7" class="text-muted-jn">Aún no hay planes de mantenimiento{% if q or sistema %} con ese filtro{% endif %}. Cree el primero con «Nuevo plan».</td></tr>{% endfor %}</tbody>
+</table></div></div>
+{% endblock %}

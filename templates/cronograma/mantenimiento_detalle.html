@@ -1,0 +1,48 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Mantenimiento · {{ plan.sede.empresa }} · {{ plan.get_sistema_display }}{% endblock %}
+{% block contenido %}
+<div class="mb-3"><a href="{% url 'cronograma:mantenimiento' %}" class="small"><i class="bi bi-arrow-left"></i> Planes de mantenimiento</a></div>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div><h1 class="h3 page-title mb-1">{{ plan.get_sistema_display }} · {{ plan.sede.empresa }}</h1>
+    <p class="text-muted-jn mb-0">{{ plan.sede.nombre }}{% if plan.sede.ciudad %} · {{ plan.sede.ciudad }}{% endif %}{% if plan.sede.direccion %} · {{ plan.sede.direccion }}{% endif %}
+      {% if not plan.activo %}<span class="badge text-bg-secondary">Inactivo</span>{% endif %}</p></div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-primary" href="{% url 'cronograma:mantenimiento_editar' plan.pk %}"><i class="bi bi-pencil"></i> Editar</a>
+    {% if plan.activo and not en_curso %}<form method="post">{% csrf_token %}<input type="hidden" name="accion" value="generar">
+      <button class="btn btn-primary" onclick="return confirm('¿Crear ya el ticket del mantenimiento del {{ plan.proxima|date:"d/m/Y" }}?')"><i class="bi bi-plus-circle"></i> Crear el ticket ya</button></form>{% endif %}
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-5"><div class="card h-100"><div class="card-header">El plan</div><div class="card-body">
+    <dl class="dl-ficha mb-0">
+      <dt>Frecuencia</dt><dd>{{ plan.get_frecuencia_display }}</dd>
+      <dt>Próximo</dt><dd><b>{{ plan.proxima|date:"l d/m/Y" }}</b><div class="small text-muted-jn">El ticket se crea {{ dias_antes }} días antes.</div></dd>
+      {% if plan.detalle %}<dt>Qué incluye</dt><dd>{{ plan.detalle }}</dd>{% endif %}
+      <dt>Contrato</dt><dd>{% if plan.con_contrato %}{{ plan.contrato|default:"Sí" }}{% if plan.contrato_vence %} · {% if plan.contrato_vencido %}<span class="text-danger fw-semibold">venció el {{ plan.contrato_vence|date:"d/m/Y" }}</span>{% else %}hasta el {{ plan.contrato_vence|date:"d/m/Y" }}{% endif %}{% endif %}
+        {% else %}Sin contrato: se cobra por visita{% if plan.valor %} ({{ plan.valor|pesos }} antes de IVA){% endif %}{% endif %}</dd>
+      {% if plan.sede.contacto_nombre %}<dt>Contacto en la sede</dt><dd>{{ plan.sede.contacto_nombre }}{% if plan.sede.contacto_telefono %} · {{ plan.sede.contacto_telefono }}{% endif %}</dd>{% endif %}
+      {% if plan.observaciones %}<dt>Observaciones</dt><dd>{{ plan.observaciones|linebreaksbr }}</dd>{% endif %}
+      <dt>Creado</dt><dd class="small">{{ plan.creado|date:"d/m/Y" }}{% if plan.creado_por %} por {{ plan.creado_por.get_full_name|default:plan.creado_por.username }}{% endif %}</dd>
+    </dl>
+    {% if otros %}<hr><div class="small fw-semibold mb-1">Otros planes de esta sede</div>
+      <ul class="small mb-0">{% for o in otros %}<li><a href="{% url 'cronograma:mantenimiento_detalle' o.pk %}">{{ o.get_sistema_display }}</a> · {{ o.get_frecuencia_display|lower }} · próximo {{ o.proxima|date:"d/m/Y" }}</li>{% endfor %}</ul>{% endif %}
+    <div class="mt-2"><a class="small" href="{% url 'cronograma:mantenimiento_nuevo' %}?sede={{ plan.sede.pk }}"><i class="bi bi-plus"></i> Otro sistema en esta sede</a></div>
+  </div></div></div>
+
+  <div class="col-lg-7"><div class="card h-100"><div class="card-header">Mantenimientos generados</div>
+    <div class="table-responsive"><table class="table table-tickets mb-0">
+      <thead><tr><th>Tocaba</th><th>Ticket</th><th>Estado</th><th>Técnico</th><th>Cerrado</th></tr></thead>
+      {% for e in ejecuciones %}<tr><td>{{ e.fecha_prevista|date:"d/m/Y" }}</td>
+        <td>{% if e.ticket %}<a href="{{ e.ticket.get_absolute_url }}">{{ e.ticket.radicado }}</a>{% else %}—{% endif %}</td>
+        <td class="small">{{ e.ticket.get_estado_display|default:"Ticket eliminado" }}</td>
+        <td class="small">{{ e.ticket.asignado_a.get_full_name|default:"—" }}</td>
+        <td class="small">{% if e.ticket.fecha_cierre %}{{ e.ticket.fecha_cierre|date:"d/m/Y" }} {% if e.a_tiempo %}<span class="badge text-bg-success">A tiempo</span>{% elif e.a_tiempo is False %}<span class="badge text-bg-warning">Tarde</span>{% endif %}{% else %}—{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="5" class="text-muted-jn small">Todavía no se ha generado ningún mantenimiento de este plan.</td></tr>{% endfor %}
+    </table></div>
+  </div></div>
+</div>
+
+<h2 class="h5 mb-2">Lo que la plataforma conoce de esta sede</h2>
+{% include "tickets/_historial_cliente.html" with h=historial %}
+{% endblock %}

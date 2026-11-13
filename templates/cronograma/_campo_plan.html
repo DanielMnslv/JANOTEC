@@ -1,0 +1,4 @@
+<label class="form-label small mb-1" for="{{ campo.id_for_label }}">{{ campo.label|capfirst }}</label>
+{{ campo }}
+{% if campo.help_text %}<div class="form-text">{{ campo.help_text }}</div>{% endif %}
+{% for e in campo.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}

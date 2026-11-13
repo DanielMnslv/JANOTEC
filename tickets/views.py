@@ -543,6 +543,9 @@ def panel(request):
     diagnostico.revisar_si_toca()
     from inventario import alertas
     alertas.revisar_si_toca()
+    if request.user.es_supervisor:
+        from cronograma import mantenimiento
+        mantenimiento.revisar_si_toca()  # los planes de mantenimiento crean sus tickets
     todos = tickets_visibles(request.user).filter(area=Ticket.Area.TECNICA)  # la bandeja técnica
     datos = request.GET.copy()
     if not request.GET:

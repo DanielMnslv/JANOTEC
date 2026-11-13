@@ -1,6 +1,7 @@
 from django.contrib import admin
 
-from .models import Actividad, DocumentoPersonal, ReporteHorasExtra, SolicitudViaticos
+from .models import (Actividad, DocumentoPersonal, EjecucionMantenimiento, PlanMantenimiento, ReporteHorasExtra,
+                     SolicitudViaticos)
 
 
 @admin.register(Actividad)
@@ -32,3 +33,18 @@ class SolicitudViaticosAdmin(admin.ModelAdmin):
     list_filter = ("estado", "para_sst", "para_tecnicos", "fecha")
     search_fields = ("destino", "personas", "ticket__radicado")
     raw_id_fields = ("ticket", "actividad")
+
+
+class EjecucionMantenimientoInline(admin.TabularInline):
+    model = EjecucionMantenimiento
+    extra = 0
+    raw_id_fields = ("ticket",)
+
+
+@admin.register(PlanMantenimiento)
+class PlanMantenimientoAdmin(admin.ModelAdmin):
+    list_display = ("sede", "sistema", "frecuencia", "proxima", "con_contrato", "activo")
+    list_filter = ("sistema", "frecuencia", "con_contrato", "activo")
+    search_fields = ("sede__nombre", "sede__empresa__razon_social", "detalle", "contrato")
+    raw_id_fields = ("sede",)
+    inlines = [EjecucionMantenimientoInline]

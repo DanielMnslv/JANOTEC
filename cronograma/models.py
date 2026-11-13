@@ -531,3 +531,102 @@ class SolicitudViaticos(models.Model):
         nombres = [n for c, n in self.CONCEPTOS if getattr(self, c)]
         texto = ", ".join(nombres) or "Por definir"
         return texto + (f" ({self.detalle})" if self.detalle else "")
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Plan de mantenimiento por sede
+# ---------------------------------------------------------------------------------------------------------------------
+class PlanMantenimiento(models.Model):
+    """Mantenimiento preventivo de un sistema en una sede, con su frecuencia.
+
+    Unos días antes de la fecha (``settings.MANTENIMIENTO_DIAS_ANTES``) la plataforma crea sola el ticket de
+    mantenimiento, que llega a «Recepción» para programarlo; la siguiente fecha se corre según la frecuencia
+    (ver ``cronograma/mantenimiento.py``). El contrato es opcional: si lo hay, se registra su número y vigencia.
+    """
+
+    class Sistema(models.TextChoices):
+        """Los sistemas que JANOTEC mantiene."""
+        CCTV = "cctv", "CCTV / videovigilancia"
+        ALARMA = "alarma", "Alarma de intrusión"
+        ACCESO = "acceso", "Control de acceso"
+        RED = "red", "Fibra óptica / red"
+        FOTOVOLTAICA = "fotovoltaica", "Energía fotovoltaica"
+        RADIO = "radio", "Radiocomunicaciones"
+        OTRO = "otro", "Otro"
+
+    class Frecuencia(models.IntegerChoices):
+        """Cada cuántos meses se hace."""
+        MENSUAL = 1, "Mensual"
+        BIMESTRAL = 2, "Bimestral"
+        TRIMESTRAL = 3, "Trimestral"
+        CUATRIMESTRAL = 4, "Cuatrimestral"
+        SEMESTRAL = 6, "Semestral"
+        ANUAL = 12, "Anual"
+
+    sede = models.ForeignKey("accounts.Sede", on_delete=models.CASCADE, related_name="planes_mantenimiento")
+    sistema = models.CharField(max_length=15, choices=Sistema.choices)
+    detalle = models.CharField("qué incluye", max_length=200, blank=True,
+                               help_text="Ej.: 16 cámaras y NVR; limpieza, ajuste de ángulos y revisión de grabación.")
+    frecuencia = models.PositiveSmallIntegerField(choices=Frecuencia.choices, default=Frecuencia.SEMESTRAL)
+    proxima = models.DateField("próximo mantenimiento")
+    activo = models.BooleanField(default=True, help_text="Desmarque si la sede ya no tiene el mantenimiento.")
+    # Contrato (opcional)
+    con_contrato = models.BooleanField("cubierto por contrato", default=False)
+    contrato = models.CharField("n.º o nombre del contrato", max_length=100, blank=True)
+    contrato_vence = models.DateField("el contrato vence", null=True, blank=True)
+    valor = models.DecimalField("valor por visita (antes de IVA)", max_digits=14, decimal_places=0, null=True, blank=True,
+                                help_text="Opcional: lo que se cobra por cada mantenimiento si no está en el contrato.")
+    observaciones = models.TextField(blank=True)
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    creado = models.DateTimeField(auto_now_add=True)
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["proxima", "sede__empresa__razon_social", "sede__nombre"]
+        verbose_name = "plan de mantenimiento"
+        verbose_name_plural = "planes de mantenimiento"
+        constraints = [models.UniqueConstraint(fields=["sede", "sistema"], name="un_plan_por_sistema_y_sede")]
+
+    def __str__(self):
+        return f"{self.get_sistema_display()} · {self.sede.empresa} · {self.sede}"
+
+    @property
+    def contrato_vencido(self):
+        """Tiene contrato y ya pasó su vigencia."""
+        return bool(self.con_contrato and self.contrato_vence and self.contrato_vence < timezone.localdate())
+
+    @property
+    def ultima(self):
+        """La última ejecución cerrada (None si nunca se ha hecho por la plataforma)."""
+        return self.ejecuciones.filter(ticket__estado="cerrado").select_related("ticket").order_by("-fecha_prevista").first()
+
+    @property
+    def en_curso(self):
+        """La ejecución cuyo ticket sigue abierto (None si no hay)."""
+        return (self.ejecuciones.exclude(ticket__estado__in=["cerrado", "cancelado"]).exclude(ticket=None)
+                .select_related("ticket").order_by("-fecha_prevista").first())
+
+
+class EjecucionMantenimiento(models.Model):
+    """Cada vez que el plan generó su ticket: la fecha que tocaba y el ticket con el que se atiende."""
+
+    plan = models.ForeignKey(PlanMantenimiento, on_delete=models.CASCADE, related_name="ejecuciones")
+    fecha_prevista = models.DateField("fecha que tocaba")
+    ticket = models.ForeignKey("tickets.Ticket", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha_prevista"]
+        verbose_name = "mantenimiento generado"
+        verbose_name_plural = "mantenimientos generados"
+
+    def __str__(self):
+        return f"{self.plan} · {self.fecha_prevista:%d/%m/%Y}"
+
+    @property
+    def a_tiempo(self):
+        """Se cerró a más tardar en el mes siguiente a la fecha prevista (None si no se ha cerrado)."""
+        t = self.ticket
+        if not t or t.estado != "cerrado" or not t.fecha_cierre:
+            return None
+        return timezone.localtime(t.fecha_cierre).date() <= self.fecha_prevista + timedelta(days=30)
