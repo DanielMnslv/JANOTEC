@@ -1,0 +1,3 @@
+<div class="mb-3"><div class="form-label fw-medium">{{ campo.label|capfirst }} <span class="text-danger">*</span></div>
+  {% for op in campo %}<div class="form-check">{{ op.tag }} <label class="form-check-label small" for="{{ op.id_for_label }}">{{ op.choice_label }}</label></div>{% endfor %}
+  {% for e in campo.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}</div>

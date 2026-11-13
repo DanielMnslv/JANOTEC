@@ -15,8 +15,8 @@ class ActividadAdmin(admin.ModelAdmin):
 
 @admin.register(ReporteHorasExtra)
 class ReporteHorasExtraAdmin(admin.ModelAdmin):
-    list_display = ("colaborador", "fecha", "rol", "hora_salida", "hora_llegada", "duracion", "cliente")
-    list_filter = ("rol", "colaborador", "fecha")
+    list_display = ("colaborador", "fecha", "rol", "hora_salida", "hora_llegada", "duracion", "cliente", "validacion")
+    list_filter = ("validacion", "rol", "salida_tardia", "llegada_tardia", "colaborador", "fecha")
     search_fields = ("cliente",)
 
 

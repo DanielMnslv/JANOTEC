@@ -166,7 +166,14 @@ class ImportarForm(forms.Form):
 
 
 class ReporteHorasExtraForm(BootstrapMixin, forms.ModelForm):
-    """Primer momento de las horas extras: el inicio, con su foto obligatoria."""
+    """Primer momento de las horas extras: el inicio.
+
+    * En el momento (``tardio=False``): la fecha y la hora las pone la plataforma; la foto es obligatoria y el
+      celular envía la ubicación en campos ocultos (ver ``cronograma/horas_validacion.py``).
+    * Tardío: el técnico escribe la fecha y la hora reales y por qué no lo registró a tiempo; la foto es opcional.
+    """
+    motivo = forms.CharField(label="¿Por qué no lo registró en el momento?", required=False, max_length=500,
+                             widget=forms.Textarea(attrs={"rows": 2}))
 
     class Meta:
         model = ReporteHorasExtra
@@ -178,25 +185,47 @@ class ReporteHorasExtraForm(BootstrapMixin, forms.ModelForm):
             "evidencia_salida": forms.ClearableFileInput(attrs={"accept": "image/*", "capture": "environment"}),
         }
 
-    def __init__(self, *args, usuario=None, **kwargs):
+    def __init__(self, *args, usuario=None, tardio=False, **kwargs):
         super().__init__(*args, **kwargs)
         from accounts.models import Empresa
 
-        if usuario.es_supervisor:  # el coordinador puede registrar por otro técnico
+        self.tardio = tardio
+        if usuario.es_supervisor:  # el coordinador puede registrar por otro técnico (queda por validar)
             self.fields["colaborador"].queryset = tecnicos_queryset()
             self.fields["colaborador"].initial = usuario.pk if tecnicos_queryset().filter(pk=usuario.pk).exists() else None
         else:
             del self.fields["colaborador"]
         self.fields["rol"].required = True
         self.fields["rol"].choices = ReporteHorasExtra.Rol.choices
-        self.fields["evidencia_salida"].required = True
         self.fields["cliente"].widget = ConSugerencias(Empresa.objects.filter(activa=True).order_by("razon_social").values_list("razon_social", flat=True),
                                                        attrs={"placeholder": "Escriba o elija el cliente"})
+        if tardio:
+            self.fields["evidencia_salida"].required = False
+            self.fields["motivo"].required = True
+            self.fields["hora_salida"].label = "Hora real de inicio"
+        else:  # la fecha y la hora las pone el servidor
+            del self.fields["fecha"], self.fields["hora_salida"], self.fields["motivo"]
+            self.fields["evidencia_salida"].required = True
         self._aplicar_estilos()
+
+    def clean(self):
+        d = super().clean()
+        if self.tardio and d.get("fecha") and d.get("hora_salida"):
+            from .horas_validacion import hora_valida_tardia
+
+            error = hora_valida_tardia(d["fecha"], d["hora_salida"])
+            if error:
+                self.add_error("hora_salida", error)
+        if self.tardio and len((d.get("motivo") or "").strip()) < 10:
+            self.add_error("motivo", "Explique en una frase por qué no lo registró en el momento.")
+        return d
 
 
 class CierreHorasExtraForm(BootstrapMixin, forms.ModelForm):
-    """Segundo momento: la hora de llegada y la foto del regreso, las dos obligatorias."""
+    """Segundo momento: el regreso. En el momento solo pide la foto (la hora es la del servidor); tardío pide la hora
+    real de llegada y el motivo."""
+    motivo = forms.CharField(label="¿Por qué no lo registró en el momento?", required=False, max_length=500,
+                             widget=forms.Textarea(attrs={"rows": 2}))
 
     class Meta:
         model = ReporteHorasExtra
@@ -206,8 +235,21 @@ class CierreHorasExtraForm(BootstrapMixin, forms.ModelForm):
             "evidencia_llegada": forms.ClearableFileInput(attrs={"accept": "image/*", "capture": "environment"}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, tardio=False, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["hora_llegada"].required = True
-        self.fields["evidencia_llegada"].required = True
+        self.tardio = tardio
+        if tardio:
+            self.fields["hora_llegada"].required = True
+            self.fields["hora_llegada"].label = "Hora real de llegada"
+            self.fields["evidencia_llegada"].required = False
+            self.fields["motivo"].required = True
+        else:
+            del self.fields["hora_llegada"], self.fields["motivo"]
+            self.fields["evidencia_llegada"].required = True
         self._aplicar_estilos()
+
+    def clean(self):
+        d = super().clean()
+        if self.tardio and len((d.get("motivo") or "").strip()) < 10:
+            self.add_error("motivo", "Explique en una frase por qué no lo registró en el momento.")
+        return d

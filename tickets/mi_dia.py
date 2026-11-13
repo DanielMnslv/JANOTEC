@@ -153,7 +153,25 @@ def coordinacion(usuario):
         salidas = [i for i in por_aprobar(usuario)["items"] if i["titulo"].startswith("Salida de material")]
         grupos.append(_grupo("salidas", "Salidas de material por autorizar", "bi-box-arrow-right", salidas,
                              "Bodega ya validó: falta su firma (o la de dirección) para que el material salga."))
+    grupos.append(_grupo("horas", "Horas extras por validar", "bi-shield-exclamation", _horas_por_validar(),
+                         "Registradas tarde, sin ubicación, lejos del sitio o por otra persona: apruébelas o recházelas.",
+                         ver_todo=reverse("cronograma:horas_extras")))
     return grupos
+
+
+def _horas_por_validar():
+    """Los reportes de horas extras cerrados que esperan la validación de la coordinación."""
+    from cronograma import horas_validacion as hv
+    from cronograma.models import ReporteHorasExtra
+
+    items = []
+    url = reverse("cronograma:horas_extras")
+    for r in (ReporteHorasExtra.objects.filter(validacion=ReporteHorasExtra.Validacion.POR_VALIDAR, hora_llegada__isnull=False)
+              .select_related("colaborador", "registrado_por", "cerrado_por").order_by("fecha")[:20]):
+        alertas = hv.alertas(r)
+        items.append(_item(f"{r.colaborador.get_full_name() or r.colaborador.username} · {r.fecha:%d/%m} · {r.duracion} h",
+                           "; ".join(alertas)[:160], f"{url}?mes={r.fecha:%Y-%m}", "Validar"))
+    return items
 
 
 def _informes_coordinacion(usuario):

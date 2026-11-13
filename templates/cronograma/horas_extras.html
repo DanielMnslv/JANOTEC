@@ -2,44 +2,106 @@
 {% block titulo %}Horas extras{% endblock %}
 {% block contenido %}
 <h1 class="h3 page-title mb-1">Horas extras</h1>
-<p class="text-muted-jn mb-4">Auto reporte de salida a campo en dos momentos, cada uno con su foto: al <b>iniciar</b> y al <b>regresar</b>.
-  El <b>conductor</b> cuenta desde que le entregan las llaves para el alistamiento del vehículo; el <b>acompañante</b>, desde que llega a la sede del cliente e inicia la operación.</p>
+<p class="text-muted-jn mb-4">Se registran en dos momentos, cada uno con su foto: al <b>iniciar</b> y al <b>regresar</b>, <b>en el momento exacto</b>: la plataforma toma la fecha, la hora y la ubicación del celular para confirmar que es real.
+  El <b>conductor</b> cuenta desde que le entregan las llaves para el alistamiento del vehículo; el <b>acompañante</b>, desde que llega a la sede del cliente e inicia la operación.
+  Si se le olvidó, use «Registro tardío» e indique por qué: la coordinación lo valida.</p>
 <div class="row g-4">
   <div class="col-lg-4">
-    {% for r, cierre in abiertos %}
+    {% for r, cierre, cierre_tarde in abiertos %}
     <div class="card mb-3 border-warning">
       <div class="card-header"><i class="bi bi-hourglass-split"></i> Falta el regreso{% if user.es_supervisor %} · {{ r.colaborador.get_full_name|default:r.colaborador.username }}{% endif %}</div>
       <div class="card-body">
-        <p class="small mb-2">{{ r.fecha|date:"d/m/Y" }} · {{ r.rol_corto }} · inició {{ r.hora_salida|time:"H:i" }} · {{ r.cliente }}
+        <p class="small mb-2">{{ r.fecha|date:"d/m/Y" }} · {{ r.rol_corto }} · inició {{ r.hora_salida|time:"H:i" }}{% if r.salida_tardia %} (registro tardío){% endif %} · {{ r.cliente }}
           {% if r.evidencia_salida %}· <a href="{% url 'cronograma:horas_extras_foto' r.pk 'salida' %}" target="_blank" rel="noopener">foto del inicio</a>{% endif %}</p>
-        <form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="accion" value="cerrar"><input type="hidden" name="reporte" value="{{ r.pk }}">
-          {% include "tickets/_campo.html" with campo=cierre.hora_llegada %}
+        <form method="post" enctype="multipart/form-data" class="con-ubicacion">{% csrf_token %}<input type="hidden" name="accion" value="cerrar"><input type="hidden" name="reporte" value="{{ r.pk }}">
+          <input type="hidden" name="lat"><input type="hidden" name="lon"><input type="hidden" name="precision">
           {% include "tickets/_campo.html" with campo=cierre.evidencia_llegada %}
-          <button class="btn btn-warning w-100"><i class="bi bi-house-check"></i> Registrar regreso</button>
+          <button class="btn btn-warning w-100"><i class="bi bi-geo-alt"></i> Estoy llegando ahora</button>
+          <div class="small text-muted-jn mt-1 estado-ubicacion">Se registran la hora y la ubicación de este momento.</div>
         </form>
+        <details class="mt-3"><summary class="small">Registro tardío del regreso (se me olvidó)</summary>
+          <form method="post" enctype="multipart/form-data" class="mt-2">{% csrf_token %}<input type="hidden" name="accion" value="cerrar_tardio"><input type="hidden" name="reporte" value="{{ r.pk }}">
+            {% include "tickets/_campo.html" with campo=cierre_tarde.hora_llegada %}
+            {% include "tickets/_campo.html" with campo=cierre_tarde.motivo %}
+            {% include "tickets/_campo.html" with campo=cierre_tarde.evidencia_llegada %}
+            <button class="btn btn-outline-warning w-100"><i class="bi bi-clock-history"></i> Registrar regreso tardío</button>
+          </form></details>
       </div>
     </div>
     {% endfor %}
-    <div class="card">
+
+    <div class="card mb-3">
       <div class="card-header"><i class="bi bi-play-circle"></i> Iniciar salida a campo</div>
       <div class="card-body">
-        <form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="accion" value="iniciar">
+        <form method="post" enctype="multipart/form-data" class="con-ubicacion">{% csrf_token %}<input type="hidden" name="accion" value="iniciar">
+          <input type="hidden" name="lat"><input type="hidden" name="lon"><input type="hidden" name="precision">
           {% for e in form.non_field_errors %}<div class="text-danger small mb-2">{{ e }}</div>{% endfor %}
           {% if form.colaborador %}{% include "tickets/_campo.html" with campo=form.colaborador %}
           {% else %}<p class="small mb-3"><span class="text-muted-jn">Colaborador:</span> <b>{{ user.get_full_name|default:user.username }}</b></p>{% endif %}
-          <div class="mb-3"><div class="form-label fw-medium">{{ form.rol.label|capfirst }} <span class="text-danger">*</span></div>
-            {% for op in form.rol %}<div class="form-check">{{ op.tag }} <label class="form-check-label small" for="{{ op.id_for_label }}">{{ op.choice_label }}</label></div>{% endfor %}
-            {% for e in form.rol.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}</div>
-          {% include "tickets/_campo.html" with campo=form.fecha %}
-          {% include "tickets/_campo.html" with campo=form.hora_salida %}
+          {% include "cronograma/_rol_horas.html" with campo=form.rol %}
           {% include "tickets/_campo.html" with campo=form.cliente %}
           {% include "tickets/_campo.html" with campo=form.evidencia_salida %}
-          <button class="btn btn-primary w-100"><i class="bi bi-check2-circle"></i> Registrar inicio</button>
+          <button class="btn btn-primary w-100"><i class="bi bi-geo-alt"></i> Estoy iniciando ahora</button>
+          <div class="small text-muted-jn mt-1 estado-ubicacion">La fecha, la hora y la ubicación las toma la plataforma en este momento.</div>
+        </form>
+        <details class="mt-3" {% if abrir_tardio %}open{% endif %}><summary class="small">Registro tardío del inicio (se me olvidó)</summary>
+          <form method="post" enctype="multipart/form-data" class="mt-2">{% csrf_token %}<input type="hidden" name="accion" value="iniciar_tardio">
+            {% for e in form_tardio.non_field_errors %}<div class="text-danger small mb-2">{{ e }}</div>{% endfor %}
+            {% if form_tardio.colaborador %}{% include "tickets/_campo.html" with campo=form_tardio.colaborador %}{% endif %}
+            {% include "cronograma/_rol_horas.html" with campo=form_tardio.rol %}
+            {% include "tickets/_campo.html" with campo=form_tardio.fecha %}
+            {% include "tickets/_campo.html" with campo=form_tardio.hora_salida %}
+            {% include "tickets/_campo.html" with campo=form_tardio.cliente %}
+            {% include "tickets/_campo.html" with campo=form_tardio.motivo %}
+            {% include "tickets/_campo.html" with campo=form_tardio.evidencia_salida %}
+            <button class="btn btn-outline-primary w-100"><i class="bi bi-clock-history"></i> Registrar inicio tardío</button>
+          </form></details>
+      </div>
+    </div>
+
+    {% if user.es_supervisor %}
+    <div class="card">
+      <div class="card-header"><i class="bi bi-building"></i> Ubicación de la oficina</div>
+      <div class="card-body small">
+        {% if oficina %}<p class="mb-2">Fijada por {{ oficina.actualizada_por.get_full_name|default:"—" }} el {{ oficina.actualizada|date:"d/m/Y" }} · <a href="https://www.google.com/maps?q={{ oficina.latitud }},{{ oficina.longitud }}" target="_blank" rel="noopener">ver en el mapa</a>.
+          Se considera «en el sitio» a menos de {{ radio }} m (más la imprecisión del GPS).</p>
+        {% else %}<p class="mb-2 text-danger">Aún no está fijada: el inicio del conductor y los regresos no se pueden confrontar con la oficina.</p>{% endif %}
+        <form method="post" class="con-ubicacion">{% csrf_token %}<input type="hidden" name="accion" value="oficina">
+          <input type="hidden" name="lat"><input type="hidden" name="lon"><input type="hidden" name="precision">
+          <button class="btn btn-sm btn-outline-secondary" onclick="return confirm('¿Está en la oficina de JANOTEC? Su ubicación actual quedará como la de la oficina.')"><i class="bi bi-crosshair"></i> Usar mi ubicación como la oficina</button>
+          <div class="text-muted-jn mt-1 estado-ubicacion"></div>
         </form>
       </div>
     </div>
+    {% endif %}
   </div>
+
   <div class="col-lg-8">
+    {% if user.es_supervisor and por_validar %}
+    <div class="card mb-3 border-danger">
+      <div class="card-header"><i class="bi bi-shield-exclamation"></i> Por validar <span class="badge text-bg-danger">{{ por_validar|length }}</span></div>
+      <div class="list-group list-group-flush">
+      {% for r in por_validar %}
+        <div class="list-group-item">
+          <div class="d-flex flex-wrap justify-content-between gap-2">
+            <div><b>{{ r.colaborador.get_full_name|default:r.colaborador.username }}</b> · {{ r.fecha|date:"D d/m/Y" }} · {{ r.rol_corto }} · {{ r.hora_salida|time:"H:i" }} a {{ r.hora_llegada|time:"H:i" }} (<b>{{ r.duracion }} h</b>) · {{ r.cliente }}
+              <ul class="small text-danger mb-1 ps-3">{% for a in r.alertas %}<li>{{ a }}</li>{% endfor %}</ul>
+              <div class="small text-muted-jn">
+                Inicio registrado el {{ r.creado|date:"d/m/Y H:i" }}{% if r.mapa_salida %} · <a href="{{ r.mapa_salida }}" target="_blank" rel="noopener"><i class="bi bi-geo-alt"></i> ubicación</a>{% endif %}{% if r.evidencia_salida %} · <a href="{% url 'cronograma:horas_extras_foto' r.pk 'salida' %}" target="_blank" rel="noopener"><i class="bi bi-camera"></i> foto</a>{% endif %}
+                · Regreso registrado el {{ r.cerrado_en|date:"d/m/Y H:i" }}{% if r.mapa_llegada %} · <a href="{{ r.mapa_llegada }}" target="_blank" rel="noopener"><i class="bi bi-geo-alt"></i> ubicación</a>{% endif %}{% if r.evidencia_llegada %} · <a href="{% url 'cronograma:horas_extras_foto' r.pk 'llegada' %}" target="_blank" rel="noopener"><i class="bi bi-camera"></i> foto</a>{% endif %}
+              </div></div>
+            <form method="post" class="d-flex flex-wrap gap-2 align-items-start" style="max-width:340px">{% csrf_token %}<input type="hidden" name="accion" value="validar"><input type="hidden" name="reporte" value="{{ r.pk }}">
+              <input name="nota" maxlength="300" class="form-control form-control-sm" placeholder="Nota (obligatoria para rechazar)">
+              <button name="decision" value="aprobar" class="btn btn-sm btn-success"><i class="bi bi-check2"></i> Aprobar</button>
+              <button name="decision" value="rechazar" class="btn btn-sm btn-outline-danger"><i class="bi bi-x"></i> Rechazar</button>
+            </form>
+          </div>
+        </div>
+      {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
     <form method="get" class="d-flex flex-wrap gap-2 align-items-center mb-3">
       <label class="small text-muted-jn" for="mes">Mes</label>
       <input type="month" id="mes" name="mes" value="{{ mes }}" class="form-control form-control-sm" style="max-width:170px">
@@ -48,7 +110,7 @@
     </form>
     {% if user.es_supervisor and totales %}
     <div class="card mb-3">
-      <div class="card-header"><i class="bi bi-people"></i> Total del mes por colaborador</div>
+      <div class="card-header"><i class="bi bi-people"></i> Total del mes por colaborador <span class="small text-muted-jn">(sin las rechazadas)</span></div>
       <ul class="list-group list-group-flush small">
         {% for c, horas in totales %}<li class="list-group-item d-flex justify-content-between"><span>{{ c.get_full_name|default:c.username }}</span><b>{{ horas }} h</b></li>{% endfor %}
       </ul>
@@ -57,14 +119,16 @@
     <div class="card">
       <div class="table-responsive">
         <table class="table table-tickets mb-0">
-          <thead><tr>{% if user.es_supervisor %}<th>Colaborador</th>{% endif %}<th>Fecha</th><th>Fue</th><th>Inicio</th><th>Llegada</th><th class="text-end">Horas</th><th>Cliente</th></tr></thead>
+          <thead><tr>{% if user.es_supervisor %}<th>Colaborador</th>{% endif %}<th>Fecha</th><th>Fue</th><th>Inicio</th><th>Llegada</th><th class="text-end">Horas</th><th>Cliente</th><th>Validación</th></tr></thead>
           {% for r in reportes %}
             <tr>{% if user.es_supervisor %}<td>{{ r.colaborador.get_full_name|default:r.colaborador.username }}</td>{% endif %}<td>{{ r.fecha|date:"d/m/Y" }}</td><td class="small">{{ r.rol_corto }}</td>
-              <td>{{ r.hora_salida|time:"H:i" }}{% if r.evidencia_salida %} <a href="{% url 'cronograma:horas_extras_foto' r.pk 'salida' %}" target="_blank" rel="noopener" title="Foto del inicio"><i class="bi bi-camera"></i></a>{% endif %}</td>
-              <td>{% if r.abierto %}<span class="badge text-bg-warning">En curso</span>{% else %}{{ r.hora_llegada|time:"H:i" }}{% if r.evidencia_llegada %} <a href="{% url 'cronograma:horas_extras_foto' r.pk 'llegada' %}" target="_blank" rel="noopener" title="Foto del regreso"><i class="bi bi-camera"></i></a>{% endif %}{% endif %}</td>
-              <td class="text-end">{{ r.duracion }}</td><td class="small">{{ r.cliente }}</td></tr>
+              <td class="text-nowrap">{{ r.hora_salida|time:"H:i" }}{% if r.salida_tardia %} <span class="badge text-bg-warning" title="{{ r.motivo_salida }}">tardío</span>{% endif %}{% if r.evidencia_salida %} <a href="{% url 'cronograma:horas_extras_foto' r.pk 'salida' %}" target="_blank" rel="noopener" title="Foto del inicio"><i class="bi bi-camera"></i></a>{% endif %}{% if r.mapa_salida %} <a href="{{ r.mapa_salida }}" target="_blank" rel="noopener" title="Ubicación del inicio{% if r.distancia_salida is not None %}: a {{ r.distancia_salida }} m de {{ r.referencia_salida }}{% endif %}"><i class="bi bi-geo-alt"></i></a>{% endif %}</td>
+              <td class="text-nowrap">{% if r.abierto %}<span class="badge text-bg-warning">En curso</span>{% else %}{{ r.hora_llegada|time:"H:i" }}{% if r.llegada_tardia %} <span class="badge text-bg-warning" title="{{ r.motivo_llegada }}">tardío</span>{% endif %}{% if r.evidencia_llegada %} <a href="{% url 'cronograma:horas_extras_foto' r.pk 'llegada' %}" target="_blank" rel="noopener" title="Foto del regreso"><i class="bi bi-camera"></i></a>{% endif %}{% if r.mapa_llegada %} <a href="{{ r.mapa_llegada }}" target="_blank" rel="noopener" title="Ubicación del regreso{% if r.distancia_llegada is not None %}: a {{ r.distancia_llegada }} m de {{ r.referencia_llegada }}{% endif %}"><i class="bi bi-geo-alt"></i></a>{% endif %}{% endif %}</td>
+              <td class="text-end">{{ r.duracion }}</td><td class="small">{{ r.cliente }}</td>
+              <td class="small">{% if r.validacion == 'verificado' or r.validacion == 'aprobado' %}<span class="badge text-bg-success">{% if r.validacion == 'verificado' %}Verificado{% else %}Aprobado{% endif %}</span>{% elif r.validacion == 'rechazado' %}<span class="badge text-bg-danger" title="{{ r.nota_validacion }}">Rechazado</span>{% elif r.validacion == 'anterior' %}<span class="text-muted-jn">—</span>{% elif not r.abierto %}<span class="badge text-bg-warning text-dark">Por validar</span>{% endif %}
+                {% if r.nota_validacion %}<div class="text-muted-jn">{{ r.nota_validacion }}</div>{% endif %}</td></tr>
           {% empty %}
-            <tr><td colspan="7" class="text-center text-muted-jn py-4">No hay horas registradas en este mes.</td></tr>
+            <tr><td colspan="8" class="text-center text-muted-jn py-4">No hay horas registradas en este mes.</td></tr>
           {% endfor %}
         </table>
       </div>
@@ -72,4 +136,23 @@
     {% if not user.es_supervisor and totales %}<p class="small mt-2 text-end">Total del mes: <b>{{ totales.0.1 }} h</b></p>{% endif %}
   </div>
 </div>
+<script>
+  // «En el momento»: antes de enviar se pide la ubicación al celular. Si no la da en 15 s (o no hay permiso), se envía
+  // igual y el reporte queda por validar.
+  document.querySelectorAll('form.con-ubicacion').forEach(function (form) {
+    form.addEventListener('submit', function (ev) {
+      if (form.dataset.listo) return;
+      ev.preventDefault();
+      const estado = form.querySelector('.estado-ubicacion');
+      const enviar = function () { form.dataset.listo = '1'; form.querySelectorAll('button').forEach(function (b) { b.disabled = true; }); form.submit(); };
+      if (!navigator.geolocation) { if (estado) estado.textContent = 'Este celular no da la ubicación: quedará por validar.'; enviar(); return; }
+      if (estado) estado.textContent = 'Tomando la ubicación del celular…';
+      navigator.geolocation.getCurrentPosition(function (p) {
+        form.lat.value = p.coords.latitude.toFixed(7); form.lon.value = p.coords.longitude.toFixed(7);
+        form.precision.value = Math.round(p.coords.accuracy || 0); enviar();
+      }, function () { if (estado) estado.textContent = 'Sin ubicación: se registra y quedará por validar.'; enviar(); },
+      {enableHighAccuracy: true, timeout: 15000, maximumAge: 0});
+    });
+  });
+</script>
 {% endblock %}

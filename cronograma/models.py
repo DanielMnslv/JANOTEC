@@ -421,6 +421,14 @@ class ReporteHorasExtra(models.Model):
         CONDUCTOR = "conductor", "Conductor (desde la entrega de llaves y el alistamiento del vehículo)"
         ACOMPANANTE = "acompanante", "Acompañante (desde la llegada a la sede del cliente)"
 
+    class Validacion(models.TextChoices):
+        """Si las horas se pueden pagar: en el momento y en el sitio se verifican solas; lo demás lo valida la coordinación."""
+        VERIFICADO = "verificado", "Verificado (en el momento y en el sitio)"
+        POR_VALIDAR = "por_validar", "Por validar (coordinación)"
+        APROBADO = "aprobado", "Aprobado por la coordinación"
+        RECHAZADO = "rechazado", "Rechazado (no suma)"
+        ANTERIOR = "anterior", "Registrado antes de la validación"
+
     colaborador = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="horas_extras")
     fecha = models.DateField(default=timezone.localdate)
     rol = models.CharField("en esta salida fue", max_length=12, choices=Rol.choices, blank=True)
@@ -434,6 +442,28 @@ class ReporteHorasExtra(models.Model):
     registrado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
                                        related_name="+")
     creado = models.DateTimeField(auto_now_add=True)
+    # --- Validación de cada momento: en el momento (hora del servidor + ubicación) o tardío (con motivo) ---
+    salida_tardia = models.BooleanField("inicio registrado tarde", default=False)
+    motivo_salida = models.TextField("por qué no registró el inicio a tiempo", blank=True)
+    lat_salida = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
+    lon_salida = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
+    precision_salida = models.PositiveIntegerField("precisión del GPS al iniciar (m)", null=True, blank=True)
+    distancia_salida = models.PositiveIntegerField("distancia al punto de referencia al iniciar (m)", null=True, blank=True)
+    referencia_salida = models.CharField("punto de referencia al iniciar", max_length=200, blank=True)
+    llegada_tardia = models.BooleanField("regreso registrado tarde", default=False)
+    motivo_llegada = models.TextField("por qué no registró el regreso a tiempo", blank=True)
+    lat_llegada = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
+    lon_llegada = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
+    precision_llegada = models.PositiveIntegerField("precisión del GPS al regresar (m)", null=True, blank=True)
+    distancia_llegada = models.PositiveIntegerField("distancia al punto de referencia al regresar (m)", null=True, blank=True)
+    referencia_llegada = models.CharField("punto de referencia al regresar", max_length=200, blank=True)
+    cerrado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="+", verbose_name="registró el regreso")
+    validacion = models.CharField(max_length=12, choices=Validacion.choices, default=Validacion.POR_VALIDAR, db_index=True)
+    validado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="+")
+    validado_en = models.DateTimeField(null=True, blank=True)
+    nota_validacion = models.CharField("nota de la validación", max_length=300, blank=True)
 
     class Meta:
         ordering = ["-fecha", "-hora_salida"]
@@ -454,8 +484,8 @@ class ReporteHorasExtra(models.Model):
 
     @property
     def minutos(self):
-        """Minutos del inicio al regreso; 0 mientras esté abierto."""
-        if self.hora_llegada is None:
+        """Minutos del inicio al regreso; 0 mientras esté abierto o si la coordinación lo rechazó."""
+        if self.hora_llegada is None or self.validacion == self.Validacion.RECHAZADO:
             return 0
         salida = self.hora_salida.hour * 60 + self.hora_salida.minute
         llegada = self.hora_llegada.hour * 60 + self.hora_llegada.minute
@@ -464,6 +494,24 @@ class ReporteHorasExtra(models.Model):
     @property
     def duracion(self):
         return f"{self.minutos // 60}:{self.minutos % 60:02d}"
+
+
+class UbicacionOficina(models.Model):
+    """Dónde queda la oficina de JANOTEC (entrega de llaves y regreso): el punto contra el que se confronta la
+    ubicación del celular en las horas extras. La fija la coordinación desde la oficina con «Usar mi ubicación»."""
+
+    latitud = models.DecimalField(max_digits=10, decimal_places=7)
+    longitud = models.DecimalField(max_digits=10, decimal_places=7)
+    actualizada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name="+")
+    actualizada = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "ubicación de la oficina"
+        verbose_name_plural = "ubicación de la oficina"
+
+    def __str__(self):
+        return f"Oficina JANOTEC ({self.latitud}, {self.longitud})"
 
 
 class SolicitudViaticos(models.Model):
