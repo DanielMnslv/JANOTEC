@@ -13,7 +13,7 @@
 {% if ticket %}<p class="text-muted-jn mb-4">Diligencie el acta al terminar la visita. Queda en el historial de la sede, el cliente la ve en su solicitud y se envía copia a los correos indicados.</p>
 {% else %}<p class="text-muted-jn mb-4"><span class="badge text-bg-warning me-1">Trabajo no programado</span> Deje constancia del trabajo que el cliente pidió y se resolvió en el momento. El acta queda en el historial de la sede y se envía copia a los correos indicados.</p>{% endif %}
 
-<form method="post" enctype="multipart/form-data" novalidate id="form-acta">{% csrf_token %}
+<form method="post" enctype="multipart/form-data" novalidate id="form-acta" data-borrador="acta:{{ user.pk }}:{% if ticket %}{{ ticket.radicado }}{% else %}{{ empresa.pk }}-{{ sede.pk|default:0 }}{% endif %}"{% if form.is_bound %} data-reenviado="1"{% endif %}>{% csrf_token %}
   {% if form.errors or equipos.total_error_count or utilizados.total_error_count or retirados.total_error_count or requeridos.total_error_count %}
     <div class="alert alert-warning"><i class="bi bi-exclamation-circle"></i> Revise los campos marcados.
       {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
@@ -153,6 +153,7 @@
           <div class="small text-muted-jn" id="estado-gps"><i class="bi bi-geo-alt"></i> Obteniendo la ubicación de la visita…</div>
         </section>
 
+        <div class="small text-muted-jn text-end mb-2" id="estado-borrador"><i class="bi bi-phone"></i> Lo que diligencie se guarda solo en este dispositivo: si sale (una llamada, otra aplicación) no se pierde.</div>
         <div class="d-flex justify-content-end gap-2">
           <a href="{% if ticket %}{{ ticket.get_absolute_url }}{% else %}{% url 'actas_lista' %}{% endif %}" class="btn btn-light">Cancelar</a>
           <button class="btn btn-accent"><i class="bi bi-check2-circle"></i> Revisar y guardar acta</button>
@@ -314,6 +315,7 @@
     document.getElementById('confirmar-acta').addEventListener('click', function () {
       confirmado = true;
       modal.hide();
+      formActa.dispatchEvent(new Event('acta:enviando'));  // el borrador se borra cuando el acta quede guardada
       formActa.submit();
     });
   })();

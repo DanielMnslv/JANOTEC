@@ -788,6 +788,20 @@ class ActaEnPlataformaTests(ActaBase):
         self.ticket.refresh_from_db()
         self.assertEqual(self.ticket.estado, E.PENDIENTE_VISITA)
 
+    def test_el_acta_guarda_borrador_en_el_dispositivo_y_lo_borra_al_registrarla(self):
+        """Borrador del acta (static/js/borrador_acta.js): clave por usuario y ticket, aviso al reenviar con errores y
+        marca en el mensaje de éxito para borrarlo del dispositivo."""
+        self.client.force_login(self.agente)
+        url = reverse("acta_nueva", args=[self.ticket.radicado])
+        r = self.client.get(url)
+        self.assertContains(r, f'data-borrador="acta:{self.agente.pk}:{self.ticket.radicado}"')
+        self.assertNotContains(r, "data-reenviado")
+        self.assertContains(r, "js/borrador_acta.js")
+        self.assertContains(self.client.post(url, self.datos_acta(firma_cliente="")), 'data-reenviado="1"')
+        r = self.client.post(url, self.datos_acta(), follow=True)
+        self.assertContains(r, "data-acta-guardada")
+        self.assertContains(r, "alert-success")
+
     def test_sin_firma_del_cliente_no_se_guarda(self):
         from .models import ActaSoporte
         self.client.force_login(self.agente)

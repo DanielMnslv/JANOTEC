@@ -1260,7 +1260,8 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
                          + (f" Se descontaron del inventario {len(usar_activos)} activo(s) y {len(usar_insumos)} insumo(s)."
                             if usar_activos or usar_insumos else "")
                          + (" Gracias por reportar la oportunidad comercial." if oportunidad else "")
-                         + (f" Bodega ya sabe que sobraron {len(sobrantes)} ítem(s) de la propuesta para recibírselos." if sobrantes else ""))
+                         + (f" Bodega ya sabe que sobraron {len(sobrantes)} ítem(s) de la propuesta para recibírselos." if sobrantes else ""),
+                         extra_tags="acta-guardada")  # borra el borrador del dispositivo (borrador_acta.js)
         if levantamiento:
             # El acta es la constancia de la visita; lo que cotiza comercial es el informe del requerimiento
             messages.info(request, "Ahora diligencie el informe del requerimiento para devolverlo al área comercial.")

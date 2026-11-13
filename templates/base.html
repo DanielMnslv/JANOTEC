@@ -64,7 +64,7 @@
 {% endif %}
 <main class="container-xl py-4">
   {% for m in messages %}
-    <div class="alert alert-{% if m.tags == 'error' %}danger{% else %}{{ m.tags }}{% endif %} alert-dismissible fade show" role="alert">
+    <div class="alert alert-{% if m.level_tag == 'error' %}danger{% else %}{{ m.level_tag }}{% endif %} alert-dismissible fade show" role="alert"{% if 'acta-guardada' in m.extra_tags %} data-acta-guardada{% endif %}>
       {{ m }}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
     </div>
   {% endfor %}
@@ -82,7 +82,8 @@
   });
 </script>
 {% if user.is_authenticated and user.es_supervisor %}{% include "tickets/_confirmar_recepcion.html" %}{% endif %}
-<script src="{% static 'js/firmas.js' %}?v=20261029"></script>
+<script src="{% static 'js/firmas.js' %}?v=20261113"></script>
 {% block scripts %}{% endblock %}
+<script src="{% static 'js/borrador_acta.js' %}?v=20261113"></script>
 </body>
 </html>

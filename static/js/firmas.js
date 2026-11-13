@@ -22,6 +22,7 @@
     lienzo.addEventListener('pointermove', function (e) { if (!dibujando) return; const [x, y] = punto(e); ctx.lineTo(x, y); ctx.stroke(); });
     ['pointerup', 'pointercancel'].forEach(function (ev) { lienzo.addEventListener(ev, function () { dibujando = false; if (trazos) campo.value = lienzo.toDataURL('image/png'); }); });
     caja.querySelector('.borrar-firma').addEventListener('click', function () { ctx.clearRect(0, 0, lienzo.width, lienzo.height); trazos = false; campo.value = ''; caja.classList.remove('con-firma'); });
+    caja.addEventListener('firma:cargar', ajustar);  // el borrador del acta repone una firma ya hecha
     ajustar();
   }
   document.querySelectorAll('.firma-pad').forEach(activar);
