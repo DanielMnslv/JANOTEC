@@ -2,7 +2,10 @@
 actas, informes, oportunidades, reportes y configuración de clientes.
 """
 
+from django.contrib.auth.decorators import login_required
 from django.urls import path
+
+from comercial import trimestre
 
 from . import calificacion, clientes, consulta, views
 
@@ -57,6 +60,7 @@ urlpatterns = [
     # Área de soporte
     path("soporte/", views.panel, name="panel"),
     path("soporte/reportes/", views.reportes, name="reportes"),
+    path("soporte/reportes/trimestre/", login_required(trimestre.vista), name="reportes_trimestre"),
     path("soporte/salud/", views.salud_procesos, name="salud_procesos"),
     path("soporte/salud/<int:pk>/revisar/", views.hallazgo_revisar, name="hallazgo_revisar"),
     # Clientes y sedes (los administra el área técnica)

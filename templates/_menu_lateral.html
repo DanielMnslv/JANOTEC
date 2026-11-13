@@ -25,6 +25,7 @@
   <li class="menu-grupo">Gestión</li>
   <li class="nav-item"><a class="nav-link {% if 'cliente' in u %}active{% endif %}" href="{% url 'clientes' %}"><i class="bi bi-building"></i> Clientes</a></li>
   <li class="nav-item"><a class="nav-link {% if u == 'reportes' %}active{% endif %}" href="{% url 'reportes' %}"><i class="bi bi-bar-chart"></i> Reportes</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'reportes_trimestre' %}active{% endif %}" href="{% url 'reportes_trimestre' %}"><i class="bi bi-graph-up"></i> Indicadores del trimestre</a></li>
   <li class="nav-item"><a class="nav-link" href="{% url 'admin:index' %}"><i class="bi bi-gear"></i> Configuración</a></li>
   {% endif %}
 {% elif user.es_bodega %}

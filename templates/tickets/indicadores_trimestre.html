@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% load inventario_extras %}
+{% block titulo %}Indicadores del trimestre · {{ trimestre.nombre }}{% endblock %}
+{% block contenido %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div>
+    <h1 class="h3 page-title mb-1">Indicadores comerciales y de proyectos</h1>
+    <p class="text-muted-jn mb-0"><b class="text-body">{{ trimestre.nombre }}</b>{% if en_curso %} · en curso, al {{ hasta|date:"d/m/Y" }}{% endif %} · comparado con el {{ trimestre.anterior.nombre }}</p>
+  </div>
+  <div class="d-flex gap-2 d-print-none">
+    <a class="btn btn-outline-secondary" href="{% url 'reportes' %}"><i class="bi bi-bar-chart"></i> Indicadores de gestión</a>
+    <a class="btn btn-outline-success" href="?t={{ trimestre.clave }}&formato=excel"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+    <button type="button" class="btn btn-outline-primary" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir</button>
+  </div>
+</div>
+
+<form method="get" class="card card-body d-print-none mb-4">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-8 col-xl-5"><label class="form-label small mb-1" for="t">Trimestre</label>
+      <select name="t" id="t" class="form-select" onchange="this.form.submit()">{% for t in trimestres %}<option value="{{ t.clave }}" {% if t.clave == trimestre.clave %}selected{% endif %}>{{ t.nombre }}</option>{% endfor %}</select></div>
+  </div>
+</form>
+
+{% if en_curso %}<div class="alert alert-info small"><i class="bi bi-info-circle"></i> El trimestre todavía no termina: se compara lo que va corrido con el trimestre anterior completo.</div>{% endif %}
+
+<div class="row g-3 mb-4">
+  {% for f in filas %}{% with i=f.i %}
+  <div class="col-sm-6 col-xl-4">
+    <div class="card h-100 indicador {% if i.cumple is True %}indicador-cumple{% elif i.cumple is False %}indicador-no-cumple{% endif %}"><div class="card-body">
+      <div class="d-flex justify-content-between align-items-start gap-2">
+        <div class="fw-semibold">{{ i.nombre }}</div>
+        {% if i.cumple is True %}<span class="badge text-bg-success">Cumple</span>{% elif i.cumple is False %}<span class="badge text-bg-danger">No cumple</span>{% elif i.valor is None %}<span class="badge text-bg-light">Sin datos</span>{% endif %}
+      </div>
+      <div class="indicador-valor">{{ f.valor }}</div>
+      <div class="small text-muted-jn">{% if i.meta is not None %}Meta: ≥ {{ i.meta|floatformat:"-1" }}{{ i.unidad }} · {% endif %}{{ i.detalle }}</div>
+      <div class="small mt-1">{% if i.anterior is not None %}
+        {% if i.tendencia == 'mejor' %}<span class="text-success"><i class="bi bi-arrow-up-right"></i> Mejoró</span>{% elif i.tendencia == 'peor' %}<span class="text-danger"><i class="bi bi-arrow-down-right"></i> Empeoró</span>{% else %}<span class="text-muted-jn"><i class="bi bi-arrow-right"></i> Igual</span>{% endif %}
+        <span class="text-muted-jn">· trimestre anterior: {{ f.anterior }}</span>
+      {% else %}<span class="text-muted-jn">Sin dato del trimestre anterior</span>{% endif %}</div>
+      <div class="small text-muted-jn mt-2 indicador-formula"><i class="bi bi-calculator"></i> {{ i.formula }}</div>
+    </div></div>
+  </div>
+  {% endwith %}{% endfor %}
+</div>
+
+<div class="card mb-4"><div class="card-header">Rentabilidad de los proyectos entregados</div>
+  <div class="table-responsive"><table class="table mb-0 table-tickets align-middle">
+    <thead><tr><th>Proyecto</th><th>Entregado</th><th class="text-end">Venta</th><th class="text-end">Costo real</th><th class="text-end">Utilidad</th><th class="text-end">Margen cotizado</th><th class="text-end">Margen real</th></tr></thead>
+    {% for p in v.proyectos %}<tr>
+      <td><a href="{{ p.ticket.get_absolute_url }}">{{ p.ticket.radicado }}</a>{% if p.propuesta %} · {{ p.propuesta }}{% endif %}
+        <div class="small text-muted-jn">{{ p.ticket.empresa|default:"" }}{% if p.ticket.sede %} · {{ p.ticket.sede }}{% endif %}</div>
+        {% if p.incompleto %}<div class="small text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> Costo incompleto: sin costo de {{ p.costo.sin_costo|join:", "|truncatechars:90 }}</div>{% endif %}</td>
+      <td class="text-nowrap">{{ p.entregado|date:"d/m/Y" }}</td>
+      <td class="text-end">{{ p.venta|pesos }}</td>
+      <td class="text-end" title="Material {{ p.costo.material|pesos }} · equipos {{ p.costo.equipos|pesos }} · servicios {{ p.costo.servicios|pesos }}">{{ p.costo.total|pesos }}</td>
+      <td class="text-end fw-semibold">{{ p.utilidad|pesos }}</td>
+      <td class="text-end">{% if p.margen_cotizado is not None %}{{ p.margen_cotizado|floatformat:1 }} %{% else %}—{% endif %}</td>
+      <td class="text-end fw-semibold">{% if p.margen_real is not None %}{{ p.margen_real|floatformat:1 }} %{% else %}—{% endif %}</td>
+    </tr>{% empty %}<tr><td colspan="7" class="text-muted-jn">No se entregaron proyectos en este trimestre.</td></tr>{% endfor %}
+  </table></div>
+  <div class="card-footer small text-muted-jn">El costo real es el material que salió de bodega para el ticket (neto de lo devuelto, a costo promedio de compra sin IVA), los equipos con placa que se quedaron en el cliente y los servicios subcontratados en las órdenes de compra. La mano de obra propia no tiene costo registrado.</div>
+</div>
+
+<div class="card mb-4"><div class="card-header">Desempeño del área técnica por técnico (actas del trimestre)</div>
+  <div class="table-responsive"><table class="table mb-0 table-tickets">
+    <thead><tr><th>Técnico</th><th class="text-end">Solucionadas</th><th class="text-end">Parciales</th><th class="text-end">Recomendaciones</th><th class="text-end">Desempeño</th></tr></thead>
+    {% for f in tecnicos %}<tr><td>{{ f.nombre }}</td><td class="text-end">{{ f.solucionadas }}</td><td class="text-end">{{ f.parciales }}</td><td class="text-end">{{ f.recomendaciones }}</td>
+      <td class="text-end fw-semibold">{% if f.desempeno is not None %}{{ f.desempeno|floatformat:1 }} %{% else %}—{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="5" class="text-muted-jn">Sin actas en el trimestre.</td></tr>{% endfor %}
+  </table></div>
+</div>
+
+<p class="small text-muted-jn mb-0">Generado el {{ generado|date:"d/m/Y h:i a" }} por {{ user.get_full_name|default:user.username }}. No cuentan los clientes de prueba ni lo cancelado.</p>
+{% endblock %}
