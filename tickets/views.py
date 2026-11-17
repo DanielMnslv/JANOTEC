@@ -771,27 +771,10 @@ def finalizar_sin_propuesta(request, radicado):
 @login_required
 @supervisor_requerido
 def reportes(request):
-    """Indicadores de gestión del periodo (para el informe de cierre) y el estado actual de las solicitudes."""
-    from . import indicadores
-
-    tickets = tickets_visibles(request.user)  # coordinador técnico: su área; dirección: todo
-    clave, desde, hasta, etiqueta = indicadores.periodo(request.GET)
-    ve_comercial = request.user.ve_comercial
-    resultado = indicadores.calcular(tickets, desde, hasta, ve_comercial)
-    distribucion = resultado["valores"]["distribucion"]
-    mayor = max(distribucion.values()) or 1
-    por_estado = [(label, tickets.filter(estado=valor).count(), valor) for valor, label in Ticket.Estado.choices]
-    return render(request, "tickets/personal_reportes.html", {
-        "periodo": clave, "desde": desde, "hasta": hasta, "etiqueta": etiqueta, "periodos": indicadores.PERIODOS,
-        "indicadores": resultado["indicadores"], "v": resultado["valores"], "ve_comercial": ve_comercial,
-        "distribucion": [(n, c, round(100 * c / mayor)) for n, c in distribucion.items()],
-        "por_responsable": indicadores.por_responsable(tickets, desde, hasta),
-        "por_cliente": indicadores.por_cliente(tickets, desde, hasta),
-        "por_tipo": indicadores.por_tipo(tickets, desde, hasta),
-        "por_falla": (tickets.filter(creado__gte=_inicio_del_dia(desde), creado__lt=_inicio_del_dia(hasta + timedelta(days=1)))
-                      .exclude(falla=None).values("falla__nombre", "categoria__nombre").annotate(n=Count("id")).order_by("-n")[:8]),
-        "por_estado": [e for e in por_estado if e[1]], "generado": timezone.localtime(),
-    })
+    """Antes «Indicadores de gestión»: ahora es la pestaña Técnica del Centro de indicadores (con el mismo periodo)."""
+    consulta = request.GET.copy()
+    consulta["pestana"] = "tecnica"
+    return redirect(reverse("indicadores_centro") + "?" + consulta.urlencode())
 
 
 # ============================================================================

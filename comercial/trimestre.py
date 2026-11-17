@@ -278,8 +278,11 @@ class Proyecto:
 
 def medir(desde, hasta):
     """Valores crudos de un periodo (los mismos se calculan para el trimestre anterior)."""
-    from tickets.models import ActaSoporte
+    return {**medir_comercial(desde, hasta), **medir_tecnico(desde, hasta)}
 
+
+def medir_comercial(desde, hasta):
+    """Propuestas entregadas y aprobadas, márgenes, clientes nuevos y proyectos entregados con su rentabilidad."""
     ini, fin = _inicio(desde), _inicio(hasta + timedelta(days=1))
     v = {}
 
@@ -340,7 +343,15 @@ def medir(desde, hasta):
     margenes = [p.margen_real for p in con_venta]
     v["margen_promedio"] = round(sum(margenes) / len(margenes), 1) if margenes else None
     v["incompletos"] = sum(1 for p in con_venta if p.incompleto)
+    return v
 
+
+def medir_tecnico(desde, hasta):
+    """Desempeño por el resultado de las actas y mantenimientos del plan por sede hechos a tiempo."""
+    from tickets.models import ActaSoporte
+
+    ini, fin = _inicio(desde), _inicio(hasta + timedelta(days=1))
+    v = {}
     # Desempeño del área técnica según el resultado de las actas
     actas = _sin_prueba(ActaSoporte.objects.filter(fecha__gte=ini, fecha__lt=fin), "empresa")
     R = ActaSoporte.Resultado
@@ -391,27 +402,38 @@ def _pesos(valor):
     return "$" + f"{int(Decimal(valor).quantize(Decimal('1'))):,}".replace(",", ".")
 
 
-def calcular(trimestre, hoy=None):
-    """Los indicadores del trimestre frente al trimestre anterior completo."""
+def metas():
+    """Metas de estos indicadores (None = sin meta); se ajustan en settings.INDICADORES_METAS."""
     from django.conf import settings
 
-    metas = {"aprobacion": 40, "margen_utilidad": None, "margen_consolidado": None, "desempeno": None, "mantenimiento": 90}
-    metas.update({k: v for k, v in getattr(settings, "INDICADORES_METAS", {}).items() if k in metas})
+    m = {"aprobacion": 40, "margen_utilidad": None, "margen_consolidado": None, "desempeno": None, "mantenimiento": 90}
+    m.update({k: v for k, v in getattr(settings, "INDICADORES_METAS", {}).items() if k in m})
+    return m
+
+
+def calcular(trimestre, hoy=None):
+    """Los indicadores del trimestre frente al trimestre anterior completo."""
     hasta = min(trimestre.hasta, hoy) if hoy else trimestre.hasta
     v = medir(trimestre.desde, hasta)
     a = medir(trimestre.anterior.desde, trimestre.anterior.hasta)
+    indicadores = indicadores_comerciales(v, a) + indicadores_tecnicos(v, a)
+    return {"indicadores": indicadores, "valores": v, "anteriores": a, "hasta": hasta}
 
-    indicadores = [
+
+def indicadores_comerciales(v, a):
+    """Indicadores comerciales y de proyectos con los valores del periodo (v) y del anterior (a)."""
+    metas_ = metas()
+    return [
         Indicador("entregadas", "Propuestas entregadas", v["entregadas"], "", "Versiones de propuesta entregadas al "
                   "cliente en el trimestre (la fecha de entrega o, si no se registró, la del envío)",
                   anterior=a["entregadas"], detalle=f"{_pesos(v['valor_entregado'])} antes de IVA"),
         Indicador("aprobadas", "Propuestas aprobadas", v["aprobadas"], "", "Versiones que el cliente aprobó en el trimestre",
                   anterior=a["aprobadas"], detalle=f"{_pesos(v['valor_aprobado'])} antes de IVA"),
         Indicador("aprobacion", "Tasa de aprobación", v["aprobacion"], "%",
-                  "Propuestas aprobadas ÷ (aprobadas + no aprobadas) respondidas en el trimestre", metas["aprobacion"],
+                  "Propuestas aprobadas ÷ (aprobadas + no aprobadas) respondidas en el trimestre", metas_["aprobacion"],
                   anterior=a["aprobacion"], detalle=f"{v['aprobadas']} aprobadas · {v['rechazadas']} no aprobadas"),
         Indicador("margen_utilidad", "Margen de utilidad (cotizado)", v["margen_utilidad"], "%",
-                  "De las propuestas aprobadas: (venta − costo cotizado) ÷ venta, antes de IVA", metas["margen_utilidad"],
+                  "De las propuestas aprobadas: (venta − costo cotizado) ÷ venta, antes de IVA", metas_["margen_utilidad"],
                   anterior=a["margen_utilidad"], detalle=f"Utilidad {_pesos(v['utilidad_cotizada'])}"
                   + (f" · {v['aprobadas_sin_costos']} sin costos en el cotizador" if v["aprobadas_sin_costos"] else "")),
         Indicador("margen_promedio", "Margen de rentabilidad (promedio por proyecto)", v["margen_promedio"], "%",
@@ -419,7 +441,7 @@ def calcular(trimestre, hoy=None):
                   anterior=a["margen_promedio"], detalle=f"{v['entregados']} proyectos entregados"),
         Indicador("margen_consolidado", "Margen de rentabilidad consolidado", v["margen_consolidado"], "%",
                   "Suma de utilidades reales ÷ suma de ventas de los proyectos entregados en el trimestre",
-                  metas["margen_consolidado"], anterior=a["margen_consolidado"],
+                  metas_["margen_consolidado"], anterior=a["margen_consolidado"],
                   detalle=f"Utilidad real {_pesos(v['utilidad_real'])} de {_pesos(v['venta_entregada'])}"
                   + (f" · {v['incompletos']} con costo incompleto" if v["incompletos"] else "")),
         Indicador("utilidad_nuevos", "Rentabilidad de clientes nuevos", float(v["utilidad_nuevos"]), "$",
@@ -431,75 +453,48 @@ def calcular(trimestre, hoy=None):
         Indicador("entregados", "Proyectos entregados", v["entregados"], "",
                   "Tickets con propuesta aprobada cerrados o con el informe de entrega aprobado en el trimestre",
                   anterior=a["entregados"], detalle=f"{_pesos(v['venta_entregada'])} en ventas"),
+    ]
+
+
+def indicadores_tecnicos(v, a):
+    """Desempeño por actas y mantenimientos a tiempo, con los valores del periodo (v) y del anterior (a)."""
+    metas_ = metas()
+    return [
         Indicador("desempeno", "Desempeño del área técnica", v["desempeno"], "%",
-                  "Actas solucionadas ÷ (solucionadas + solucionadas parcialmente) del trimestre", metas["desempeno"],
+                  "Actas solucionadas ÷ (solucionadas + solucionadas parcialmente) del trimestre", metas_["desempeno"],
                   anterior=a["desempeno"],
                   detalle=f"{v['solucionadas']} solucionadas · {v['parciales']} parciales de {v['actas']} actas"),
         Indicador("mantenimiento", "Mantenimientos preventivos a tiempo", v["mantenimiento"], "%",
                   "Mantenimientos del plan por sede que tocaban en el trimestre y se cerraron a más tardar 30 días después "
-                  "÷ los que ya debían estar hechos", metas["mantenimiento"], anterior=a["mantenimiento"],
+                  "÷ los que ya debían estar hechos", metas_["mantenimiento"], anterior=a["mantenimiento"],
                   detalle=f"{v['mantenimientos_a_tiempo']} a tiempo de {v['mantenimientos']} programados por el plan"),
     ]
-    return {"indicadores": indicadores, "valores": v, "anteriores": a, "hasta": hasta}
 
 
-def texto(indicador, valor):
-    """El valor listo para mostrar: pesos, porcentaje o número."""
-    if valor is None:
-        return "—"
-    if indicador.unidad == "$":
-        return _pesos(valor)
-    if indicador.unidad == "%":
-        return f"{valor:.1f} %".replace(".", ",")
-    return f"{valor:g}"
+NEGRITA_EXCEL = {"name": "Arial", "bold": True, "color": "FFFFFF"}
+FORMATOS_EXCEL = {"$": '"$"#,##0;-"$"#,##0;"-"', "%": '0.0" %"', "": "0"}
 
 
-# ---------------------------------------------------------------------------------------------------------------------
-# Pantalla y Excel
-# ---------------------------------------------------------------------------------------------------------------------
-def _filas(resultado):
-    """Cada indicador con sus valores ya escritos, para la plantilla y el Excel."""
-    return [{"i": i, "valor": texto(i, i.valor), "anterior": texto(i, i.anterior)} for i in resultado["indicadores"]]
-
-
-def _excel(trimestre, resultado, tecnicos):
-    """El libro con los indicadores, la rentabilidad de cada proyecto y el desempeño por técnico."""
-    from django.http import HttpResponse
-    from openpyxl import Workbook
+def encabezado_excel(hoja, columnas, anchos):
+    """Fila de títulos en verde JANOTEC, anchos de columna y paneles fijos debajo de los títulos."""
     from openpyxl.styles import Alignment, Font, PatternFill
 
-    negrita, fondo = Font(name="Arial", bold=True, color="FFFFFF"), PatternFill("solid", fgColor="6B7A2E")
-    formatos = {"$": '"$"#,##0;-"$"#,##0;"-"', "%": '0.0" %"', "": "0"}
+    hoja.append(columnas)
+    for celda in hoja[hoja.max_row]:
+        celda.font, celda.fill = Font(**NEGRITA_EXCEL), PatternFill("solid", fgColor="6B7A2E")
+        celda.alignment = Alignment(vertical="center", wrap_text=True)
+    for n, ancho in enumerate(anchos):
+        hoja.column_dimensions[chr(65 + n)].width = ancho
+    hoja.freeze_panes = f"A{hoja.max_row + 1}"  # con la celda se crearía una fila vacía
 
-    def encabezado(hoja, columnas, anchos):
-        hoja.append(columnas)
-        for celda in hoja[hoja.max_row]:
-            celda.font, celda.fill = negrita, fondo
-            celda.alignment = Alignment(vertical="center", wrap_text=True)
-        for n, ancho in enumerate(anchos):
-            hoja.column_dimensions[chr(65 + n)].width = ancho
-        hoja.freeze_panes = f"A{hoja.max_row + 1}"  # con la celda se crearía una fila vacía
 
-    libro = Workbook()
-    hoja = libro.active
-    hoja.title = "Indicadores"
-    hoja.append([f"Indicadores del {trimestre.nombre} frente al {trimestre.anterior.nombre}"])
-    hoja["A1"].font = Font(name="Arial", bold=True, size=12)
-    encabezado(hoja, ["Indicador", "Trimestre", "Trimestre anterior", "Variación", "Tendencia", "Meta", "Detalle", "Fórmula"],
-               (40, 16, 18, 14, 12, 10, 50, 70))
-    for i in resultado["indicadores"]:
-        hoja.append([i.nombre, i.valor, i.anterior, None, {"mejor": "Mejoró", "peor": "Empeoró", "igual": "Igual"}.get(i.tendencia, ""),
-                     i.meta, i.detalle, i.formula])
-        r = hoja.max_row
-        hoja.cell(r, 4).value = f'=IF(OR(B{r}="",C{r}=""),"",B{r}-C{r})'
-        for c in (2, 3, 4, 6):
-            hoja.cell(r, c).number_format = formatos[i.unidad]
-
+def hoja_proyectos(libro, proyectos):
+    """Hoja «Proyectos entregados»: venta, costo cotizado, costo real por partes, utilidad y márgenes (con fórmulas)."""
     hoja = libro.create_sheet("Proyectos entregados")
-    encabezado(hoja, ["Ticket", "Propuesta", "Cliente", "Sede", "Entregado", "Venta", "Costo cotizado", "Material de bodega",
-                      "Equipos", "Servicios subcontratados", "Costo real", "Utilidad real", "Margen cotizado", "Margen real",
-                      "Costo incompleto"], (12, 18, 34, 24, 12, 15, 15, 15, 13, 15, 15, 15, 12, 12, 40))
-    for p in resultado["valores"]["proyectos"]:
+    encabezado_excel(hoja, ["Ticket", "Propuesta", "Cliente", "Sede", "Entregado", "Venta", "Costo cotizado", "Material de bodega",
+                            "Equipos", "Servicios subcontratados", "Costo real", "Utilidad real", "Margen cotizado", "Margen real",
+                            "Costo incompleto"], (12, 18, 34, 24, 12, 15, 15, 15, 13, 15, 15, 15, 12, 12, 40))
+    for p in proyectos:
         t = p.ticket
         hoja.append([t.radicado, p.propuesta, str(t.empresa or ""), str(t.sede or ""), timezone.localtime(p.entregado).date(),
                      float(p.venta), float(p.costo_cotizado) if p.costo_cotizado is not None else None,
@@ -512,45 +507,56 @@ def _excel(trimestre, resultado, tecnicos):
         hoja.cell(r, 14).value = f'=IF(F{r}=0,"",L{r}/F{r})'
         hoja.cell(r, 5).number_format = "DD/MM/YYYY"
         for c in range(6, 13):
-            hoja.cell(r, c).number_format = formatos["$"]
+            hoja.cell(r, c).number_format = FORMATOS_EXCEL["$"]
         for c in (13, 14):
             hoja.cell(r, c).number_format = "0.0%"
+    return hoja
 
+
+def hoja_tecnicos(libro, tecnicos):
+    """Hoja «Actas por técnico»: solucionadas, parciales, recomendaciones y desempeño (con fórmulas)."""
     hoja = libro.create_sheet("Actas por técnico")
-    encabezado(hoja, ["Técnico", "Solucionadas", "Parciales", "Recomendaciones", "Total", "Desempeño"], (34, 14, 12, 16, 10, 12))
+    encabezado_excel(hoja, ["Técnico", "Solucionadas", "Parciales", "Recomendaciones", "Total", "Desempeño"], (34, 14, 12, 16, 10, 12))
     for f in tecnicos:
         hoja.append([f["nombre"], f["solucionadas"], f["parciales"], f["recomendaciones"], None, None])
         r = hoja.max_row
         hoja.cell(r, 5).value = f"=B{r}+C{r}+D{r}"
         hoja.cell(r, 6).value = f'=IF(B{r}+C{r}=0,"",B{r}/(B{r}+C{r}))'
         hoja.cell(r, 6).number_format = "0.0%"
+    return hoja
+
+
+def fuente_arial(libro):
+    """Arial 10 en todo lo que no sea título (la primera fila de «Indicadores» es el título del libro)."""
+    from openpyxl.styles import Font
 
     for h in libro.worksheets:
         for fila in h.iter_rows(min_row=2 if h.title == "Indicadores" else 1):
             for celda in fila:
                 if not celda.font.bold:
                     celda.font = Font(name="Arial", size=10)
+
+
+def respuesta_excel(libro, nombre):
+    """El libro como descarga .xlsx."""
+    from django.http import HttpResponse
+
     respuesta = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    respuesta["Content-Disposition"] = f'attachment; filename="indicadores_trimestre_{trimestre.clave}.xlsx"'
+    respuesta["Content-Disposition"] = f'attachment; filename="{nombre}"'
     libro.save(respuesta)
     return respuesta
 
 
 def vista(request):
-    """Indicadores comerciales y de proyectos del trimestre frente al anterior (coordinación técnica y dirección)."""
-    from django.core.exceptions import PermissionDenied
-    from django.shortcuts import render
+    """Antes «Indicadores del trimestre»: ahora es la pestaña Comercial y proyectos del Centro de indicadores, con el
+    trimestre elegido (?t=AAAA-N) como rango; también el Excel."""
+    from urllib.parse import urlencode
 
-    if not request.user.es_supervisor:  # la URL ya exige iniciar sesión
-        raise PermissionDenied
-    hoy = timezone.localdate()
-    trimestre = Trimestre.de_texto(request.GET.get("t"), hoy)
-    resultado = calcular(trimestre, hoy)
-    tecnicos = por_tecnico(trimestre.desde, resultado["hasta"])
+    from django.shortcuts import redirect
+    from django.urls import reverse
+
+    t = Trimestre.de_texto(request.GET.get("t"), timezone.localdate())
+    datos = {"pestana": "comercial", "periodo": "rango", "desde": t.desde.isoformat(), "hasta": t.hasta.isoformat()}
     if request.GET.get("formato") == "excel":
-        return _excel(trimestre, resultado, tecnicos)
-    return render(request, "tickets/indicadores_trimestre.html", {
-        "trimestre": trimestre, "trimestres": ultimos(hoy), "en_curso": resultado["hasta"] < trimestre.hasta,
-        "hasta": resultado["hasta"], "filas": _filas(resultado), "v": resultado["valores"], "tecnicos": tecnicos,
-        "generado": timezone.localtime(),
-    })
+        datos["formato"] = "excel"
+    return redirect(reverse("indicadores_centro") + "?" + urlencode(datos))

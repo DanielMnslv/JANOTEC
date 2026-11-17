@@ -419,8 +419,8 @@ class PersonalTests(BaseTickets):
     def test_panel_y_reportes_cargan(self):
         self.crear_ticket(prioridad="critica")
         self.client.force_login(self.supervisor)
-        for nombre in ("panel", "reportes"):
-            self.assertEqual(self.client.get(reverse(nombre)).status_code, 200, nombre)
+        for nombre in ("panel", "reportes", "indicadores_centro"):
+            self.assertEqual(self.client.get(reverse(nombre), follow=True).status_code, 200, nombre)
         self.assertEqual(self.client.get(reverse("panel") + "?orden=prioridad&asignado=sin&tipo=mantenimiento").status_code, 200)
 
     def test_anonimo_redirigido_a_login(self):
@@ -1804,7 +1804,7 @@ class IndicadoresDeGestionTests(BaseTickets):
         self.assertTrue(porc["satisfaccion"].cumple)
         self.client.force_login(self.supervisor)
         for q in ("", "?periodo=mes_anterior", "?periodo=anio", "?periodo=rango&desde=2026-01-01&hasta=2026-03-31"):
-            self.assertContains(self.client.get(reverse("reportes") + q), "Indicadores del periodo")
+            self.assertContains(self.client.get(reverse("reportes") + q, follow=True), "Eficacia en el cierre")
 
 
 class VincularActaHistoricaTests(BaseTickets):

@@ -1,0 +1,18 @@
+{# Tarjeta de un indicador (tickets/centro.tarjeta): valor, meta, cumple, tendencia frente al periodo anterior y fórmula #}
+{% with i=t.i %}
+<div class="col-sm-6 col-xl-4">
+  <div class="card h-100 indicador {% if i.cumple is True %}indicador-cumple{% elif i.cumple is False %}indicador-no-cumple{% endif %}"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-start gap-2">
+      <div class="fw-semibold">{{ i.nombre }}</div>
+      {% if i.cumple is True %}<span class="badge text-bg-success">Cumple</span>{% elif i.cumple is False %}<span class="badge text-bg-danger">No cumple</span>{% elif i.valor is None %}<span class="badge text-bg-light">Sin datos</span>{% endif %}
+    </div>
+    <div class="indicador-valor">{{ t.valor }}</div>
+    <div class="small text-muted-jn">{% if t.meta %}Meta: {{ t.meta }}{% if i.detalle %} · {% endif %}{% endif %}{{ i.detalle }}</div>
+    <div class="small mt-1">{% if i.anterior is not None %}
+      {% if i.tendencia == 'mejor' %}<span class="text-success"><i class="bi bi-arrow-up-right"></i> Mejoró</span>{% elif i.tendencia == 'peor' %}<span class="text-danger"><i class="bi bi-arrow-down-right"></i> Empeoró</span>{% else %}<span class="text-muted-jn"><i class="bi bi-arrow-right"></i> Igual</span>{% endif %}
+      <span class="text-muted-jn">· antes: {{ t.anterior }}</span>
+    {% else %}<span class="text-muted-jn">Sin dato del periodo anterior</span>{% endif %}</div>
+    <details class="small text-muted-jn mt-2 indicador-formula"><summary>Cómo se calcula</summary>{{ i.formula }}</details>
+  </div></div>
+</div>
+{% endwith %}

@@ -7,7 +7,7 @@ from django.urls import path
 
 from comercial import trimestre
 
-from . import calificacion, clientes, consulta, views
+from . import calificacion, centro, clientes, consulta, views
 
 urlpatterns = [
     path("", views.inicio, name="inicio"),
@@ -59,7 +59,8 @@ urlpatterns = [
     path("ticket/<str:radicado>/inventario-listo/", views.inventario_listo, name="inventario_listo"),
     # Área de soporte
     path("soporte/", views.panel, name="panel"),
-    path("soporte/reportes/", views.reportes, name="reportes"),
+    path("soporte/indicadores/", login_required(centro.vista), name="indicadores_centro"),
+    path("soporte/reportes/", views.reportes, name="reportes"),  # antiguo: lleva al Centro de indicadores
     path("soporte/reportes/trimestre/", login_required(trimestre.vista), name="reportes_trimestre"),
     path("soporte/salud/", views.salud_procesos, name="salud_procesos"),
     path("soporte/salud/<int:pk>/revisar/", views.hallazgo_revisar, name="hallazgo_revisar"),

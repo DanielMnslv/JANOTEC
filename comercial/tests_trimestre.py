@@ -109,11 +109,15 @@ class TrimestreTests(BaseComercial):
 
         url = reverse("reportes_trimestre") + "?t=2026-4"
         self.client.force_login(self.tecnico)
-        self.assertEqual(self.client.get(url).status_code, 403)
+        self.assertEqual(self.client.get(url, follow=True).status_code, 403)
         self.client.force_login(self.coord)
-        r = self.client.get(url)
+        # La dirección antigua lleva al Centro de indicadores con ese trimestre como rango
+        r = self.client.get(url, follow=True)
+        self.assertEqual(r.context["pestana"], "comercial")
+        self.assertEqual((r.context["p"].desde, r.context["p"].fin), (self.t4.desde, self.t4.hasta))
+        r = self.client.get(reverse("indicadores_centro") + "?pestana=tecnica&periodo=rango&desde=2026-10-01&hasta=2026-12-31")
         self.assertContains(r, "Desempeño del área técnica")
-        self.assertContains(r, "75,0 %")
-        r = self.client.get(url + "&formato=excel")
+        self.assertContains(r, "75 %")
+        r = self.client.get(url + "&formato=excel", follow=True)
         self.assertEqual(r["Content-Type"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        self.assertIn("indicadores_trimestre_2026-4.xlsx", r["Content-Disposition"])
+        self.assertIn("indicadores_comercial_2026-10-01_2026-12-31.xlsx", r["Content-Disposition"])

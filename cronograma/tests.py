@@ -331,7 +331,7 @@ class SemanalTests(BaseCronograma):
         self.assertEqual((ind["total"], ind["cliente_top"]["etiqueta"]), (2, "Grupo del Llano"))
         self.client.force_login(self.coord)
         self.assertContains(self.client.get(reverse("cronograma:insumos") + f"?d={self.lunes:%Y-%m-%d}"), "PIR sensor")
-        self.assertContains(self.client.get(reverse("cronograma:indicadores") + f"?d={self.lunes:%Y-%m-%d}"), "Carga por técnico")
+        self.assertContains(self.client.get(reverse("cronograma:indicadores") + f"?d={self.lunes:%Y-%m-%d}", follow=True), "Carga por técnico")
         self.client.force_login(self.tec)
         self.assertEqual(self.client.get(reverse("cronograma:insumos")).status_code, 403)
 

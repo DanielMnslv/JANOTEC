@@ -127,8 +127,7 @@ def _grupos(request, datos):
         if usuario.es_supervisor:
             grupo("gestion", "Gestión", "gestion",
                   Enlace("Clientes", reverse("clientes"), "bi-building", "cliente" in u),
-                  Enlace("Reportes", reverse("reportes"), "bi-bar-chart", u == "reportes"),
-                  Enlace("Indicadores del trimestre", reverse("reportes_trimestre"), "bi-graph-up", u == "reportes_trimestre"),
+                  Enlace("Indicadores", reverse("indicadores_centro"), "bi-graph-up", u == "indicadores_centro"),
                   Enlace("Configuración", reverse("admin:index"), "bi-gear"))
     elif usuario.es_bodega:
         # Bodega tiene muchas opciones: arranca abierto «Mi trabajo»; los demás grupos se abren con un toque

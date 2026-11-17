@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% load inventario_extras %}
+{# Centro de indicadores (tickets/centro.py): una pestaña por área, el mismo periodo y la misma comparación en todas #}
+{% block titulo %}Indicadores · {{ nombre_pestana }} · {{ p.nombre }}{% endblock %}
+{% block contenido %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div>
+    <h1 class="h3 page-title mb-1">Indicadores</h1>
+    <p class="text-muted-jn mb-0"><b class="text-body">{{ p.nombre }}</b>{% if p.en_curso %} · en curso, al {{ p.hasta|date:"d/m/Y" }}{% endif %} · frente a {{ p.nombre_anterior }}</p>
+  </div>
+  <div class="d-flex gap-2 d-print-none">
+    <a class="btn btn-outline-success" href="?pestana={{ pestana }}&{{ consulta }}&formato=excel"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+    <button type="button" class="btn btn-outline-primary" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir o PDF</button>
+  </div>
+</div>
+
+<ul class="nav nav-tabs mb-3 d-print-none flex-nowrap overflow-auto">
+  {% for clave, nombre, icono in pestanas %}
+  <li class="nav-item"><a class="nav-link text-nowrap {% if clave == pestana %}active{% endif %}" href="?pestana={{ clave }}&{{ consulta }}"><i class="bi {{ icono }}"></i> {{ nombre }}</a></li>
+  {% endfor %}
+</ul>
+
+<form method="get" class="card card-body d-print-none mb-4">
+  <input type="hidden" name="pestana" value="{{ pestana }}">
+  <div class="row g-2 align-items-end">
+    <div class="col-sm-4 col-lg-3"><label class="form-label small mb-1" for="periodo">Periodo</label>
+      <select name="periodo" id="periodo" class="form-select">{% for valor, nombre in periodos %}<option value="{{ valor }}" {% if valor == p.clave %}selected{% endif %}>{{ nombre }}</option>{% endfor %}</select></div>
+    <div class="col-6 col-sm-3 col-lg-2 rango"><label class="form-label small mb-1" for="desde">Desde</label><input type="date" name="desde" id="desde" class="form-control" value="{{ p.desde|date:'Y-m-d' }}"></div>
+    <div class="col-6 col-sm-3 col-lg-2 rango"><label class="form-label small mb-1" for="hasta">Hasta</label><input type="date" name="hasta" id="hasta" class="form-control" value="{{ p.fin|date:'Y-m-d' }}"></div>
+    <div class="col-sm-2 col-lg-2 d-grid"><button class="btn btn-primary"><i class="bi bi-funnel"></i> Ver</button></div>
+  </div>
+  <div class="small text-muted-jn mt-2"><i class="bi bi-info-circle"></i> Todo se compara con el periodo anterior completo{% if p.en_curso %}; como este periodo no ha terminado, se compara lo que va corrido{% endif %}.</div>
+</form>
+
+<h2 class="h5 mb-3 d-none d-print-block">{{ nombre_pestana }}</h2>
+
+{% if pestana == "resumen" %}
+  {% for g in grupos %}
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="h6 text-uppercase text-muted-jn mb-0">{{ g.titulo }}</h2>
+    <a class="small d-print-none" href="?pestana={{ g.clave }}&{{ consulta }}">Ver todo {{ g.titulo|lower }} <i class="bi bi-arrow-right"></i></a>
+  </div>
+  <div class="row g-3 mb-4">{% for t in g.tarjetas %}{% include "tickets/_tarjeta_indicador.html" %}{% endfor %}</div>
+  {% endfor %}
+
+{% elif pestana == "tecnica" %}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3"><div class="kpi"><div class="valor">{{ v.recibidos }}</div><div class="etiqueta">Solicitudes recibidas</div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi"><div class="valor">{{ v.cerrados }}</div><div class="etiqueta">Solicitudes cerradas</div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi"><div class="valor">{{ v.pendientes }}</div><div class="etiqueta">Pendientes al final del periodo</div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi"><div class="valor">{{ v.actas }}</div><div class="etiqueta">Actas de soporte{% if v.actas_no_programadas %} · {{ v.actas_no_programadas }} no programadas{% endif %}</div></div></div>
+  </div>
+  <div class="row g-3 mb-4">{% for t in tarjetas %}{% include "tickets/_tarjeta_indicador.html" %}{% endfor %}</div>
+  <div class="row g-4">
+    <div class="col-12"><div class="card"><div class="card-header">Gestión por técnico</div>
+      <div class="table-responsive"><table class="table mb-0 table-tickets">
+        <thead><tr><th>Técnico</th><th class="text-end">Actas</th><th class="text-end">Cerrados</th><th class="text-end">Abiertos hoy</th><th class="text-end">Días de solución</th><th class="text-end">Satisfacción</th><th class="text-end">Desempeño</th></tr></thead>
+        {% for f in por_tecnico %}<tr><td>{{ f.nombre }}</td><td class="text-end">{{ f.actas }}</td><td class="text-end">{{ f.cerrados }}</td><td class="text-end">{{ f.abiertos }}</td>
+          <td class="text-end">{{ f.solucion_dias|default_if_none:"—" }}</td><td class="text-end">{% if f.satisfaccion is not None %}{{ f.satisfaccion }}/10 <span class="small text-muted-jn">({{ f.calificaciones }})</span>{% else %}—{% endif %}</td>
+          <td class="text-end fw-semibold" title="{{ f.solucionadas }} solucionadas · {{ f.parciales }} parciales">{% if f.desempeno is not None %}{{ f.desempeno|floatformat:1 }} %{% else %}—{% endif %}</td></tr>
+        {% empty %}<tr><td colspan="7" class="text-muted-jn">Sin gestión de técnicos en el periodo.</td></tr>{% endfor %}
+      </table></div>
+      <div class="card-footer small text-muted-jn">Desempeño: actas solucionadas ÷ (solucionadas + parciales) del periodo.</div>
+    </div></div>
+
+    <div class="col-lg-5"><div class="card h-100"><div class="card-header">Calificaciones del periodo (1 a 10)</div><div class="card-body">
+      {% if v.calificaciones %}
+        {% for n, cantidad, ancho in distribucion reversed %}
+        <div class="d-flex align-items-center gap-2 small mb-1">
+          <span class="text-nowrap" style="width:3.2rem"><span class="estrellas-nota">★</span> {{ n }}</span>
+          <div class="flex-grow-1 barra-fondo"><div class="barra {% if n >= 8 %}barra-buena{% elif n >= 6 %}barra-media{% else %}barra-mala{% endif %}" style="width:{{ ancho }}%"></div></div>
+          <span class="text-end fw-semibold" style="width:2rem">{{ cantidad }}</span>
+        </div>
+        {% endfor %}
+        <div class="small text-muted-jn mt-2">{{ v.calificaciones }} calificaciones{% if v.respuesta_encuesta is not None %} · {{ v.respuesta_encuesta|floatformat:"-1" }} % de las solicitudes cerradas fueron calificadas{% endif %}</div>
+      {% else %}<p class="text-muted-jn mb-0">Todavía no hay calificaciones en este periodo. Al cerrar una solicitud, el cliente recibe el correo para calificar de 1 a 10.</p>{% endif %}
+    </div></div></div>
+
+    <div class="col-lg-7"><div class="card h-100"><div class="card-header">Clientes con más solicitudes</div>
+      <div class="table-responsive"><table class="table mb-0 table-tickets">
+        <thead><tr><th>Cliente</th><th class="text-end">Recibidas</th><th class="text-end">Cerradas</th><th class="text-end">Satisfacción</th></tr></thead>
+        {% for c in por_cliente %}<tr><td>{{ c.empresa__razon_social }}</td><td class="text-end fw-semibold">{{ c.n }}</td><td class="text-end">{{ c.cerrados }}</td><td class="text-end">{% if c.satisfaccion %}{{ c.satisfaccion|floatformat:1 }}/10{% else %}—{% endif %}</td></tr>
+        {% empty %}<tr><td colspan="4" class="text-muted-jn">Sin solicitudes en el periodo.</td></tr>{% endfor %}
+      </table></div>
+    </div></div>
+
+    <div class="col-lg-6"><div class="card h-100"><div class="card-header">Solicitudes por tipo de servicio</div>
+      <div class="table-responsive"><table class="table mb-0 table-tickets">
+        {% for nombre, n, pct in por_tipo %}<tr><td>{{ nombre }}</td><td class="text-end fw-semibold">{{ n }}</td><td class="text-end text-muted-jn">{{ pct|floatformat:"-1" }} %</td></tr>
+        {% empty %}<tr><td class="text-muted-jn">Sin solicitudes en el periodo.</td></tr>{% endfor %}
+      </table></div>
+      {% if por_falla %}<div class="card-header border-top">Fallas más frecuentes</div>
+      <table class="table mb-0 table-tickets">{% for f in por_falla %}<tr><td>{{ f.falla__nombre }}<div class="small text-muted-jn">{{ f.categoria__nombre }}</div></td><td class="text-end fw-semibold">{{ f.n }}</td></tr>{% endfor %}</table>{% endif %}
+    </div></div>
+
+    <div class="col-lg-6"><div class="card h-100"><div class="card-header">Estado actual de las solicitudes <span class="small text-muted-jn">(hoy, sin importar el periodo)</span></div>
+      <table class="table mb-0 table-tickets">{% for nombre, n, valor in por_estado %}<tr><td><a href="{% url 'panel' %}?estado={{ valor }}">{{ nombre }}</a></td><td class="text-end fw-semibold">{{ n }}</td></tr>{% endfor %}</table>
+    </div></div>
+  </div>
+
+{% elif pestana == "bodega" %}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3"><div class="kpi"><div class="valor">{{ v.alistados }}</div><div class="etiqueta">Instalaciones alistadas</div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi"><div class="valor">{{ v.actas_entrega }}</div><div class="etiqueta">Actas de entrega</div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi"><div class="valor">{{ v.compras_recibidas }}</div><div class="etiqueta">Órdenes de compra recibidas</div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi"><div class="valor">{{ v.cerrados_con_material }}</div><div class="etiqueta">Tickets cerrados con material</div></div></div>
+  </div>
+  <div class="row g-3 mb-4">{% for t in tarjetas %}{% include "tickets/_tarjeta_indicador.html" %}{% endfor %}</div>
+
+{% elif pestana == "comercial" %}
+  <div class="row g-3 mb-4">{% for t in tarjetas %}{% include "tickets/_tarjeta_indicador.html" %}{% endfor %}</div>
+  <div class="card mb-4"><div class="card-header">Rentabilidad de los proyectos entregados</div>
+    <div class="table-responsive"><table class="table mb-0 table-tickets align-middle">
+      <thead><tr><th>Proyecto</th><th>Entregado</th><th class="text-end">Venta</th><th class="text-end">Costo real</th><th class="text-end">Utilidad</th><th class="text-end">Margen cotizado</th><th class="text-end">Margen real</th></tr></thead>
+      {% for pr in v.proyectos %}<tr>
+        <td><a href="{{ pr.ticket.get_absolute_url }}">{{ pr.ticket.radicado }}</a>{% if pr.propuesta %} · {{ pr.propuesta }}{% endif %}
+          <div class="small text-muted-jn">{{ pr.ticket.empresa|default:"" }}{% if pr.ticket.sede %} · {{ pr.ticket.sede }}{% endif %}</div>
+          {% if pr.incompleto %}<div class="small text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> Costo incompleto: sin costo de {{ pr.costo.sin_costo|join:", "|truncatechars:90 }}</div>{% endif %}</td>
+        <td class="text-nowrap">{{ pr.entregado|date:"d/m/Y" }}</td>
+        <td class="text-end">{{ pr.venta|pesos }}</td>
+        <td class="text-end" title="Material {{ pr.costo.material|pesos }} · equipos {{ pr.costo.equipos|pesos }} · servicios {{ pr.costo.servicios|pesos }}">{{ pr.costo.total|pesos }}</td>
+        <td class="text-end fw-semibold">{{ pr.utilidad|pesos }}</td>
+        <td class="text-end">{% if pr.margen_cotizado is not None %}{{ pr.margen_cotizado|floatformat:1 }} %{% else %}—{% endif %}</td>
+        <td class="text-end fw-semibold">{% if pr.margen_real is not None %}{{ pr.margen_real|floatformat:1 }} %{% else %}—{% endif %}</td>
+      </tr>{% empty %}<tr><td colspan="7" class="text-muted-jn">No se entregaron proyectos en el periodo.</td></tr>{% endfor %}
+    </table></div>
+    <div class="card-footer small text-muted-jn">El costo real es el material que salió de bodega para el ticket (neto de lo devuelto, a costo promedio de compra sin IVA), los equipos con placa que se quedaron en el cliente y los servicios subcontratados en las órdenes de compra. La mano de obra propia no tiene costo registrado.</div>
+  </div>
+
+{% elif pestana == "cronograma" %}
+  <p class="text-muted-jn">Qué se atendió, dónde y quién: para priorizar sedes con soportes repetidos y equilibrar la carga de los técnicos.</p>
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3"><div class="kpi"><div class="valor">{{ crono.total }}</div><div class="etiqueta">Actividades · {{ crono.autorizadas }} autorizada{{ crono.autorizadas|pluralize }}{% if crono.en_rojo %} · <span class="text-danger">{{ crono.en_rojo }} en rojo</span>{% endif %}</div></div></div>
+    <div class="col-6 col-lg-3"><div class="kpi"><div class="valor">{{ crono.tipo_top.n|default:0 }}</div><div class="etiqueta">Tipo más frecuente<br><strong>{{ crono.tipo_top.etiqueta|default:"—" }}</strong></div></div></div>
+    <div class="col-6 col-lg-3"><div class="kpi"><div class="valor">{{ crono.cliente_top.n|default:0 }}</div><div class="etiqueta">Cliente más recurrente<br><strong>{{ crono.cliente_top.etiqueta|default:"—" }}</strong></div></div></div>
+    <div class="col-6 col-lg-3"><div class="kpi alerta"><div class="valor">{{ crono.sede_top.n|default:0 }}</div><div class="etiqueta">Sede a priorizar<br><strong>{{ crono.sede_top.etiqueta|default:"—" }}</strong></div></div></div>
+  </div>
+  <div class="row g-3">
+    {% include "cronograma/_barras.html" with titulo="Actividades por tipo" filas=crono.por_tipo %}
+    {% include "cronograma/_barras.html" with titulo="Carga por técnico" filas=crono.por_tecnico %}
+    {% include "cronograma/_barras.html" with titulo="Visitas por cliente" filas=crono.por_cliente %}
+    {% include "cronograma/_barras.html" with titulo="Soporte y mantenimiento por sede" filas=crono.por_sede %}
+    {% include "cronograma/_barras.html" with titulo="Por línea / solución" filas=crono.por_linea %}
+    {% include "cronograma/_barras.html" with titulo="Soportes técnicos por cliente" filas=crono.soportes_por_cliente alerta=True %}
+  </div>
+{% endif %}
+
+<p class="small text-muted-jn mt-4 mb-0">Generado el {{ generado|date:"d/m/Y h:i a" }} por {{ user.get_full_name|default:user.username }}. No cuentan los clientes de prueba ni lo cancelado. Las metas son las definidas para cada área.</p>
+<script>
+  (function () {
+    const sel = document.getElementById('periodo');
+    const mostrar = function () { document.querySelectorAll('.rango').forEach(function (c) { c.hidden = sel.value !== 'rango'; }); };
+    sel.addEventListener('change', mostrar); mostrar();
+    // Al imprimir se ve cómo se calcula cada indicador
+    window.addEventListener('beforeprint', function () { document.querySelectorAll('details.indicador-formula').forEach(function (d) { d.open = true; }); });
+  })();
+</script>
+{% endblock %}

@@ -322,9 +322,12 @@ def insumos(request):
 @login_required
 @supervisor_requerido
 def indicadores(request):
+    """Los indicadores de la semana ahora están en el Centro de indicadores (pestaña Cronograma, con esa semana)."""
+    from urllib.parse import urlencode
+
     ctx = _contexto_semana(request)
-    ctx.update(ind=semanal.indicadores(semanal.actividades_de(ctx["lunes"])), pestana="indicadores")
-    return render(request, "cronograma/indicadores.html", ctx)
+    datos = {"pestana": "cronograma", "periodo": "rango", "desde": ctx["lunes"].isoformat(), "hasta": ctx["domingo"].isoformat()}
+    return redirect(reverse("indicadores_centro") + "?" + urlencode(datos))
 
 
 @login_required

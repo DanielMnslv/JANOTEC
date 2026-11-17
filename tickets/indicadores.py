@@ -213,11 +213,12 @@ def _medir_bodega(tickets, ini, fin):
     return v
 
 
-def calcular(tickets, desde, hasta, ve_comercial=False):
-    """Indicadores del periodo, comparados con el periodo anterior de la misma duración."""
+def calcular(tickets, desde, hasta, ve_comercial=False, anterior=None):
+    """Indicadores del periodo, comparados con el periodo anterior de la misma duración o con ``anterior``
+    (desde, hasta), p. ej. el mes o el trimestre anterior completo en el Centro de indicadores."""
     v = _medir(tickets, desde, hasta, ve_comercial)
     dias = (hasta - desde).days + 1
-    antes = _medir(tickets, desde - timedelta(days=dias), desde - timedelta(days=1), ve_comercial)
+    antes = _medir(tickets, *(anterior or (desde - timedelta(days=dias), desde - timedelta(days=1))), ve_comercial)
     m = METAS
 
     indicadores = [
