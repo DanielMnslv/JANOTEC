@@ -57,3 +57,37 @@ class MenuPorRolTests(TestCase):
         self.assertEqual(self.menu(usuario("tec", rol="agente"))["otros"], [])
         self.client.force_login(usuario("tec2", rol="agente"))
         self.assertNotContains(self.client.get(reverse("mi_dia")), "Más áreas")
+
+class MenuPasoAPasoTests(TestCase):
+    """Cada área ve sus opciones en el orden de su trabajo, numeradas; las de apoyo van debajo sin número."""
+
+    def pasos(self, u, url="mi_dia", **params):
+        self.client.force_login(u)
+        menu = self.client.get(reverse(url), params, follow=True).context["menu"]
+        return {g.clave: [(e.paso, e.nombre) for e in g.enlaces] for g in menu["propios"]}
+
+    def test_coordinador_sigue_el_paso_a_paso_del_ticket(self):
+        tecnica = self.pasos(usuario("coord", rol="supervisor"))["tecnica"]
+        numerados = [n for p, n in tecnica if p]
+        self.assertEqual(numerados[:3], ["Recepcionar", "Asignar técnico", "Programar visita"])
+        self.assertEqual(numerados[-2:], ["Informe", "Confirmar y cerrar"])
+        self.assertEqual([p for p, _ in tecnica if p], list(range(1, len(numerados) + 1)))
+        self.assertTrue(all(p == 0 for p, _ in tecnica[len(numerados):]))  # el apoyo, debajo
+
+    def test_la_vista_abierta_marca_su_paso(self):
+        u = usuario("coord2", rol="supervisor")
+        self.client.force_login(u)
+        r = self.client.get(reverse("panel"), {"estado": "por_programar"})
+        activos = [e.nombre for g in r.context["menu"]["propios"] for e in g.enlaces if e.activo]
+        self.assertEqual(activos, ["Programar visita"])
+        self.assertContains(r, 'class="menu-paso"')
+
+    def test_tecnico_bodega_comercial_y_administrativa(self):
+        self.assertEqual(self.pasos(usuario("tec", rol="agente"))["tecnica"][0], (1, "Mis visitas por atender"))
+        bodega = self.pasos(usuario("bod", rol="bodega"))
+        self.assertEqual([n for p, n in bodega["bodega-0"] if p],
+                         ["Tickets en bodega", "Validar solicitudes de material", "Comprar lo que falta", "Recibir compras",
+                          "Entregar al técnico", "Devoluciones y cuadre"])
+        self.assertNotIn("Entregar a técnico", [n for _, n in bodega["bodega-3"]])  # no se repite abajo
+        self.assertEqual(self.pasos(usuario("ases", rol="comercial"))["comercial"][0], (1, "Nuevo requerimiento"))
+        self.assertEqual(self.pasos(usuario("adm", rol="administrativo"))["administrativa"][0], (1, "Propuestas por armar"))

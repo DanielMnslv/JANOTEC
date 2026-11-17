@@ -422,6 +422,9 @@ class SolicitudesDeMaterialTests(BaseInventario):
         InformeRequerimiento.objects.create(ficha=ficha, necesidad="Cableado", elaborado_por=self.supervisor,
                                             servicios="1 Instalación de cableado",
                                             materiales="40 m Cable UTP exterior [CAB-UTP-EXT]")
+        from comercial.models import PropuestaVersion
+        from django.utils import timezone
+        PropuestaVersion.objects.create(ficha=ficha, numero=1, codigo="PE-2026-11-001", enviada=timezone.now())
         com.registrar_respuesta(ficha, self.supervisor, aprobada=True)
         self.ticket.refresh_from_db()
         # 1. Aprobada: el ticket queda «En inventario» y bodega tiene la lista con lo aprobado (sin el servicio)
@@ -450,6 +453,9 @@ class SolicitudesDeMaterialTests(BaseInventario):
         # 4. Entrega: queda el acta (solo lo entregado, en sus dos secciones) en PDF y el técnico confirma
         mail.outbox.clear()
         self.client.force_login(self.bodega)
+        # Bodega elige la propuesta aprobada en «Entregar» y se trae lo aprobado
+        self.assertContains(self.client.get(reverse("inventario:entrega")), f"({s.numero})")
+        self.assertContains(self.client.get(reverse("inventario:entrega"), {"solicitud": s.pk}), "Propuesta aprobada <b>PE-2026-11-001</b>", html=False)
         with self.captureOnCommitCallbacks(execute=True):
             self.client.post(reverse("inventario:entrega"), {
                 "solicitud": s.pk, "tecnico": self.agente.pk, "modalidad": "venta", "ticket": self.ticket.pk,
@@ -1107,8 +1113,6 @@ class ApartarYCuadrarTests(BaseInventario):
         self.assertEqual(sol.total_apartado(), {"CAB-UTP-EXT": 5})
 
     def test_cuadre_del_material_del_ticket(self):
-        from tickets.diagnostico import material_sin_cuadrar
-
         from . import solicitudes as sol
         s = self.solicitud_aprobada(cantidad="40", camaras=1)
         self.entregar(solicitud=s)
@@ -1120,10 +1124,8 @@ class ApartarYCuadrarTests(BaseInventario):
                                ticket=self.ticket)
         c = sol.cuadre(self.ticket)
         self.assertEqual([(f["codigo"], f["pendiente"]) for f in c["pendientes"]], [("CAB-UTP-EXT", 10)])
-        # Si se cierra así, «Salud de los procesos» lo señala
         self.ticket.estado = Ticket.Estado.CERRADO
         self.ticket.save()
-        self.assertEqual(len(material_sin_cuadrar()), 1)
         self.assertIn("10 Cable UTP exterior", sol.resumen_pendiente(self.ticket))
         # Bodega recibe el sobrante indicando el ticket (viene precargado) y queda cuadrado
         self.client.force_login(self.bodega)
@@ -1133,7 +1135,6 @@ class ApartarYCuadrarTests(BaseInventario):
                          {"ticket": self.ticket.pk, f"cantidad_{self.cable.pk}": "10", "observaciones": "Sobró"})
         c = sol.cuadre(self.ticket)
         self.assertTrue(c["cuadrado"])
-        self.assertEqual(material_sin_cuadrar(), [])
 
 
 class EquiposRetiradosTests(BaseInventario):

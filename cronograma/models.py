@@ -414,7 +414,7 @@ class ReporteHorasExtra(models.Model):
 
     * **Inicio**: el conductor cuenta desde que le entregan las llaves para el alistamiento (pre operación) del vehículo;
       el acompañante, desde que llega a la sede del cliente e inicia la operación.
-    * **Regreso**: la hora de llegada, con su foto. Hasta que no se cierre, el reporte no suma horas.
+    * **Fin**: la hora en que termina, con su foto y la ubicación, esté donde esté. Hasta que no se cierre, no suma horas.
     """
 
     class Rol(models.TextChoices):
@@ -422,8 +422,8 @@ class ReporteHorasExtra(models.Model):
         ACOMPANANTE = "acompanante", "Acompañante (desde la llegada a la sede del cliente)"
 
     class Validacion(models.TextChoices):
-        """Si las horas se pueden pagar: en el momento y en el sitio se verifican solas; lo demás lo valida la coordinación."""
-        VERIFICADO = "verificado", "Verificado (en el momento y en el sitio)"
+        """Si las horas se pueden pagar: en el momento y con ubicación se verifican solas; lo demás lo valida la coordinación."""
+        VERIFICADO = "verificado", "Verificado (en el momento, con foto y ubicación)"
         POR_VALIDAR = "por_validar", "Por validar (coordinación)"
         APROBADO = "aprobado", "Aprobado por la coordinación"
         RECHAZADO = "rechazado", "Rechazado (no suma)"
@@ -434,10 +434,10 @@ class ReporteHorasExtra(models.Model):
     rol = models.CharField("en esta salida fue", max_length=12, choices=Rol.choices, blank=True)
     hora_salida = models.TimeField("hora de inicio")
     evidencia_salida = models.ImageField("foto del inicio", upload_to=ruta_evidencia_horas, blank=True,
-                                         help_text="Conductor: las llaves o el vehículo en alistamiento. Acompañante: la llegada a la sede.")
-    hora_llegada = models.TimeField("hora de llegada", null=True, blank=True)
-    evidencia_llegada = models.ImageField("foto del regreso", upload_to=ruta_evidencia_horas, blank=True)
-    cerrado_en = models.DateTimeField("regreso registrado", null=True, blank=True)
+                                         help_text="Una foto del lugar donde está al iniciar (el vehículo, la sede, la tarea).")
+    hora_llegada = models.TimeField("hora de fin", null=True, blank=True)
+    evidencia_llegada = models.ImageField("foto del fin", upload_to=ruta_evidencia_horas, blank=True)
+    cerrado_en = models.DateTimeField("fin registrado", null=True, blank=True)
     cliente = models.CharField("cliente al que se dirige", max_length=200)
     registrado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
                                        related_name="+")
@@ -448,17 +448,13 @@ class ReporteHorasExtra(models.Model):
     lat_salida = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
     lon_salida = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
     precision_salida = models.PositiveIntegerField("precisión del GPS al iniciar (m)", null=True, blank=True)
-    distancia_salida = models.PositiveIntegerField("distancia al punto de referencia al iniciar (m)", null=True, blank=True)
-    referencia_salida = models.CharField("punto de referencia al iniciar", max_length=200, blank=True)
-    llegada_tardia = models.BooleanField("regreso registrado tarde", default=False)
-    motivo_llegada = models.TextField("por qué no registró el regreso a tiempo", blank=True)
+    llegada_tardia = models.BooleanField("fin registrado tarde", default=False)
+    motivo_llegada = models.TextField("por qué no registró el fin a tiempo", blank=True)
     lat_llegada = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
     lon_llegada = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
     precision_llegada = models.PositiveIntegerField("precisión del GPS al regresar (m)", null=True, blank=True)
-    distancia_llegada = models.PositiveIntegerField("distancia al punto de referencia al regresar (m)", null=True, blank=True)
-    referencia_llegada = models.CharField("punto de referencia al regresar", max_length=200, blank=True)
     cerrado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
-                                    related_name="+", verbose_name="registró el regreso")
+                                    related_name="+", verbose_name="registró el fin")
     validacion = models.CharField(max_length=12, choices=Validacion.choices, default=Validacion.POR_VALIDAR, db_index=True)
     validado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                      related_name="+")
@@ -475,7 +471,7 @@ class ReporteHorasExtra(models.Model):
 
     @property
     def abierto(self):
-        """Salió pero todavía no registró el regreso."""
+        """Inició pero todavía no registró el fin."""
         return self.hora_llegada is None
 
     @property
@@ -484,7 +480,7 @@ class ReporteHorasExtra(models.Model):
 
     @property
     def minutos(self):
-        """Minutos del inicio al regreso; 0 mientras esté abierto o si la coordinación lo rechazó."""
+        """Minutos del inicio al fin; 0 mientras esté abierto o si la coordinación lo rechazó."""
         if self.hora_llegada is None or self.validacion == self.Validacion.RECHAZADO:
             return 0
         salida = self.hora_salida.hour * 60 + self.hora_salida.minute
@@ -494,24 +490,6 @@ class ReporteHorasExtra(models.Model):
     @property
     def duracion(self):
         return f"{self.minutos // 60}:{self.minutos % 60:02d}"
-
-
-class UbicacionOficina(models.Model):
-    """Dónde queda la oficina de JANOTEC (entrega de llaves y regreso): el punto contra el que se confronta la
-    ubicación del celular en las horas extras. La fija la coordinación desde la oficina con «Usar mi ubicación»."""
-
-    latitud = models.DecimalField(max_digits=10, decimal_places=7)
-    longitud = models.DecimalField(max_digits=10, decimal_places=7)
-    actualizada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
-                                        related_name="+")
-    actualizada = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "ubicación de la oficina"
-        verbose_name_plural = "ubicación de la oficina"
-
-    def __str__(self):
-        return f"Oficina JANOTEC ({self.latitud}, {self.longitud})"
 
 
 class SolicitudViaticos(models.Model):

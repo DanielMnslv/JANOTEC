@@ -222,7 +222,7 @@ class ReporteHorasExtraForm(BootstrapMixin, forms.ModelForm):
 
 
 class CierreHorasExtraForm(BootstrapMixin, forms.ModelForm):
-    """Segundo momento: el regreso. En el momento solo pide la foto (la hora es la del servidor); tardío pide la hora
+    """Segundo momento: el fin. En el momento solo pide la foto (la hora es la del servidor); tardío pide la hora
     real de llegada y el motivo."""
     motivo = forms.CharField(label="¿Por qué no lo registró en el momento?", required=False, max_length=500,
                              widget=forms.Textarea(attrs={"rows": 2}))

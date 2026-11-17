@@ -765,7 +765,7 @@ class GestionForm(BootstrapMixin, forms.Form):
             if ficha and ficha.etapa == "levantamiento" and ticket.estado != Ticket.Estado.EN_PROCESO:
                 comerciales.add(Ticket.Estado.EN_PROCESO)  # el levantamiento vuelve con el informe del técnico
             # Paso a paso: solo los cambios que tienen sentido desde el estado actual (lo demás, con «Omitir paso»)
-            from .diagnostico import SIGUIENTES
+            from .pasos import SIGUIENTES
             validos = SIGUIENTES.get(ticket.estado, set()) | {ticket.estado}
             self.fields["estado"].choices = [
                 (v, "En gestión comercial (pasa al área comercial)" if v == Ticket.Estado.EN_PROCESO and v != ticket.estado else l)

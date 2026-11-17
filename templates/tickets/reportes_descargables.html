@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{# Reportes descargables (tickets/reportes.py): los listados en Excel del periodo, solo los que le tocan a cada persona #}
+{% block titulo %}Reportes en Excel · {{ p.nombre }}{% endblock %}
+{% block contenido %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div>
+    <h1 class="h3 page-title mb-1">Reportes en Excel</h1>
+    <p class="text-muted-jn mb-0">Los listados fila por fila de <b class="text-body">{{ p.nombre }}</b> ({{ p.desde|date:"d/m/Y" }} al {{ p.fin|date:"d/m/Y" }}), para revisar o cruzar en Excel.</p>
+  </div>
+  {% if ve_centro %}<a class="btn btn-outline-secondary" href="{% url 'indicadores_centro' %}?{{ consulta }}"><i class="bi bi-graph-up"></i> Indicadores</a>{% endif %}
+</div>
+
+<form method="get" class="card card-body mb-4">
+  <div class="row g-2 align-items-end">
+    <div class="col-sm-4 col-lg-3"><label class="form-label small mb-1" for="periodo">Periodo</label>
+      <select name="periodo" id="periodo" class="form-select">{% for valor, nombre in periodos %}<option value="{{ valor }}" {% if valor == p.clave %}selected{% endif %}>{{ nombre }}</option>{% endfor %}</select></div>
+    <div class="col-6 col-sm-3 col-lg-2 rango"><label class="form-label small mb-1" for="desde">Desde</label><input type="date" name="desde" id="desde" class="form-control" value="{{ p.desde|date:'Y-m-d' }}"></div>
+    <div class="col-6 col-sm-3 col-lg-2 rango"><label class="form-label small mb-1" for="hasta">Hasta</label><input type="date" name="hasta" id="hasta" class="form-control" value="{{ p.fin|date:'Y-m-d' }}"></div>
+    <div class="col-sm-2 col-lg-2 d-grid"><button class="btn btn-primary"><i class="bi bi-funnel"></i> Cambiar</button></div>
+  </div>
+</form>
+
+{% for area, lista in areas %}
+<h2 class="h6 text-uppercase text-muted-jn mb-2">{{ area }}</h2>
+<div class="row g-3 mb-4">
+  {% for r in lista %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100"><div class="card-body d-flex flex-column">
+      <div class="fw-semibold mb-1"><i class="bi {{ r.icono }} me-1"></i> {{ r.nombre }}</div>
+      <p class="small text-muted-jn flex-grow-1 mb-3">{{ r.descripcion }}</p>
+      <a class="btn btn-outline-success align-self-start" href="?reporte={{ r.clave }}&{{ consulta }}"><i class="bi bi-file-earmark-excel"></i> Descargar Excel</a>
+    </div></div>
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}
+
+<p class="small text-muted-jn mb-0">No salen los clientes de prueba. Cada archivo trae al final cuántas filas tiene, quién lo generó y cuándo.</p>
+<script>
+  (function () {
+    const sel = document.getElementById('periodo');
+    const mostrar = function () { document.querySelectorAll('.rango').forEach(function (c) { c.hidden = sel.value !== 'rango'; }); };
+    sel.addEventListener('change', mostrar); mostrar();
+  })();
+</script>
+{% endblock %}

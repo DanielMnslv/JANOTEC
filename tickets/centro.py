@@ -25,6 +25,7 @@ from django.utils import timezone
 from comercial import trimestre as tri
 
 from . import indicadores as ind
+from . import metas
 from .models import Ticket
 
 MESES = ind.MESES
@@ -197,8 +198,9 @@ def _por_tecnico(tickets, p):
 
 
 def _elegir(lista, claves):
+    """Los indicadores de esas claves, en ese orden, con la meta vigente."""
     por_clave = {i.clave: i for i in lista}
-    return [por_clave[c] for c in claves if c in por_clave]
+    return metas.aplicar([por_clave[c] for c in claves if c in por_clave])
 
 
 def calcular(pestana, usuario, tickets, p):
@@ -222,7 +224,7 @@ def calcular(pestana, usuario, tickets, p):
         ctx.update(tarjetas=[tarjeta(i) for i in _elegir(g["indicadores"], BODEGA)], v=g["valores"])
     elif pestana == "comercial":
         v, a = tri.medir_comercial(p.desde, p.hasta), tri.medir_comercial(*p.anterior)
-        ctx.update(tarjetas=[tarjeta(i) for i in tri.indicadores_comerciales(v, a)], v=v)
+        ctx.update(tarjetas=[tarjeta(i) for i in metas.aplicar(tri.indicadores_comerciales(v, a))], v=v)
     elif pestana == "cronograma":
         from cronograma import semanal
         from cronograma.models import Actividad
@@ -325,3 +327,40 @@ def vista(request):
         **ctx, "pestana": pestana, "nombre_pestana": nombre_pestana, "pestanas": pestanas, "p": p,
         "periodos": PERIODOS, "consulta": consulta.urlencode(), "generado": timezone.localtime(),
     })
+
+
+def vista_metas(request):
+    """Metas de los indicadores: dirección o la coordinación las fijan (vacío = sin meta) y quedan con quién y cuándo."""
+    from django.contrib import messages
+    from django.shortcuts import redirect
+    from django.urls import reverse
+
+    from .models import MetaIndicador
+
+    if not request.user.es_supervisor:
+        raise PermissionDenied
+    errores = []
+    if request.method == "POST":
+        cambiadas, errores = metas.guardar(request.POST, request.user)
+        if not errores:
+            if cambiadas:
+                messages.success(request, "Metas guardadas: " + ", ".join(d.nombre for d in cambiadas) + ".")
+            else:
+                messages.info(request, "No cambió ninguna meta.")
+            return redirect("indicadores_metas")
+    vigentes = metas.valores()
+    guardadas = {m.clave: m for m in MetaIndicador.objects.select_related("actualizada_por")}
+    filas = []
+    for d in metas.CATALOGO:
+        valor = request.POST.get(f"meta_{d.clave}") if errores else vigentes.get(d.clave)
+        if isinstance(valor, float):
+            valor = f"{valor:g}".replace(".", ",")
+        filas.append({"d": d, "valor": "" if valor is None else valor, "guardada": guardadas.get(d.clave),
+                      "defecto": "sin meta" if d.defecto is None else f"{d.defecto:g}".replace(".", ",")})
+    areas = []
+    for f in filas:
+        if not areas or areas[-1][0] != f["d"].area:
+            areas.append((f["d"].area, []))
+        areas[-1][1].append(f)
+    return render(request, "tickets/centro_metas.html", {"areas": areas, "errores": errores,
+                                                         "volver": reverse("indicadores_centro")})

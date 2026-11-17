@@ -582,11 +582,11 @@ def horas_extras(request):
     """Auto reporte de salida a campo, con la validación de cada momento (ver ``cronograma/horas_validacion.py``).
 
     Acciones (POST «accion»): iniciar / iniciar_tardio, cerrar / cerrar_tardio (con «reporte»), validar (coordinación:
-    aprobar o rechazar con nota) y oficina (coordinación: fijar la ubicación de la oficina con la del celular).
+    aprobar o rechazar con nota). Cada momento lleva foto y la ubicación del celular, esté donde esté.
     El técnico ve lo suyo; la coordinación ve todo, valida y descarga el Excel."""
     from . import horas_validacion as hv
     from .forms import CierreHorasExtraForm, ReporteHorasExtraForm
-    from .models import ReporteHorasExtra, UbicacionOficina
+    from .models import ReporteHorasExtra
 
     V = ReporteHorasExtra.Validacion
     accion = request.POST.get("accion", "") if request.method == "POST" else ""
@@ -622,10 +622,10 @@ def horas_extras(request):
             if not tardio and reporte.lat_salida is None:
                 aviso = " Ojo: no llegó la ubicación del celular; quedará por validar."
             messages.success(request, f"Inicio registrado el {reporte.fecha:%d/%m/%Y} a las {reporte.hora_salida:%H:%M} en "
-                                      f"{reporte.cliente}. Al regresar, registre la llegada con su foto.{aviso}")
+                                      f"{reporte.cliente}. Al terminar, registre el fin con su foto.{aviso}")
             return redirect("cronograma:horas_extras")
 
-    # --- Regreso ---
+    # --- Fin ---
     if accion in ("cerrar", "cerrar_tardio"):
         reporte = get_object_or_404(ReporteHorasExtra, pk=request.POST.get("reporte"), hora_llegada__isnull=True)
         if reporte.colaborador_id != request.user.pk and not request.user.es_supervisor:
@@ -645,14 +645,14 @@ def horas_extras(request):
             hv.actualizar_estado(reporte)
             reporte.save()
             estado = "Quedó verificado." if reporte.validacion == V.VERIFICADO else "Queda por validar de la coordinación."
-            messages.success(request, f"Regreso registrado a las {reporte.hora_llegada:%H:%M}: {reporte.duracion} h en "
+            messages.success(request, f"Fin registrado a las {reporte.hora_llegada:%H:%M}: {reporte.duracion} h en "
                                       f"{reporte.cliente}. {estado}")
         else:
             errores = "; ".join(e for lista in cierre.errors.values() for e in lista)
-            messages.error(request, f"No se registró el regreso: {errores}")
+            messages.error(request, f"No se registró el fin: {errores}")
         return redirect("cronograma:horas_extras")
 
-    # --- Coordinación: validar y fijar la oficina ---
+    # --- Coordinación: validar ---
     if accion == "validar":
         if not request.user.es_supervisor:
             raise PermissionDenied
@@ -667,19 +667,6 @@ def horas_extras(request):
             messages.success(request, f"Horas de {reporte.colaborador} del {reporte.fecha:%d/%m/%Y}: "
                                       f"{reporte.get_validacion_display().lower()}.")
         return redirect(reverse("cronograma:horas_extras") + f"?mes={reporte.fecha:%Y-%m}")
-    if accion == "oficina":
-        if not request.user.es_supervisor:
-            raise PermissionDenied
-        punto = hv.leer_ubicacion(request.POST)
-        if punto is None:
-            messages.error(request, "No llegó la ubicación del celular: permita el acceso a la ubicación e intente de nuevo.")
-        else:
-            o = hv.oficina() or UbicacionOficina(latitud=punto[0], longitud=punto[1])
-            o.latitud, o.longitud, o.actualizada_por = punto[0], punto[1], request.user
-            o.save()
-            messages.success(request, f"Ubicación de la oficina guardada (precisión de {punto[2]} m).")
-        return redirect("cronograma:horas_extras")
-
     abiertos = ReporteHorasExtra.objects.filter(hora_llegada__isnull=True).select_related("colaborador")
     if not request.user.es_supervisor:
         abiertos = abiertos.filter(colaborador=request.user)
@@ -712,13 +699,12 @@ def horas_extras(request):
 
     return render(request, "cronograma/horas_extras.html", {
         "form": form, "form_tardio": form_tardio, "abrir_tardio": tardio, "reportes": reportes, "totales": totales,
-        "mes": f"{anio}-{mes:02d}", "abiertos": abiertos, "por_validar": por_validar, "oficina": hv.oficina(),
-        "radio": hv.radio_metros(),
+        "mes": f"{anio}-{mes:02d}", "abiertos": abiertos, "por_validar": por_validar,
     })
 
 
 def _excel_horas_extras(reportes, anio, mes):
-    """El Excel del mes con cómo se registró cada momento, la ubicación, la distancia y la validación."""
+    """El Excel del mes con cómo se registró cada momento, el enlace a la ubicación en el mapa y la validación."""
     from openpyxl import Workbook
 
     def nombre(u):
@@ -734,17 +720,21 @@ def _excel_horas_extras(reportes, anio, mes):
     libro = Workbook()
     hoja = libro.active
     hoja.title = "Horas extras"
-    hoja.append(["Colaborador", "Fecha", "Fue", "Hora de inicio", "Inicio", "Ubicación del inicio", "Distancia al iniciar (m)",
-                 "Hora de llegada", "Regreso", "Ubicación del regreso", "Distancia al regresar (m)", "Horas", "Cliente",
+    hoja.append(["Colaborador", "Fecha", "Fue", "Hora de inicio", "Inicio", "Ubicación del inicio",
+                 "Hora de fin", "Fin", "Ubicación del fin", "Horas", "Cliente",
                  "Validación", "Alertas", "Validó", "Nota de la validación", "Registró"])
     for r in sorted(reportes, key=lambda x: (x.fecha, x.hora_salida)):
         hoja.append([nombre(r.colaborador), r.fecha, r.rol_corto, r.hora_salida.strftime("%H:%M"), como(r, "salida"),
-                     r.mapa_salida, r.distancia_salida, r.hora_llegada.strftime("%H:%M") if r.hora_llegada else "Sin regreso",
-                     como(r, "llegada"), r.mapa_llegada, r.distancia_llegada, round(r.minutos / 60, 2), r.cliente,
+                     r.mapa_salida, r.hora_llegada.strftime("%H:%M") if r.hora_llegada else "Sin terminar",
+                     como(r, "llegada"), r.mapa_llegada, round(r.minutos / 60, 2), r.cliente,
                      r.get_validacion_display(), "; ".join(r.alertas), nombre(r.validado_por), r.nota_validacion,
                      nombre(r.registrado_por)])
         hoja.cell(hoja.max_row, 2).number_format = "DD/MM/YYYY"
-    for n, ancho in enumerate((30, 12, 13, 10, 30, 30, 12, 10, 30, 30, 12, 8, 34, 26, 50, 26, 30, 26)):
+        for columna in (6, 9):  # la ubicación como enlace «Ver en el mapa»
+            celda = hoja.cell(hoja.max_row, columna)
+            if celda.value:
+                celda.hyperlink, celda.value, celda.style = celda.value, "Ver en el mapa", "Hyperlink"
+    for n, ancho in enumerate((30, 12, 13, 10, 30, 30, 10, 30, 30, 8, 34, 26, 50, 26, 30, 26)):
         hoja.column_dimensions[chr(65 + n)].width = ancho
     hoja.freeze_panes = "A2"
     respuesta = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -756,7 +746,7 @@ def _excel_horas_extras(reportes, anio, mes):
 @login_required
 @personal_requerido
 def horas_extras_foto(request, pk, cual):
-    """La foto de inicio o de regreso de un reporte de horas extras: la ve quien lo hizo y la coordinación."""
+    """La foto de inicio o de fin de un reporte de horas extras: la ve quien lo hizo y la coordinación."""
     from .models import ReporteHorasExtra
 
     reporte = get_object_or_404(ReporteHorasExtra, pk=pk)

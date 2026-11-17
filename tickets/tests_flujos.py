@@ -390,38 +390,6 @@ class FlujoComercialTests(BaseFlujos):
         self.assertContains(self.client.get(reverse("oportunidades")), "alarma para la bodega")
 
 
-@override_settings(SALUD_PROCESOS=True)  # retirada el 06/11/2026; se prueba encendida por si se reactiva
-class SaludDeLosProcesosTests(BaseFlujos):
-    """La plataforma detecta sola lo que no sigue la lógica del proceso y avisa al superusuario."""
-
-    def test_detecta_avisa_y_cierra_solo(self):
-        from tickets import diagnostico
-        from tickets.models import Hallazgo
-        admin = Usuario.objects.create_superuser("admin", "d.jimenez@seguridadjano.com", "Clave-segura-1")
-        t = self.ticket(contacto_email=COORD, estado=E.RECEPCIONADO)
-        t.cambiar_estado(E.VISITA_EJECUTADA, self.jguana)  # salto: sin cronograma ni acta
-        nuevos = diagnostico.revisar()
-        reglas = {h.regla for h in nuevos}
-        self.assertTrue({"contacto_interno", "saltos_de_estado", "visita_sin_acta"} <= reglas, reglas)
-        mail.outbox.clear()
-        self.assertTrue(diagnostico.avisar(forzar=True))
-        self.assertEqual(mail.outbox[-1].to, [admin.email])
-        self.assertIn("Qué mejorar", mail.outbox[-1].body)
-        self.assertFalse(diagnostico.avisar(forzar=True))  # lo ya avisado no se repite
-        # Se corrige el contacto: ese hallazgo se cierra solo
-        t.contacto_email = "cliente@ganacampo.co"
-        t.save()
-        diagnostico.revisar()
-        self.assertIsNotNone(Hallazgo.objects.get(regla="contacto_interno").resuelto)
-        # Solo el superusuario ve la página
-        self.client.force_login(self.jguana)
-        self.assertEqual(self.client.get(reverse("salud_procesos")).status_code, 403)
-        self.client.force_login(admin)
-        r = self.client.get(reverse("salud_procesos"))
-        self.assertContains(r, "Dice que hubo visita, pero no hay acta")
-        self.assertContains(r, "Corregidas en los últimos 30 días")
-
-
 class ContactoPorSedeTests(BaseFlujos):
     """La sede guarda quién recibe; se llena solo al radicar y se advierte si el contacto es del personal."""
 
@@ -451,7 +419,6 @@ class ContactoPorSedeTests(BaseFlujos):
 
     def test_empresa_del_grupo_es_trabajo_interno(self):
         from cronograma.models import Actividad
-        from tickets import diagnostico
         grupo = Empresa.objects.create(razon_social="SEGURIDAD JANO LTDA", nit="822002315-6", es_del_grupo=True)
         Sede.objects.create(empresa=grupo, nombre="Principal")
         t = self.ticket(empresa=grupo, sede=grupo.sedes.first(), contacto_email=COORD, estado=E.RECEPCIONADO)
@@ -460,66 +427,6 @@ class ContactoPorSedeTests(BaseFlujos):
         self.assertFalse(a.en_rojo)
         r = self.client.post(reverse("cronograma:enviar_autorizacion", args=[a.pk]), follow=True)
         self.assertContains(r, "no se le envía autorización")
-        diagnostico.revisar()
-        from tickets.models import Hallazgo
-        self.assertFalse(Hallazgo.objects.filter(ticket=t, regla__in=["contacto_interno", "autorizaciones"]).exists())
-
-
-@override_settings(SALUD_PROCESOS=True)
-class RevisarCasosDeSaludTests(BaseFlujos):
-    """Cada área ve sus casos en su bandeja y marca como revisado (con motivo) lo que no requiere acción."""
-
-    def test_revisado_con_motivo_y_vuelve_si_pasa_de_nuevo(self):
-        from tickets import diagnostico
-        from tickets.models import Hallazgo
-        t = self.ticket(contacto_email=COORD, estado=E.RECEPCIONADO)
-        diagnostico.revisar()
-        h = Hallazgo.objects.get(regla="contacto_interno", ticket=t)
-        self.client.force_login(self.jguana)  # coordinación lo ve en su bandeja
-        self.assertContains(self.client.get(reverse("panel")), "Situaciones por revisar")
-        self.client.force_login(self.yuri)  # bodega no lo puede revisar: no es de su área
-        self.assertEqual(self.client.post(reverse("hallazgo_revisar", args=[h.pk]), {"motivo": "No es mío"}).status_code, 403)
-        self.client.force_login(self.jguana)
-        r = self.client.post(reverse("hallazgo_revisar", args=[h.pk]), {"motivo": "x", "volver": "/soporte/"}, follow=True)
-        self.assertContains(r, "Escriba por qué no requiere acción")
-        self.client.post(reverse("hallazgo_revisar", args=[h.pk]), {"motivo": "Jguana es el contacto a propósito", "volver": "/soporte/"})
-        h.refresh_from_db()
-        self.assertEqual((h.revisado_por, h.motivo_revision), (self.jguana, "Jguana es el contacto a propósito"))
-        self.assertNotIn(h, diagnostico.casos_para(self.jguana))
-        diagnostico.revisar()  # sigue igual: no vuelve a la lista
-        h.refresh_from_db()
-        self.assertIsNotNone(h.revisado_en)
-        # Se corrige y luego vuelve a pasar: es algo nuevo y vuelve a la lista
-        t.contacto_email = "cliente@ganacampo.co"
-        t.save()
-        diagnostico.revisar()
-        t.contacto_email = COORD
-        t.save()
-        diagnostico.revisar()
-        h.refresh_from_db()
-        self.assertIsNone(h.revisado_en)
-        self.assertIn(h, diagnostico.casos_para(self.jguana))
-
-
-class SaludApagadaTests(BaseFlujos):
-    """Retirada el 06/11/2026: no revisa, no avisa y no sale en ninguna pantalla; lo ya detectado se conserva."""
-
-    def test_no_aparece_en_ninguna_parte(self):
-        from tickets import diagnostico
-        from tickets.models import Hallazgo
-        admin = Usuario.objects.create_superuser("admin", "d.jimenez@seguridadjano.com", "Clave-segura-1")
-        self.ticket(contacto_email=COORD, estado=E.RECEPCIONADO)  # antes era un caso de «contacto interno»
-        mail.outbox.clear()
-        diagnostico.revisar_si_toca()
-        self.assertFalse(Hallazgo.objects.exists())
-        self.assertEqual(mail.outbox, [])
-        self.client.force_login(admin)
-        r = self.client.get(reverse("panel"))
-        self.assertNotContains(r, "Situaciones por revisar")
-        self.assertNotContains(r, reverse("salud_procesos"))
-        self.assertEqual(self.client.get(reverse("salud_procesos")).status_code, 404)
-        self.client.force_login(self.jguana)
-        self.assertNotContains(self.client.get(reverse("panel")), "Situaciones por revisar")
 
 
 class ServicioRepetidoTests(BaseFlujos):

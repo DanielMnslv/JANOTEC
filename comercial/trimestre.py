@@ -403,12 +403,10 @@ def _pesos(valor):
 
 
 def metas():
-    """Metas de estos indicadores (None = sin meta); se ajustan en settings.INDICADORES_METAS."""
-    from django.conf import settings
+    """Metas vigentes (None = sin meta): se fijan en el Centro de indicadores → «Metas» (tickets/metas.py)."""
+    from tickets.metas import valores
 
-    m = {"aprobacion": 40, "margen_utilidad": None, "margen_consolidado": None, "desempeno": None, "mantenimiento": 90}
-    m.update({k: v for k, v in getattr(settings, "INDICADORES_METAS", {}).items() if k in m})
-    return m
+    return valores()
 
 
 def calcular(trimestre, hoy=None):

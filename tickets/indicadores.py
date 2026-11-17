@@ -1,7 +1,7 @@
 """Indicadores de gestión del área por periodo (mes, trimestre, semestre, año o rango).
 
 Cada indicador trae su fórmula, la meta y el valor del periodo anterior de la misma duración, para el
-informe que se presenta al cerrar el periodo. Las metas se ajustan en settings.INDICADORES_METAS.
+informe que se presenta al cerrar el periodo. Las metas se fijan en el Centro de indicadores → «Metas» (tickets/metas.py).
 """
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
@@ -14,21 +14,7 @@ from .models import ActaSoporte, Aplazamiento, Seguimiento, Ticket
 
 E = Ticket.Estado
 
-METAS = {
-    "recepcion_horas": 24,      # recepcionar en máximo un día
-    "solucion_dias": 5,         # resolver en máximo 5 días
-    "cierre": 90,               # % de lo recibido en el periodo que quedó cerrado
-    "primera_visita": 80,       # % resuelto sin nueva visita
-    "satisfaccion": 8.0,        # promedio de 1 a 10
-    "satisfechos": 85,          # % de calificaciones de 8 o más
-    "cronograma": 90,           # % de visitas programadas que no se aplazaron
-    "aprobacion": 40,           # % de propuestas aprobadas
-    "alistamiento_dias": 3,     # de la propuesta aprobada a la entrega del material
-    "entregas_confirmadas": 95, # % de actas de entrega que el técnico confirmó
-    "compras_a_tiempo": 90,     # % de órdenes recibidas a más tardar en la fecha estimada
-    "material_cuadrado": 100,   # % de tickets cerrados con el material cuadrado
-}
-METAS.update(getattr(settings, "INDICADORES_METAS", {}))
+from .metas import DEFECTOS as METAS  # noqa: E402  (las metas vigentes: metas.valores())
 
 MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
          "noviembre", "diciembre"]
@@ -219,7 +205,9 @@ def calcular(tickets, desde, hasta, ve_comercial=False, anterior=None):
     v = _medir(tickets, desde, hasta, ve_comercial)
     dias = (hasta - desde).days + 1
     antes = _medir(tickets, *(anterior or (desde - timedelta(days=dias), desde - timedelta(days=1))), ve_comercial)
-    m = METAS
+    from . import metas
+
+    m = metas.valores()
 
     indicadores = [
         Indicador("cierre", "Eficacia en el cierre", v["cierre"], "%",

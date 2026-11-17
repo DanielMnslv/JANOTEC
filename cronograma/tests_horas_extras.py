@@ -12,12 +12,11 @@ from django.utils import timezone
 from PIL import Image
 
 from . import horas_validacion as hv
-from .models import Actividad, ReporteHorasExtra, UbicacionOficina
+from .models import ReporteHorasExtra
 from .tests import MEDIA_TMP, BaseCronograma
 
-OFICINA = (Decimal("4.1420000"), Decimal("-73.6270000"))  # Villavicencio (sintético)
-CERCA = {"lat": "4.1425000", "lon": "-73.6272000", "precision": "15"}  # ~60 m
-LEJOS = {"lat": "4.1600000", "lon": "-73.6400000", "precision": "15"}  # ~2,5 km
+CERCA = {"lat": "4.1425000", "lon": "-73.6272000", "precision": "15"}  # Villavicencio (sintético)
+LEJOS = {"lat": "3.4500000", "lon": "-76.5300000", "precision": "15"}  # otra ciudad: también vale
 
 
 def foto(nombre="foto.png"):
@@ -35,10 +34,6 @@ def a_las(hora, dia=None):
 class HorasExtrasValidacionTests(BaseCronograma):
     url = reverse("cronograma:horas_extras")
 
-    def setUp(self):
-        super().setUp()
-        UbicacionOficina.objects.create(latitud=OFICINA[0], longitud=OFICINA[1], actualizada_por=self.coord)
-
     def iniciar(self, usuario, **extra):
         self.client.force_login(usuario)
         datos = {"accion": "iniciar", "i-rol": "conductor", "i-cliente": "LLANOGAS", "i-evidencia_salida": foto(), **CERCA}
@@ -50,17 +45,13 @@ class HorasExtrasValidacionTests(BaseCronograma):
         datos.update(extra)
         return self.client.post(self.url, datos)
 
-    def test_distancia(self):
-        self.assertAlmostEqual(hv.distancia(*OFICINA, Decimal("4.1425"), Decimal("-73.6272")), 59, delta=3)
-
-    def test_en_el_momento_y_en_el_sitio_queda_verificado(self):
+    def test_en_el_momento_con_foto_y_ubicacion_queda_verificado(self):
         with mock.patch("django.utils.timezone.now", return_value=a_las((18, 32))):
             r = self.iniciar(self.tec, **{"i-fecha": "2020-01-01", "i-hora_salida": "06:00"})  # lo escrito se ignora
         self.assertRedirects(r, self.url)
         reporte = ReporteHorasExtra.objects.get()
         self.assertEqual((reporte.fecha, reporte.hora_salida), (timezone.localdate(), time(18, 32)))
-        self.assertEqual((reporte.referencia_salida, reporte.salida_tardia), ("Oficina JANOTEC", False))
-        self.assertLess(reporte.distancia_salida, 100)
+        self.assertEqual((reporte.lat_salida, reporte.salida_tardia), (Decimal("4.1425000"), False))
         self.assertEqual(reporte.validacion, "por_validar")  # abierto
         with mock.patch("django.utils.timezone.now", return_value=a_las((21, 2))):
             self.cerrar(reporte)
@@ -73,27 +64,21 @@ class HorasExtrasValidacionTests(BaseCronograma):
         self.client.post(self.url, {"accion": "iniciar", "i-rol": "conductor", "i-cliente": "LLANOGAS", **CERCA})
         self.assertFalse(ReporteHorasExtra.objects.exists())
 
-    def test_lejos_o_sin_ubicacion_queda_por_validar(self):
-        self.iniciar(self.tec, **LEJOS)
+    def test_donde_este_vale_y_sin_ubicacion_queda_por_validar(self):
+        self.iniciar(self.tec, **LEJOS)  # en otra ciudad: no hay punto fijo con qué compararlo
         reporte = ReporteHorasExtra.objects.get()
-        self.cerrar(reporte, lat="", lon="", precision="")
+        with mock.patch("django.utils.timezone.now", return_value=timezone.now() + timedelta(hours=1)):
+            self.cerrar(reporte, **LEJOS)
         reporte.refresh_from_db()
-        alertas = hv.alertas(reporte)
-        self.assertEqual(reporte.validacion, "por_validar")
-        self.assertTrue(any("2,5 km de Oficina JANOTEC" in a for a in alertas), alertas)
-        self.assertIn("Regreso sin ubicación del celular", alertas)
-
-    def test_acompanante_se_confronta_con_el_cliente_de_su_visita(self):
-        from tickets.models import Ticket
-
-        Ticket.objects.filter(pk=self.ticket.pk).update(latitud=Decimal("4.0800000"), longitud=Decimal("-73.6800000"))
-        a = Actividad.objects.create(ticket=self.ticket, fecha=timezone.localdate(), hora_inicio=time(8), hora_fin=time(12),
-                                     cliente="Grupo del Llano", actividad="Mantenimiento")
-        a.encargados.add(self.tec)
-        self.iniciar(self.tec, **{"i-rol": "acompanante", "lat": "4.0801000", "lon": "-73.6801000"})
-        reporte = ReporteHorasExtra.objects.get()
-        self.assertEqual(reporte.referencia_salida, "Grupo del Llano · Manare")
-        self.assertLess(reporte.distancia_salida, 50)
+        self.assertEqual((hv.alertas(reporte), reporte.validacion), ([], "verificado"))
+        self.client.force_login(self.coord)
+        self.assertContains(self.client.get(self.url), "https://www.google.com/maps?q=3.4500000,-76.5300000")
+        self.iniciar(self.tec)
+        otro = ReporteHorasExtra.objects.get(hora_llegada=None)
+        self.cerrar(otro, lat="", lon="", precision="")
+        otro.refresh_from_db()
+        self.assertEqual(otro.validacion, "por_validar")
+        self.assertIn("Fin sin ubicación del celular", hv.alertas(otro))
 
     def test_registro_tardio_pide_motivo_y_hora_pasada(self):
         self.client.force_login(self.tec)
@@ -116,14 +101,15 @@ class HorasExtrasValidacionTests(BaseCronograma):
         self.assertIn("Inicio registrado tarde: Se me descargó el celular en la vía", hv.alertas(reporte))
 
     def test_la_coordinacion_aprueba_o_rechaza_y_lo_rechazado_no_suma(self):
-        self.iniciar(self.tec, **LEJOS)
+        self.iniciar(self.tec, lat="", lon="")
         reporte = ReporteHorasExtra.objects.get()
         with mock.patch("django.utils.timezone.now", return_value=timezone.now() + timedelta(hours=2)):
             self.cerrar(reporte)
         self.client.force_login(self.coord)
         lista = self.client.get(self.url)
         self.assertContains(lista, "Por validar")
-        self.assertContains(lista, "Oficina JANOTEC")
+        self.assertContains(lista, "sin ubicación")
+        self.assertNotContains(lista, "Ubicación de la oficina")
         self.client.post(self.url, {"accion": "validar", "reporte": reporte.pk, "decision": "rechazar"})  # sin nota no
         reporte.refresh_from_db()
         self.assertEqual(reporte.validacion, "por_validar")
@@ -158,14 +144,6 @@ class HorasExtrasValidacionTests(BaseCronograma):
         reporte.refresh_from_db()
         self.assertEqual(reporte.validacion, "por_validar")
         self.assertTrue(any("no el colaborador" in a for a in hv.alertas(reporte)))
-
-    def test_fijar_la_oficina(self):
-        UbicacionOficina.objects.all().delete()
-        self.client.force_login(self.coord)
-        self.client.post(self.url, {"accion": "oficina", "lat": "4.1500000", "lon": "-73.6300000", "precision": "8"})
-        self.assertEqual(hv.oficina().latitud, Decimal("4.1500000"))
-        self.client.force_login(self.tec)
-        self.assertEqual(self.client.post(self.url, {"accion": "oficina", **CERCA}).status_code, 403)
 
     def test_el_cliente_no_entra(self):
         self.client.force_login(self.cli)

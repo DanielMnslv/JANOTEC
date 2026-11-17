@@ -4,12 +4,21 @@
 {% include "inventario/_acciones.html" with titulo="Entregar material a un técnico" subtitulo="Sale de bodega y queda en poder del técnico. Él lo descuenta al diligenciar el acta, y lo que no use lo devuelve." %}
 {% if solicitud %}
 <div class="alert {% if solicitud.estado == 'aprobada' %}alert-info{% else %}alert-danger{% endif %} small">
-  <div class="fw-semibold"><i class="bi bi-clipboard-check"></i> <a href="{{ solicitud.get_absolute_url }}">{{ solicitud.numero }}</a> · {{ solicitud.ticket.empresa }} · {{ solicitud.ticket.radicado }} · {{ solicitud.get_estado_display }}</div>
+  <div class="fw-semibold"><i class="bi bi-clipboard-check"></i> {% if solicitud.propuesta %}Propuesta aprobada <b>{{ solicitud.propuesta.codigo|default:"sin código" }}</b> · {% endif %}<a href="{{ solicitud.get_absolute_url }}">{{ solicitud.numero }}</a> · {{ solicitud.ticket.empresa }} · {{ solicitud.ticket.radicado }} · {{ solicitud.get_estado_display }}</div>
   <div>Precargado con lo aprobado (incluida la holgura de consumibles) que aún no ha salido. Revise o escanee las placas y registre la entrega.</div>
   {% if pendiente.a_mano %}<div class="mt-1"><i class="bi bi-pencil"></i> Escrito a mano (no está en el inventario): marque lo que entrega para que quede en el acta de entrega.</div>{% endif %}
 </div>
 {% else %}
-<div class="alert alert-light border small"><i class="bi bi-info-circle"></i> El material para clientes sale desde una <a href="{% url 'inventario:solicitudes' %}?estado=aprobada">solicitud aprobada</a>. Aquí, sin solicitud, solo se entregan herramientas de uso del personal (modalidad «Uso del personal»).</div>
+<div class="card mb-4 border-primary"><div class="card-body">
+  <label class="form-label fw-semibold" for="propuesta-aprobada"><i class="bi bi-briefcase"></i> ¿Para qué propuesta aprobada es la entrega?</label>
+  {% if aprobadas %}
+  <select id="propuesta-aprobada" class="form-select" onchange="if (this.value) location.href = '?solicitud=' + this.value">
+    <option value="">— Elija la propuesta: se traen los materiales y equipos aprobados —</option>
+    {% for s in aprobadas %}<option value="{{ s.pk }}">{% if s.propuesta %}{{ s.propuesta.codigo|default:"Propuesta" }} · {% endif %}{{ s.ticket.radicado }} · {{ s.ticket.empresa }}{% if s.ticket.sede %} · {{ s.ticket.sede.nombre }}{% endif %}{% if s.tecnico %} · {{ s.tecnico.get_full_name|default:s.tecnico.username }}{% endif %} ({{ s.numero }})</option>{% endfor %}
+  </select>
+  {% else %}<div class="small text-muted-jn">No hay propuestas aprobadas con material listo para entregar (la solicitud debe estar aprobada por bodega y coordinación o dirección).</div>{% endif %}
+  <div class="small text-muted-jn mt-2">Sin propuesta, aquí solo se entregan herramientas de uso del personal (modalidad «Uso del personal»).</div>
+</div></div>
 {% endif %}
 <form method="post" class="row g-4">{% csrf_token %}{% if solicitud %}<input type="hidden" name="solicitud" value="{{ solicitud.pk }}">{% endif %}
   <div class="col-lg-5">

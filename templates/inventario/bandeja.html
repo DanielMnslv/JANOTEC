@@ -2,7 +2,6 @@
 {% block titulo %}Tickets en bodega{% endblock %}
 {% block contenido %}
 {% include "inventario/_acciones.html" with titulo="Tickets en bodega" subtitulo="Cada ticket que necesita material, en el paso en que va: revisar la lista, comprar, autorizar la salida, alistar y entregar, y la confirmación del técnico. Al terminar pasa solo a técnica." %}
-{% include "tickets/_casos_area.html" with area_1="Bodega" %}
 
 <div class="row g-3 mb-4">
   {% for clave, nombre, n in pasos %}

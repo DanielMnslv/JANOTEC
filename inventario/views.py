@@ -549,10 +549,26 @@ def entrega(request):
     else:
         placas = pendiente["placas"]
         insumos_filas = [(f"{i.codigo} · {i.descripcion}", f"{c.normalize():f}") for i, c in pendiente["insumos"]]
+    aprobadas = []
+    if solicitud is None:  # para elegir la propuesta aprobada (su solicitud) y traer lo que se le entrega al técnico
+        aprobadas = list(SolicitudMaterial.objects.filter(estado=SolicitudMaterial.Estado.APROBADA)
+                         .select_related("ticket__empresa", "ticket__sede", "tecnico").order_by("creado"))
+    for s in aprobadas + ([solicitud] if solicitud else []):
+        s.propuesta = _propuesta_aprobada(s.ticket)
     return render(request, "inventario/entrega.html", {
         "form": form, "errores": errores, **_listas_material(), "placas": placas, "insumos_post": insumos_filas,
-        "solicitud": solicitud, "pendiente": pendiente,
+        "solicitud": solicitud, "pendiente": pendiente, "aprobadas": aprobadas,
     })
+
+
+def _propuesta_aprobada(ticket):
+    """La versión de propuesta aprobada del ticket (la que dice qué materiales y equipos se suministran); None si no hay."""
+    from comercial.models import PropuestaVersion
+
+    if ticket is None:
+        return None
+    return (PropuestaVersion.objects.filter(ficha__ticket=ticket, estado=PropuestaVersion.Estado.APROBADA)
+            .order_by("-numero").first())
 
 
 @login_required

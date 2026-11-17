@@ -16,3 +16,4 @@ ENLACE_ACTUAL.txt
 
 *.log
 .pytest_cache/
+respaldos/

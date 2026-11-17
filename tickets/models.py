@@ -1239,7 +1239,7 @@ class OportunidadComercial(models.Model):
 
 
 class Hallazgo(models.Model):
-    """Algo que la plataforma detectó sola en el uso real y que no sigue la lógica del proceso (ver diagnostico.py)."""
+    """Algo que la plataforma detectó sola en el uso real y que no sigue la lógica del proceso. «Salud de los procesos» se retiró del todo el 18/11/2026; los hallazgos guardados se conservan."""
 
     class Gravedad(models.TextChoices):
         """Qué tan grave es el hallazgo encontrado en la visita."""
@@ -1341,3 +1341,22 @@ class Devolucion(models.Model):
     def pendiente(self):
         """True mientras el área anterior no lo haya corregido."""
         return self.resuelta is None
+
+
+class MetaIndicador(models.Model):
+    """Meta de un indicador del Centro de indicadores, fijada por dirección o la coordinación (18/11/2026).
+
+    Sin fila, el indicador usa la meta por defecto de ``tickets/metas.py``; con la fila y el valor vacío queda sin meta.
+    """
+    clave = models.CharField(max_length=40, unique=True)
+    valor = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)
+    actualizada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name="+")
+    actualizada = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "meta de indicador"
+        verbose_name_plural = "metas de indicadores"
+
+    def __str__(self):
+        return f"{self.clave}: {self.valor if self.valor is not None else 'sin meta'}"

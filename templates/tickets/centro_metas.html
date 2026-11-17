@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{# Metas de los indicadores (tickets/centro.vista_metas): vacío = sin meta; queda quién la cambió y cuándo #}
+{% block titulo %}Metas de los indicadores{% endblock %}
+{% block contenido %}
+<a href="{{ volver }}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Indicadores</a>
+<h1 class="h3 page-title mt-2 mb-1">Metas de los indicadores</h1>
+<p class="text-muted-jn mb-4">La meta decide si la tarjeta sale en verde (<b>Cumple</b>) o en rojo (<b>No cumple</b>). Deje el campo vacío si ese indicador no lleva meta. Se aplica de inmediato a todos los periodos.</p>
+
+{% if errores %}<div class="alert alert-warning"><i class="bi bi-exclamation-circle"></i> No se guardó nada. Revise:{% for e in errores %}<div>{{ e }}</div>{% endfor %}</div>{% endif %}
+
+<form method="post">{% csrf_token %}
+  {% for area, filas in areas %}
+  <div class="card mb-4">
+    <div class="card-header">{{ area }}</div>
+    <div class="table-responsive"><table class="table mb-0 table-tickets align-middle">
+      <thead><tr><th>Indicador</th><th style="width:14rem">Meta</th><th class="d-none d-md-table-cell">Por defecto</th><th class="d-none d-md-table-cell">Último cambio</th></tr></thead>
+      {% for f in filas %}<tr>
+        <td><label for="meta_{{ f.d.clave }}" class="fw-medium">{{ f.d.nombre }}</label>
+          <div class="small text-muted-jn">{% if f.d.mayor_es_mejor %}Cumple si es mayor o igual{% else %}Cumple si es menor o igual{% endif %}</div></td>
+        <td><div class="input-group">
+          <span class="input-group-text">{% if f.d.mayor_es_mejor %}≥{% else %}≤{% endif %}</span>
+          <input type="text" inputmode="decimal" class="form-control" id="meta_{{ f.d.clave }}" name="meta_{{ f.d.clave }}" value="{{ f.valor }}" placeholder="Sin meta">
+          {% if f.d.unidad %}<span class="input-group-text">{{ f.d.unidad|cut:" " }}</span>{% endif %}
+        </div></td>
+        <td class="d-none d-md-table-cell small text-muted-jn">{{ f.defecto }}{% if f.d.defecto is not None %}{{ f.d.unidad }}{% endif %}</td>
+        <td class="d-none d-md-table-cell small text-muted-jn">{% if f.guardada %}{{ f.guardada.actualizada_por|default:"—" }} · {{ f.guardada.actualizada|date:"d/m/Y" }}{% else %}Sin cambios{% endif %}</td>
+      </tr>{% endfor %}
+    </table></div>
+  </div>
+  {% endfor %}
+  <div class="d-flex justify-content-end gap-2">
+    <a href="{{ volver }}" class="btn btn-light">Cancelar</a>
+    <button class="btn btn-accent"><i class="bi bi-check2-circle"></i> Guardar metas</button>
+  </div>
+</form>
+{% endblock %}

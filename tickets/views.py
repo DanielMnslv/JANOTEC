@@ -4,7 +4,7 @@ Organización del archivo (cada bloque tiene su separador):
 - Ayudantes comunes y el inicio, que lleva a cada rol a su bandeja.
 - Portal del cliente: sus solicitudes, radicar, responder, confirmar la solución, calificar y cancelar.
 - Detalle del ticket (compartido por todos los roles) y descarga de adjuntos.
-- Panel del área técnica: bandeja, gestión del ticket, salud de procesos, hallazgos y reportes.
+- Panel del área técnica: bandeja y gestión del ticket (los indicadores están en tickets/centro.py).
 - Historial de servicio: consulta de actas y sus evidencias.
 - Acta de soporte: diligenciarla en la visita, vincularla o desvincularla del ticket y sus archivos.
 - Oportunidades comerciales detectadas en campo.
@@ -37,7 +37,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.models import Empresa
 
-from . import cierre, diagnostico, etapas, mi_dia as agenda, notificaciones, pasos, reincidencia
+from . import cierre, etapas, mi_dia as agenda, notificaciones, pasos, reincidencia
 from .forms import (
     ActaForm,
     AplazarForm,
@@ -469,78 +469,14 @@ def descargar_adjunto(request, pk):
 # Panel del área de soporte
 # ============================================================================
 @login_required
-def salud_procesos(request):
-    """Lo que la plataforma detectó sola en el uso real (solo el superusuario, y solo si está encendida)."""
-    if not diagnostico.activa():
-        raise Http404("La salud de los procesos está apagada.")
-    if not request.user.is_superuser:
-        raise PermissionDenied
-    from .models import Hallazgo
-    if request.method == "POST":
-        nuevos = diagnostico.revisar()
-        messages.success(request, f"Revisión hecha: {len(nuevos)} situación(es) nueva(s).")
-        return redirect("salud_procesos")
-    info = diagnostico.reglas()
-    abiertos = list(diagnostico.pendientes().select_related("ticket", "usuario").order_by("creado"))
-    grupos = []
-    for clave, regla in info.items():
-        casos = [h for h in abiertos if h.regla == clave]
-        if casos:
-            personas = {}
-            for h in casos:
-                if h.usuario:
-                    nombre = h.usuario.get_full_name() or h.usuario.username
-                    personas[nombre] = personas.get(nombre, 0) + 1
-            grupos.append({"regla": regla, "casos": casos, "personas": sorted(personas.items(), key=lambda x: -x[1])})
-    orden = {"alta": 0, "media": 1, "baja": 2}
-    grupos.sort(key=lambda g: (orden[g["regla"].gravedad], -len(g["casos"])))
-    hace_30 = timezone.now() - timedelta(days=30)
-    resueltos = Hallazgo.objects.filter(resuelto__gte=hace_30).values("regla").annotate(n=Count("id")).order_by("-n")
-    return render(request, "tickets/salud_procesos.html", {
-        "grupos": grupos, "total": len(abiertos), "altas": sum(1 for h in abiertos if h.gravedad == "alta"),
-        "resueltos": [(info[r["regla"]].nombre if r["regla"] in info else r["regla"], r["n"]) for r in resueltos],
-        "sin_problemas": [r for c, r in info.items() if not any(h.regla == c for h in abiertos)],
-        "revisados": Hallazgo.objects.filter(resuelto__isnull=True, revisado_en__isnull=False)
-                                     .select_related("ticket", "revisado_por").order_by("-revisado_en"),
-    })
-
-
-@login_required
-@require_POST
-def hallazgo_revisar(request, pk):
-    """Marcar un caso de «Salud de los procesos» como revisado (con el motivo), o reabrirlo (solo el superusuario)."""
-    from .models import Hallazgo
-
-    if not diagnostico.activa():
-        raise Http404("La salud de los procesos está apagada.")
-    h = get_object_or_404(Hallazgo, pk=pk)
-    if request.POST.get("accion") == "reabrir":
-        if not request.user.is_superuser:
-            raise PermissionDenied
-        h.revisado_en, h.revisado_por, h.motivo_revision = None, None, ""
-        h.save(update_fields=["revisado_en", "revisado_por", "motivo_revision"])
-        messages.info(request, "El caso volvió a la lista.")
-    else:
-        try:
-            diagnostico.marcar_revisado(h, request.user, request.POST.get("motivo", ""))
-        except ValidationError as e:
-            messages.error(request, " ".join(e.messages))
-        else:
-            messages.success(request, "Caso revisado: sale de la lista con su motivo.")
-    volver = request.POST.get("volver", "")
-    return redirect(volver if volver.startswith("/") and not volver.startswith("//") else "salud_procesos")
-
-
-@login_required
 @personal_requerido
 def panel(request):
     """Bandeja del área técnica.
 
     Sin filtros, el coordinador ve los tickets abiertos y el técnico lo que tiene programado y aún no atiende.
-    Al entrar se revisan, si toca, el cierre automático, el diagnóstico de procesos y las alertas de inventario.
+    Al entrar se revisan, si toca, el cierre automático y las alertas de inventario.
     """
     cierre.revisar_si_toca()
-    diagnostico.revisar_si_toca()
     from inventario import alertas
     alertas.revisar_si_toca()
     if request.user.es_supervisor:
