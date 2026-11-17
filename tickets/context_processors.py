@@ -7,7 +7,7 @@ MODULO_ADMINISTRATIVO = ("propuestas", "cotizador", "catalogo")
 def empresa(request):
     """Datos de marca disponibles en todas las plantillas; para dirección, cuántas propuestas esperan su aprobación, y
     para financiera (y dirección), cuántas órdenes de compra están por pagar; si el usuario abre en «Mi día» y, para
-    dirección, cuántas cosas esperan su firma («Por aprobar»)."""
+    dirección, cuántas cosas esperan su firma («Por aprobar»), y el menú lateral según su rol (tickets/menu.py)."""
     datos = {"MARCA": {"nombre": "JANOTEC", "lema": "Seguridad electrónica"}, "modulo_administrativo": MODULO_ADMINISTRATIVO}
     usuario = getattr(request, "user", None)
     if usuario is not None and usuario.is_authenticated and usuario.es_direccion:
@@ -21,4 +21,7 @@ def empresa(request):
     if usuario is not None and usuario.is_authenticated and usuario.ve_financiera:
         from inventario.models import OrdenCompra
         datos["compras_por_pagar"] = OrdenCompra.objects.filter(estado=OrdenCompra.Estado.POR_PAGAR).count()
+    if usuario is not None and usuario.is_authenticated:
+        from . import menu
+        datos["menu"] = menu.construir(request, datos)  # menú lateral: lo de su rol desplegado, lo demás en «Más áreas»
     return datos

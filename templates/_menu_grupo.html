@@ -1,0 +1,9 @@
+{# Un grupo del menú lateral (tickets/menu.Grupo). Dentro de «Más áreas» (plegar) arranca cerrado. #}
+<li class="menu-seccion">
+  <details class="menu-desplegable" data-clave="{{ g.clave }}"{% if g.activo %} open data-activo{% elif g.abierto and not plegar %} open{% endif %}>
+    <summary class="menu-grupo">{{ g.titulo }}<i class="bi bi-chevron-down ms-auto flecha-menu"></i></summary>
+    <ul class="nav flex-column">
+      {% for e in g.enlaces %}<li class="nav-item"><a class="nav-link{% if e.activo %} active{% endif %}" href="{{ e.url }}"><i class="bi {{ e.icono }}"></i> {{ e.nombre }}{% if e.contador %} <span class="badge text-bg-{{ e.contador_clase }} ms-auto" title="{{ e.contador_ayuda }}">{{ e.contador }}</span>{% endif %}</a></li>{% endfor %}
+    </ul>
+  </details>
+</li>

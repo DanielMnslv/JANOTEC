@@ -367,6 +367,17 @@ tr.fila-interna > td { background: #f4f4f6; }
 .menu-lateral .nav-link.active { background: rgba(172,200,18,.16); color: #fff; border-left-color: var(--jn-verde); font-weight: 700; }
 .menu-lateral .nav-link.active i { color: var(--jn-verde); opacity: 1; }
 .menu-lateral .badge { font-size: .72rem; }
+/* Grupos plegables (tickets/menu.py): lo del rol desplegado, lo demás en «Más áreas» */
+.menu-lateral .menu-desplegable > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: .5rem; user-select: none; }
+.menu-lateral .menu-desplegable > summary::-webkit-details-marker { display: none; }
+.menu-lateral .menu-desplegable > summary:hover { color: rgba(255,255,255,.85); }
+.menu-lateral .flecha-menu { font-size: .7rem; transition: transform .2s; transform: rotate(-90deg); }
+.menu-lateral .menu-desplegable[open] > summary .flecha-menu { transform: none; }
+.menu-lateral .menu-mas { margin-top: .8rem; padding-top: .5rem; border-top: 1px solid rgba(255,255,255,.12); }
+.menu-lateral .menu-mas-titulo { color: rgba(255,255,255,.75); padding: .45rem .7rem; border-radius: .5rem; font-size: .9rem; font-weight: 600; }
+.menu-lateral .menu-mas-titulo:hover { background: rgba(255,255,255,.07); color: #fff; }
+.menu-lateral .menu-mas .menu-grupo { padding-left: 1rem; }
+.menu-lateral .menu-mas .nav-link { padding-left: 1rem; }
 
 /* --- Barra superior: buscador y usuario ---------------------------------------------------- */
 .barra-superior { position: sticky; top: 0; z-index: 1020; display: flex; align-items: center; gap: .75rem; padding: .55rem 1.25rem; background: #fff; border-bottom: 1px solid var(--jn-border); }
