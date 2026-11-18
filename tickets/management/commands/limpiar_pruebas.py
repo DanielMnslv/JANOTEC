@@ -131,6 +131,15 @@ class Command(BaseCommand):
                             help="Dónde guardar el respaldo (por defecto respaldos/ junto a manage.py).")
 
     def handle(self, *args, confirmar=False, carpeta=None, **opciones):
+        from django.core.management.base import CommandError
+        from django.db.migrations.executor import MigrationExecutor
+
+        # Con migraciones pendientes faltan tablas y el respaldo no estaría completo: primero migrate
+        pendientes = MigrationExecutor(connection).migration_plan(
+            MigrationExecutor(connection).loader.graph.leaf_nodes())
+        if pendientes:
+            nombres = ", ".join(f"{m.app_label}.{m.name}" for m, _ in pendientes)
+            raise CommandError(f"Hay migraciones sin aplicar ({nombres}). Corra primero «manage.py migrate».")
         pasos, conserva = plan()
         self.stdout.write(self.style.MIGRATE_HEADING("SE CONSERVA"))
         for nombre, n in conserva.items():
