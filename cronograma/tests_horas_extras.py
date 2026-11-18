@@ -148,3 +148,33 @@ class HorasExtrasValidacionTests(BaseCronograma):
     def test_el_cliente_no_entra(self):
         self.client.force_login(self.cli)
         self.assertEqual(self.client.get(self.url).status_code, 403)
+
+
+class BorrarHorasExtrasTests(BaseCronograma):
+    """Comando borrar_horas_extras (18/11/2026): lo registrado eran pruebas; simula, respalda y borra."""
+
+    def test_simula_y_luego_respalda_y_borra(self):
+        import gzip
+        import io
+        import json
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        from django.core.management import call_command
+
+        carpeta = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, carpeta, ignore_errors=True)
+        ReporteHorasExtra.objects.create(colaborador=self.tec, fecha=timezone.localdate(), hora_salida="22:00",
+                                         hora_llegada="23:30", cliente="Cliente de prueba")
+        salida = io.StringIO()
+        call_command("borrar_horas_extras", "--carpeta", carpeta, stdout=salida)
+        self.assertIn("SIMULACIÓN", salida.getvalue())
+        self.assertEqual(ReporteHorasExtra.objects.count(), 1)
+
+        call_command("borrar_horas_extras", "--confirmar", "--carpeta", carpeta, stdout=io.StringIO())
+        self.assertFalse(ReporteHorasExtra.objects.exists())
+        respaldo = list(Path(carpeta).glob("horas_extras_*.json.gz"))
+        self.assertEqual(len(respaldo), 1)
+        datos = json.load(gzip.open(respaldo[0], "rt", encoding="utf-8"))
+        self.assertEqual(datos[0]["fields"]["cliente"], "Cliente de prueba")
