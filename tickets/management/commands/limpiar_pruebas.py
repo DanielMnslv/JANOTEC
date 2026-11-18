@@ -46,7 +46,7 @@ def plan():
     from comercial.models import (ConsecutivoPropuesta, Cotizacion, FichaComercial, InformeRequerimiento,
                                   ItemCatalogo, PropuestaVersion)
     from inventario.models import (Activo, AuditoriaHerramientas, AvisoSemanal, CompraHistorica, CotizacionProveedor,
-                                   EntregaHerramienta, GarantiaProveedor, Herramienta, Insumo, MinimoModelo,
+                                   EntregaHerramienta, GarantiaProveedor, Herramienta, Insumo, ItemSolicitud, MinimoModelo,
                                    MovimientoActivo, MovimientoInsumo, OrdenCompra, Proveedor, SolicitudCotizacion,
                                    SolicitudMaterial)
     from tickets.models import ActaSoporte, OportunidadComercial, Ticket
@@ -68,8 +68,9 @@ def plan():
     mov_insumo = set(MovimientoInsumo.objects.filter(mov_real).values_list("pk", flat=True))
     mov_activo = set(MovimientoActivo.objects.filter(mov_real).values_list("pk", flat=True))
     insumos = set(MovimientoInsumo.objects.filter(pk__in=mov_insumo).values_list("insumo_id", flat=True))
-    insumos |= set(SolicitudMaterial.objects.filter(pk__in=solicitudes).exclude(items__insumo=None)
-                   .values_list("items__insumo", flat=True))
+    # Línea por línea: una solicitud puede mezclar productos del inventario con líneas escritas a mano (sin producto)
+    insumos |= set(ItemSolicitud.objects.filter(solicitud__in=solicitudes, insumo__isnull=False)
+                   .values_list("insumo_id", flat=True))
     activos = set(MovimientoActivo.objects.filter(pk__in=mov_activo).values_list("activo_id", flat=True))
     ordenes = set(OrdenCompra.objects.filter(creado_por__in=reales).values_list("pk", flat=True))
     cotizaciones_prov = set(SolicitudCotizacion.objects.filter(creado_por__in=reales).values_list("pk", flat=True))

@@ -12,7 +12,7 @@ from django.test import TestCase
 
 from accounts.models import Usuario
 from comercial.models import ItemCatalogo
-from inventario.models import Insumo, MovimientoInsumo, Proveedor
+from inventario.models import Insumo, ItemSolicitud, MovimientoInsumo, Proveedor, SolicitudMaterial
 
 from .models import Categoria, Empresa, Ticket
 
@@ -62,3 +62,13 @@ class LimpiarPruebasTests(TestCase):
         guardados = {(d["model"], d["pk"]) for d in datos}
         self.assertIn(("tickets.ticket", self.comercial.pk), guardados)
         self.assertIn("comercial.itemcatalogo", {d["model"] for d in datos})
+
+    def test_solicitud_real_con_lineas_a_mano_conserva_sus_productos(self):
+        """Una solicitud de jguana que mezcla un producto del inventario con una línea escrita a mano (18/11/2026)."""
+        caja = Insumo.objects.create(codigo="C1", descripcion="Caja de sobreponer")
+        s = SolicitudMaterial.objects.create(ticket=self.tecnico, origen="tecnica", solicitado_por=self.jguana)
+        ItemSolicitud.objects.create(solicitud=s, descripcion="Cámara que está en la sede Bogotá", cantidad=1)
+        ItemSolicitud.objects.create(solicitud=s, insumo=caja, descripcion="Caja de sobreponer", cantidad=1)
+        self.correr("--confirmar")
+        self.assertTrue(SolicitudMaterial.objects.filter(pk=s.pk).exists())
+        self.assertEqual(set(Insumo.objects.values_list("codigo", flat=True)), {"A1", "C1"})
