@@ -92,6 +92,8 @@
 </script>
 {% if user.is_authenticated and user.es_supervisor %}{% include "tickets/_confirmar_recepcion.html" %}{% endif %}
 <script src="{% static 'js/firmas.js' %}?v=20261113"></script>
+{% if redaccion %}{{ redaccion|json_script:"redaccion-config" }}
+<script src="{% static 'js/redaccion.js' %}?v=20261118"></script>{% endif %}
 {% block scripts %}{% endblock %}
 <script src="{% static 'js/borrador_acta.js' %}?v=20261113"></script>
 </body>

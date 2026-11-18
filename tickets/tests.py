@@ -1589,7 +1589,7 @@ class AyudaRedaccionTests(ActaBase):
         import os
         from unittest import mock
         self.client.force_login(self.agente)
-        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}):
+        with mock.patch.dict(os.environ, {"REDACCION_API_KEY": ""}):
             r = self.client.get(reverse("acta_nueva", args=[self.ticket.radicado]))
         html = r.content.decode()
         for tipo in ("diagnostico", "resultado", "oportunidad", "equipo"):
@@ -1605,7 +1605,7 @@ class AyudaRedaccionTests(ActaBase):
         import os
         from unittest import mock
         self.client.force_login(self.agente)
-        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "clave-de-prueba"}):
+        with mock.patch.dict(os.environ, {"REDACCION_API_KEY": "clave-de-prueba"}):
             r = self.client.get(reverse("acta_nueva", args=[self.ticket.radicado]))
         self.assertEqual(r.context["redaccion"]["url"], reverse("mejorar_redaccion"))
 
@@ -1613,7 +1613,7 @@ class AyudaRedaccionTests(ActaBase):
         import os
         from unittest import mock
         self.client.force_login(self.agente)
-        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "clave-de-prueba"}), \
+        with mock.patch.dict(os.environ, {"REDACCION_API_KEY": "clave-de-prueba"}), \
                 mock.patch("anthropic.Anthropic") as cliente:
             crear = cliente.return_value.beta.messages.create
             crear.return_value = self._respuesta("La cámara 3 no presentaba imagen. Se reemplazó el conector.")
@@ -1632,14 +1632,14 @@ class AyudaRedaccionTests(ActaBase):
         from unittest import mock
         self.client.force_login(self.agente)
         url = reverse("mejorar_redaccion")
-        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "clave-de-prueba"}), \
+        with mock.patch.dict(os.environ, {"REDACCION_API_KEY": "clave-de-prueba"}), \
                 mock.patch("anthropic.Anthropic") as cliente:
             cliente.return_value.beta.messages.create.return_value = self._respuesta("", motivo="refusal")
             r = self.client.post(url, {"texto": "algo", "tipo": "resultado"})
             self.assertEqual(r.status_code, 400)
             self.assertIn("error", r.json())
             self.assertEqual(self.client.post(url, {"texto": "  ", "tipo": "resultado"}).status_code, 400)
-        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}):
+        with mock.patch.dict(os.environ, {"REDACCION_API_KEY": ""}):
             self.assertIn("no está activada", self.client.post(url, {"texto": "algo"}).json()["error"])
 
     def test_revisar_ortografia_gratuita_devuelve_errores_y_sugerencias(self):
@@ -1678,6 +1678,57 @@ class AyudaRedaccionTests(ActaBase):
         self.assertNotEqual(self.client.post(url, {"texto": "algo"}).status_code, 200)
         self.client.force_login(self.agente)
         self.assertEqual(self.client.get(url).status_code, 405)
+
+    def test_cualquier_texto_del_personal_con_el_campo_y_la_pagina(self):
+        """18/11/2026: la mejora sirve en todos los textos largos (comercial, administrativa, bodega…), no solo el acta."""
+        import os
+        from unittest import mock
+
+        from accounts.models import Usuario
+        comercial = Usuario.objects.create_user("com_red", "cr@janotec.test", "Clave-segura-1", rol="comercial")
+        self.client.force_login(comercial)
+        with mock.patch.dict(os.environ, {"REDACCION_API_KEY": "clave-de-prueba"}):
+            pagina = self.client.get(reverse("inicio"), follow=True)
+            self.assertIn("js/redaccion.js", pagina.content.decode())
+            with mock.patch("anthropic.Anthropic") as cliente:
+                crear = cliente.return_value.beta.messages.create
+                crear.return_value = self._respuesta("El cliente necesita cámaras en el parqueadero.")
+                r = self.client.post(reverse("mejorar_redaccion"), {
+                    "texto": "cliente nesesita camaras parqueadero", "tipo": "general",
+                    "campo": "¿Qué quiere y necesita el cliente? <b>", "pagina": "Levantamiento"})
+        self.assertEqual(r.status_code, 200)
+        contenido = crear.call_args.kwargs["messages"][0]["content"]
+        self.assertIn("el campo «¿Qué quiere y necesita el cliente? b» de la página «Levantamiento»", contenido)
+
+    def test_el_cliente_no_recibe_la_ayuda(self):
+        self.client.force_login(self.cli_a)
+        self.assertNotIn("js/redaccion.js", self.client.get(reverse("inicio"), follow=True).content.decode())
+        self.assertEqual(self.client.post(reverse("revisar_ortografia"), {"texto": "algo"}).status_code, 403)
+
+    def test_cupo_diario_y_saldo_agotado(self):
+        import os
+        from unittest import mock
+
+        import anthropic
+        from django.core.cache import cache
+
+        from . import redaccion
+        cache.clear()
+        self.client.force_login(self.agente)
+        url = reverse("mejorar_redaccion")
+        with mock.patch.dict(os.environ, {"REDACCION_API_KEY": "clave-de-prueba"}),                 mock.patch("anthropic.Anthropic") as cliente, mock.patch.object(redaccion, "MEJORAS_POR_DIA", 2):
+            cliente.return_value.beta.messages.create.return_value = self._respuesta("Texto mejorado.")
+            self.assertEqual(self.client.post(url, {"texto": "uno"}).status_code, 200)
+            self.assertEqual(self.client.post(url, {"texto": "dos"}).status_code, 200)
+            r = self.client.post(url, {"texto": "tres"})
+            self.assertEqual(r.status_code, 400)
+            self.assertIn("mejoras de hoy", r.json()["error"])
+            cache.clear()
+            sin_saldo = anthropic.BadRequestError.__new__(anthropic.BadRequestError)  # sin armar la respuesta HTTP
+            Exception.__init__(sin_saldo, "Your credit balance is too low to access the Anthropic API")
+            sin_saldo.status_code = 400
+            cliente.return_value.beta.messages.create.side_effect = sin_saldo
+            self.assertIn("saldo", self.client.post(url, {"texto": "cuatro"}).json()["error"])
 
 
 class ActaSinProgramarTests(ActaBase):

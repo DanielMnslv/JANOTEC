@@ -1,4 +1,5 @@
-"""Ayuda de redacción para los campos que escriben los técnicos en el acta de soporte.
+"""Ayuda de redacción para los textos que se escriben en la plataforma: el acta de soporte (con guía y frases) y,
+desde el 18/11/2026, cualquier campo de texto largo del personal de JANOTEC (tipo «general»).
 
 Tres niveles:
 
@@ -8,8 +9,10 @@ Tres niveles:
 2. Botón «Revisar ortografía», gratuito: LanguageTool señala tildes, ortografía, gramática y puntuación, y el técnico
    aplica cada corrección con un toque (o todas a la vez).
 3. Botón «Mejorar redacción» (opcional, con costo): le pide a Claude (Anthropic) que reescriba el texto del técnico en español formal
-   y claro, sin agregar hechos. Solo se activa si el servidor tiene ANTHROPIC_API_KEY en el .env y la librería
+   y claro, sin agregar hechos. Solo se activa si el servidor tiene REDACCION_API_KEY en el .env y la librería
    «anthropic» instalada; si falta cualquiera de las dos, el botón no aparece y lo demás sigue funcionando.
+   La clave tiene un nombre propio (no ANTHROPIC_API_KEY) para que ningún otro programa del servidor la tome por su
+   cuenta: el saldo se usa única y exclusivamente para redactar y mejorar textos de la plataforma (18/11/2026).
 
 Al servicio externo solo viaja el párrafo del campo: ni el cliente, ni la sede, ni el ticket.
 """
@@ -20,7 +23,9 @@ import os
 log = logging.getLogger(__name__)
 
 MODELO = "claude-opus-5-5"
-LARGO_MAXIMO = 2000  # caracteres que se aceptan para mejorar (un campo del acta no debería pasar de esto)
+LARGO_MAXIMO = 4000  # caracteres que se aceptan para mejorar (un campo de la plataforma no debería pasar de esto)
+CLAVE = "REDACCION_API_KEY"  # variable del .env, solo para este botón
+MEJORAS_POR_DIA = 40  # por persona: cuida el saldo prepagado (cada mejora cuesta cerca de 1 centavo de dólar)
 
 # Guía, frases rápidas y mínimo de palabras por tipo de campo
 TIPOS = {
@@ -51,14 +56,18 @@ TIPOS = {
         "frases": ["El cliente solicita cotizar ", "Se observó que ", "Se recomienda instalar "],
         "minimo": 4,
     },
+    # Cualquier otro campo de texto largo: sin guía ni frases; el contexto lo arman el nombre del campo y la página
+    "general": {"contexto": "", "guia": "", "frases": [], "minimo": 0},
 }
 
 INSTRUCCIONES = (
-    "Eres el corrector de estilo de las actas técnicas de JANOTEC, empresa colombiana de seguridad electrónica "
-    "(CCTV, alarmas, control de acceso, redes y cableado). Un técnico escribió el texto en campo, a veces desde el "
-    "celular y con prisa. Reescríbelo para que quede bien presentado en un acta y en un informe para el cliente.\n\n"
+    "Eres el corrector de estilo de los textos de JANOTEC, empresa colombiana de seguridad electrónica "
+    "(CCTV, alarmas, control de acceso, redes y cableado). Una persona del equipo (técnico, comercial, administrativa, "
+    "bodega o coordinación) escribió el texto en la plataforma, a veces desde el celular y con prisa. Reescríbelo para "
+    "que quede bien presentado: puede terminar en un acta, un informe o una propuesta para el cliente.\n\n"
     "Reglas:\n"
-    "- Español de Colombia, formal y claro, en forma impersonal («Se realizó…», «Se encontró…»).\n"
+    "- Español de Colombia, formal y claro. En actas, informes y diagnósticos usa forma impersonal («Se realizó…», "
+    "«Se encontró…»); en un mensaje, motivo o comentario conserva a quién se dirige y su propósito.\n"
     "- Corrige ortografía, tildes, puntuación y mayúsculas; ordena las ideas en oraciones completas.\n"
     "- No agregues hechos, causas, cifras, equipos, recomendaciones ni conclusiones que no estén en el texto.\n"
     "- Conserva tal cual marcas, referencias, modelos, seriales, cantidades, medidas, zonas y nombres.\n"
@@ -69,7 +78,7 @@ INSTRUCCIONES = (
 
 def ia_disponible():
     """True si se puede usar el botón «Mejorar redacción»: hay clave en el .env y la librería está instalada."""
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    if not os.environ.get(CLAVE):
         return False
     try:
         import anthropic  # noqa: F401
@@ -135,8 +144,42 @@ def revisar_ortografia(texto):
     return errores
 
 
-def mejorar(texto, tipo):
-    """Devuelve el texto del técnico reescrito por Claude, o lanza RedaccionNoDisponible con un mensaje para mostrar."""
+def _limpio(valor, largo=80):
+    """Nombre de campo o página que manda el navegador: una línea corta, sin signos que se confundan con etiquetas."""
+    return " ".join(str(valor or "").replace("<", " ").replace(">", " ").split())[:largo]
+
+
+def descripcion(tipo, campo="", pagina=""):
+    """A qué corresponde el texto, para que Claude sepa el tono: el del tipo del acta o, en general, campo y página."""
+    conocido = TIPOS.get(tipo, {}).get("contexto")
+    if conocido:
+        return conocido
+    campo, pagina = _limpio(campo), _limpio(pagina)
+    if campo and pagina:
+        return f"el campo «{campo}» de la página «{pagina}» de la plataforma"
+    if campo or pagina:
+        return f"el campo «{campo or pagina}» de la plataforma"
+    return "un texto escrito en la plataforma"
+
+
+def gastar_cupo(usuario):
+    """Cuenta una mejora del día para la persona; False si ya llegó a MEJORAS_POR_DIA (cuida el saldo prepagado)."""
+    from django.core.cache import cache
+    from django.utils import timezone
+
+    clave = f"redaccion:{usuario.pk}:{timezone.localdate():%Y%m%d}"
+    usadas = cache.get_or_set(clave, 0, 60 * 60 * 26)
+    if usadas >= MEJORAS_POR_DIA:
+        return False
+    try:
+        cache.incr(clave)
+    except ValueError:  # se venció justo ahora
+        cache.set(clave, 1, 60 * 60 * 26)
+    return True
+
+
+def mejorar(texto, tipo, campo="", pagina=""):
+    """Devuelve el texto reescrito por Claude, o lanza RedaccionNoDisponible con un mensaje para mostrar."""
     texto = (texto or "").strip()
     if not texto:
         raise RedaccionNoDisponible("Escriba primero el texto que quiere mejorar.")
@@ -146,12 +189,12 @@ def mejorar(texto, tipo):
         raise RedaccionNoDisponible("La mejora de redacción no está activada en el servidor.")
     import anthropic
 
-    contexto = TIPOS.get(tipo, TIPOS["resultado"])["contexto"]
-    cliente = anthropic.Anthropic(timeout=40.0, max_retries=1)
+    contexto = descripcion(tipo, campo, pagina)
+    cliente = anthropic.Anthropic(api_key=os.environ[CLAVE], timeout=60.0, max_retries=1)
     try:
         respuesta = cliente.beta.messages.create(
             model=MODELO,
-            max_tokens=4000,
+            max_tokens=8000,
             output_config={"effort": "low"},  # corregir estilo no necesita razonar a fondo
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",  # si el modelo se niega, la API reintenta sola con otro modelo
@@ -159,8 +202,14 @@ def mejorar(texto, tipo):
             messages=[{"role": "user", "content": f"El texto corresponde a {contexto}.\n\n<texto>\n{texto}\n</texto>"}],
         )
     except anthropic.AuthenticationError:
-        log.error("Redacción: la clave ANTHROPIC_API_KEY no es válida")
+        log.error("Redacción: la clave REDACCION_API_KEY no es válida")
         raise RedaccionNoDisponible("La clave del servicio de redacción no es válida. Avise a sistemas.")
+    except anthropic.BadRequestError as e:
+        if "credit" in str(e).lower():  # se acabó el saldo prepagado
+            log.error("Redacción: sin saldo en la cuenta de Anthropic")
+            raise RedaccionNoDisponible("Se acabó el saldo de la mejora de redacción. Avise a sistemas para recargarlo.")
+        log.error("Redacción: solicitud rechazada (%s)", e.status_code)
+        raise RedaccionNoDisponible("El servicio de redacción no respondió bien. Intente de nuevo.")
     except anthropic.RateLimitError:
         raise RedaccionNoDisponible("El servicio de redacción está ocupado. Intente en un minuto.")
     except anthropic.APIStatusError as e:

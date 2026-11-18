@@ -1,6 +1,9 @@
-/* Ayuda de redacción para los campos que escribe el técnico en el acta (tickets/redaccion.py).
+/* Ayuda de redacción para los textos de la plataforma (tickets/redaccion.py).
  *
- * A cada <textarea data-redaccion="tipo"> le agrega:
+ * Cualquier otro <textarea> del personal (18/11/2026), al tocarlo, recibe solo los dos botones de abajo; se excluyen
+ * las listas (seriales, placas, materiales…) y los campos con data-redaccion="no".
+ *
+ * A cada <textarea data-redaccion="tipo"> del acta le agrega:
  *  - una guía corta de qué escribir,
  *  - frases rápidas para tocar (útil en el celular),
  *  - corrección automática al salir del campo: espacios de sobra, mayúscula inicial y punto final,
@@ -54,12 +57,13 @@
 
   function preparar(campo) {
     if (campo.dataset.redaccionLista) return;
-    const tipo = config.tipos[campo.dataset.redaccion];
+    const clave = campo.dataset.redaccion || 'general';
+    const tipo = config.tipos[clave];
     if (!tipo) return;
     campo.dataset.redaccionLista = '1';
 
     const caja = el('div', 'redaccion-ayuda mt-1');
-    caja.append(el('div', 'form-text mt-0 mb-1', '✍️ ' + tipo.guia));
+    if (tipo.guia) caja.append(el('div', 'form-text mt-0 mb-1', '✍️ ' + tipo.guia));
 
     const fila = el('div', 'd-flex flex-wrap gap-1 align-items-center');
     tipo.frases.forEach(function (frase) {
@@ -181,7 +185,9 @@
         mejorar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Mejorando…';
         const datos = new FormData();
         datos.append('texto', campo.value);
-        datos.append('tipo', campo.dataset.redaccion);
+        datos.append('tipo', clave);
+        datos.append('campo', nombreDelCampo(campo));
+        datos.append('pagina', (document.querySelector('h1') || {}).textContent || document.title);
         fetch(config.url, { method: 'POST', body: datos, headers: { 'X-CSRFToken': token(campo) }, credentials: 'same-origin' })
           .then(function (r) { return r.json().catch(function () { return { error: 'No se pudo mejorar. Intente de nuevo.' }; }); })
           .then(function (r) { mostrar(r); })
@@ -221,19 +227,36 @@
       aviso.textContent = 'Muy corto para el acta: cuente un poco más (' + tipo.guia.toLowerCase() + ')';
     }
 
-    campo.addEventListener('blur', function () {
-      const limpio = pulir(campo.value);
-      if (limpio !== campo.value) campo.value = limpio;
-      revisar();
-    });
+    if (tipo.minimo) {  // solo los campos del acta: los demás pueden ser listas o mensajes con su propio formato
+      campo.addEventListener('blur', function () {
+        const limpio = pulir(campo.value);
+        if (limpio !== campo.value) campo.value = limpio;
+        revisar();
+      });
+    }
 
     caja.append(fila, aviso, propuesta);
     campo.after(caja);
   }
 
-  document.querySelectorAll('textarea[data-redaccion]').forEach(preparar);
-  // Filas que se agregan después (equipos, materiales): se preparan al tocarlas
+  // El nombre del campo (su etiqueta o lo que pide), para que la mejora sepa qué tono usar
+  function nombreDelCampo(campo) {
+    const etiqueta = campo.id && document.querySelector('label[for="' + campo.id + '"]');
+    return ((etiqueta && etiqueta.textContent) || campo.getAttribute('aria-label') || campo.placeholder || campo.name || '')
+      .replace(/\*/g, '').trim().slice(0, 80);
+  }
+
+  // Listas y datos, no prosa: ahí no hay nada que redactar
+  const LISTAS = /(serial|placa|materiales|adicionales|insumos|suministros|servicios|correo|codigo|json|csv)/i;
+  function esTextoLibre(campo) {
+    if (campo.dataset.redaccion === 'no' || campo.readOnly || campo.disabled || campo.closest('.no-redaccion')) return false;
+    return !LISTAS.test(campo.name || '') && !/por l[ií]nea/i.test(campo.placeholder || '');
+  }
+
+  document.querySelectorAll('textarea[data-redaccion]').forEach(function (c) { if (c.dataset.redaccion !== 'no') preparar(c); });
+  // Filas que se agregan después (equipos, materiales) y los demás textos de la plataforma: se preparan al tocarlos
   document.addEventListener('focusin', function (ev) {
-    if (ev.target.matches && ev.target.matches('textarea[data-redaccion]')) preparar(ev.target);
+    const t = ev.target;
+    if (t && t.tagName === 'TEXTAREA' && esTextoLibre(t)) preparar(t);
   });
 })();

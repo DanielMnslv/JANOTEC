@@ -21,6 +21,12 @@ def empresa(request):
     if usuario is not None and usuario.is_authenticated and usuario.ve_financiera:
         from inventario.models import OrdenCompra
         datos["compras_por_pagar"] = OrdenCompra.objects.filter(estado=OrdenCompra.Estado.POR_PAGAR).count()
+    if usuario is not None and usuario.is_authenticated and usuario.es_interno:
+        from django.urls import reverse
+
+        from . import redaccion
+        # «Revisar ortografía» y «Mejorar redacción» en todos los textos largos del personal (static/js/redaccion.js)
+        datos["redaccion"] = redaccion.configuracion(reverse("mejorar_redaccion"), reverse("revisar_ortografia"))
     if usuario is not None and usuario.is_authenticated:
         from . import menu
         datos["menu"] = menu.construir(request, datos)  # menú lateral: lo de su rol desplegado, lo demás en «Más áreas»

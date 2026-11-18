@@ -950,32 +950,40 @@ def resolver_devolucion(request, pk):
 
 
 @login_required
-@personal_requerido
 @require_POST
 def mejorar_redaccion(request):
-    """Botón «Mejorar redacción» del acta: devuelve el texto del técnico reescrito por Claude (JSON).
+    """Botón «Mejorar redacción» (acta y cualquier texto largo del personal): el texto reescrito por Claude (JSON).
 
-    El técnico ve la propuesta y decide si la usa; aquí no se guarda nada.
+    Quien escribe ve la propuesta y decide si la usa; aquí no se guarda nada. Cada persona tiene un cupo diario
+    (redaccion.MEJORAS_POR_DIA) para que el saldo prepagado no se acabe en un día.
     """
     from django.http import JsonResponse
 
     from . import redaccion
 
+    if not request.user.es_interno:
+        raise PermissionDenied
+    if redaccion.ia_disponible() and (request.POST.get("texto") or "").strip() and not redaccion.gastar_cupo(request.user):
+        return JsonResponse({"error": f"Ya usó las {redaccion.MEJORAS_POR_DIA} mejoras de hoy. Mañana tiene más; "
+                                      "mientras tanto use «Revisar ortografía» (gratis)."}, status=400)
     try:
-        texto = redaccion.mejorar(request.POST.get("texto", ""), request.POST.get("tipo", ""))
+        texto = redaccion.mejorar(request.POST.get("texto", ""), request.POST.get("tipo", ""),
+                                  request.POST.get("campo", ""), request.POST.get("pagina", ""))
     except redaccion.RedaccionNoDisponible as e:
         return JsonResponse({"error": str(e)}, status=400)
     return JsonResponse({"texto": texto})
 
 
 @login_required
-@personal_requerido
 @require_POST
 def revisar_ortografia(request):
-    """Botón «Revisar ortografía» del acta (gratuito, LanguageTool): devuelve los errores y sus sugerencias (JSON)."""
+    """Botón «Revisar ortografía» (gratuito, LanguageTool) para el personal: devuelve errores y sugerencias (JSON)."""
     from django.http import JsonResponse
 
     from . import redaccion
+
+    if not request.user.es_interno:
+        raise PermissionDenied
 
     try:
         errores = redaccion.revisar_ortografia(request.POST.get("texto", ""))
