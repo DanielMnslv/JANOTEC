@@ -178,3 +178,31 @@ class BorrarHorasExtrasTests(BaseCronograma):
         self.assertEqual(len(respaldo), 1)
         datos = json.load(gzip.open(respaldo[0], "rt", encoding="utf-8"))
         self.assertEqual(datos[0]["fields"]["cliente"], "Cliente de prueba")
+
+
+class HorasExtrasEnBusTests(BaseCronograma):
+    """En bus o transporte público (18/11/2026) solo cuenta de 6:00 a. m. a 7:00 p. m."""
+
+    def reporte(self, rol, salida, llegada):
+        return ReporteHorasExtra(colaborador=self.tec, rol=rol, hora_salida=time(*salida), hora_llegada=time(*llegada),
+                                 cliente="X")
+
+    def test_en_bus_no_cuenta_antes_de_las_6_ni_despues_de_las_7(self):
+        r = self.reporte("bus", (4, 30), (21, 0))
+        self.assertEqual(r.minutos, 13 * 60)
+        self.assertTrue(r.recortado_por_bus)
+
+    def test_en_bus_dentro_de_la_franja_cuenta_todo(self):
+        r = self.reporte("bus", (7, 0), (18, 30))
+        self.assertEqual(r.minutos, 11 * 60 + 30)
+        self.assertFalse(r.recortado_por_bus)
+
+    def test_en_bus_toda_de_noche_no_cuenta(self):
+        self.assertEqual(self.reporte("bus", (20, 0), (5, 0)).minutos, 0)
+
+    def test_en_bus_pasando_la_medianoche_cuenta_la_manana_siguiente(self):
+        self.assertEqual(self.reporte("bus", (17, 0), (8, 0)).minutos, 2 * 60 + 2 * 60)
+
+    def test_conductor_cuenta_todo_aunque_sea_de_noche(self):
+        self.assertEqual(self.reporte("conductor", (4, 30), (21, 0)).minutos, 16 * 60 + 30)
+        self.assertEqual(self.reporte("acompanante", (20, 0), (5, 0)).minutos, 9 * 60)
