@@ -10,7 +10,7 @@
   <div class="col-lg-4">
     {% for r, cierre, cierre_tarde in abiertos %}
     <div class="card mb-3 border-warning">
-      <div class="card-header"><i class="bi bi-hourglass-split"></i> Falta terminar{% if user.es_supervisor %} · {{ r.colaborador.get_full_name|default:r.colaborador.username }}{% endif %}</div>
+      <div class="card-header"><i class="bi bi-hourglass-split"></i> Falta terminar{% if user.gestiona_horas_extras %} · {{ r.colaborador.get_full_name|default:r.colaborador.username }}{% endif %}</div>
       <div class="card-body">
         <p class="small mb-2">{{ r.fecha|date:"d/m/Y" }} · {{ r.rol_corto }} · inició {{ r.hora_salida|time:"H:i" }}{% if r.salida_tardia %} (registro tardío){% endif %} · {{ r.cliente }}
           {% if r.evidencia_salida %}· <a href="{% url 'cronograma:horas_extras_foto' r.pk 'salida' %}" target="_blank" rel="noopener">foto del inicio</a>{% endif %}</p>
@@ -63,7 +63,7 @@
   </div>
 
   <div class="col-lg-8">
-    {% if user.es_supervisor and por_validar %}
+    {% if user.gestiona_horas_extras and por_validar %}
     <div class="card mb-3 border-danger">
       <div class="card-header"><i class="bi bi-shield-exclamation"></i> Por validar <span class="badge text-bg-danger">{{ por_validar|length }}</span></div>
       <div class="list-group list-group-flush">
@@ -92,9 +92,9 @@
       <label class="small text-muted-jn" for="mes">Mes</label>
       <input type="month" id="mes" name="mes" value="{{ mes }}" class="form-control form-control-sm" style="max-width:170px">
       <button class="btn btn-sm btn-outline-secondary">Ver</button>
-      {% if user.es_supervisor %}<a class="btn btn-sm btn-outline-success ms-auto" href="?mes={{ mes }}&formato=excel"><i class="bi bi-file-earmark-excel"></i> Descargar Excel</a>{% endif %}
+      {% if user.gestiona_horas_extras %}<a class="btn btn-sm btn-outline-success ms-auto" href="?mes={{ mes }}&formato=excel"><i class="bi bi-file-earmark-excel"></i> Descargar Excel</a>{% endif %}
     </form>
-    {% if user.es_supervisor and totales %}
+    {% if user.gestiona_horas_extras and totales %}
     <div class="card mb-3">
       <div class="card-header"><i class="bi bi-people"></i> Total del mes por colaborador <span class="small text-muted-jn">(sin las rechazadas)</span></div>
       <ul class="list-group list-group-flush small">
@@ -105,21 +105,22 @@
     <div class="card">
       <div class="table-responsive">
         <table class="table table-tickets mb-0">
-          <thead><tr>{% if user.es_supervisor %}<th>Colaborador</th>{% endif %}<th>Fecha</th><th>Fue</th><th>Inicio</th><th>Fin</th><th class="text-end">Horas</th><th>Cliente</th><th>Validación</th></tr></thead>
+          <thead><tr>{% if user.gestiona_horas_extras %}<th>Colaborador</th>{% endif %}<th>Fecha</th><th>Fue</th><th>Inicio</th><th>Fin</th><th class="text-end">Horas</th><th>Cliente</th><th>Validación</th></tr></thead>
           {% for r in reportes %}
-            <tr>{% if user.es_supervisor %}<td>{{ r.colaborador.get_full_name|default:r.colaborador.username }}</td>{% endif %}<td>{{ r.fecha|date:"d/m/Y" }}</td><td class="small">{{ r.rol_corto }}</td>
+            <tr>{% if user.gestiona_horas_extras %}<td>{{ r.colaborador.get_full_name|default:r.colaborador.username }}</td>{% endif %}<td>{{ r.fecha|date:"d/m/Y" }}</td><td class="small">{{ r.rol_corto }}</td>
               <td class="text-nowrap">{{ r.hora_salida|time:"H:i" }}{% if r.salida_tardia %} <span class="badge text-bg-warning" title="{{ r.motivo_salida }}">tardío</span>{% endif %}{% if r.evidencia_salida %} <a href="{% url 'cronograma:horas_extras_foto' r.pk 'salida' %}" target="_blank" rel="noopener" title="Foto del inicio"><i class="bi bi-camera"></i></a>{% endif %}{% if r.mapa_salida %} <a href="{{ r.mapa_salida }}" target="_blank" rel="noopener" title="Ver en el mapa dónde inició"><i class="bi bi-geo-alt"></i></a>{% endif %}</td>
               <td class="text-nowrap">{% if r.abierto %}<span class="badge text-bg-warning">En curso</span>{% else %}{{ r.hora_llegada|time:"H:i" }}{% if r.llegada_tardia %} <span class="badge text-bg-warning" title="{{ r.motivo_llegada }}">tardío</span>{% endif %}{% if r.evidencia_llegada %} <a href="{% url 'cronograma:horas_extras_foto' r.pk 'llegada' %}" target="_blank" rel="noopener" title="Foto del fin"><i class="bi bi-camera"></i></a>{% endif %}{% if r.mapa_llegada %} <a href="{{ r.mapa_llegada }}" target="_blank" rel="noopener" title="Ver en el mapa dónde terminó"><i class="bi bi-geo-alt"></i></a>{% endif %}{% endif %}</td>
               <td class="text-end">{{ r.duracion }}{% if r.recortado_por_bus %}<span class="d-block small text-muted-jn" title="En bus solo cuenta de 6:00 a. m. a 7:00 p. m.">solo 6 a. m.–7 p. m.</span>{% endif %}</td><td class="small">{{ r.cliente }}</td>
               <td class="small">{% if r.validacion == 'verificado' or r.validacion == 'aprobado' %}<span class="badge text-bg-success">{% if r.validacion == 'verificado' %}Verificado{% else %}Aprobado{% endif %}</span>{% elif r.validacion == 'rechazado' %}<span class="badge text-bg-danger" title="{{ r.nota_validacion }}">Rechazado</span>{% elif r.validacion == 'anterior' %}<span class="text-muted-jn">—</span>{% elif not r.abierto %}<span class="badge text-bg-warning text-dark">Por validar</span>{% endif %}
-                {% if r.nota_validacion %}<div class="text-muted-jn">{{ r.nota_validacion }}</div>{% endif %}</td></tr>
+                {% if r.nota_validacion %}<div class="text-muted-jn">{{ r.nota_validacion }}</div>{% endif %}
+                {% if user.gestiona_horas_extras %}<a class="d-inline-block mt-1" href="{% url 'cronograma:horas_extras_corregir' r.pk %}"><i class="bi bi-pencil"></i> Corregir o borrar</a>{% endif %}</td></tr>
           {% empty %}
             <tr><td colspan="8" class="text-center text-muted-jn py-4">No hay horas registradas en este mes.</td></tr>
           {% endfor %}
         </table>
       </div>
     </div>
-    {% if not user.es_supervisor and totales %}<p class="small mt-2 text-end">Total del mes: <b>{{ totales.0.1 }} h</b></p>{% endif %}
+    {% if not user.gestiona_horas_extras and totales %}<p class="small mt-2 text-end">Total del mes: <b>{{ totales.0.1 }} h</b></p>{% endif %}
   </div>
 </div>
 <script>

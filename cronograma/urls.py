@@ -37,6 +37,7 @@ urlpatterns = [
     path("viaticos/nueva/", viaticos.nueva, name="viaticos_nueva"),
     path("viaticos/<int:pk>/gestionar/", viaticos.gestionar, name="viaticos_gestionar"),
     path("viaticos/<int:pk>/soporte/", viaticos.soporte, name="viaticos_soporte"),
+    path("horas-extras/<int:pk>/corregir/", views.horas_extras_corregir, name="horas_extras_corregir"),
     path("horas-extras/<int:pk>/foto/<str:cual>/", views.horas_extras_foto, name="horas_extras_foto"),
     path("documentos/mios/", views.documentos_tecnico, name="mis_documentos"),
     path("documentos/<int:pk>/", views.documentos_tecnico, name="documentos_tecnico"),

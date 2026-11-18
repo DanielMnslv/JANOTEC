@@ -190,7 +190,7 @@ class ReporteHorasExtraForm(BootstrapMixin, forms.ModelForm):
         from accounts.models import Empresa
 
         self.tardio = tardio
-        if usuario.es_supervisor:  # el coordinador puede registrar por otro técnico (queda por validar)
+        if usuario.gestiona_horas_extras:  # la coordinación puede registrar por otro técnico (queda por validar)
             self.fields["colaborador"].queryset = tecnicos_queryset()
             self.fields["colaborador"].initial = usuario.pk if tecnicos_queryset().filter(pk=usuario.pk).exists() else None
         else:
@@ -252,4 +252,33 @@ class CierreHorasExtraForm(BootstrapMixin, forms.ModelForm):
         d = super().clean()
         if self.tardio and len((d.get("motivo") or "").strip()) < 10:
             self.add_error("motivo", "Explique en una frase por qué no lo registró en el momento.")
+        return d
+
+
+class CorregirHorasExtraForm(BootstrapMixin, forms.ModelForm):
+    """Quien lleva las horas extras corrige un registro que quedó mal; el motivo queda en la nota de validación."""
+    motivo = forms.CharField(label="¿Qué se corrigió y por qué?", max_length=250,
+                             widget=forms.Textarea(attrs={"rows": 2}))
+
+    class Meta:
+        model = ReporteHorasExtra
+        fields = ["rol", "fecha", "hora_salida", "hora_llegada", "cliente"]
+        widgets = {
+            "rol": forms.RadioSelect,
+            "fecha": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "hora_salida": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
+            "hora_llegada": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["rol"].required = True
+        self.fields["rol"].choices = ReporteHorasExtra.Rol.choices
+        self.fields["hora_llegada"].required = True
+        self._aplicar_estilos()
+
+    def clean(self):
+        d = super().clean()
+        if len((d.get("motivo") or "").strip()) < 5:
+            self.add_error("motivo", "Escriba en una frase qué se corrigió.")
         return d

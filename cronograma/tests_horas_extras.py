@@ -206,3 +206,55 @@ class HorasExtrasEnBusTests(BaseCronograma):
     def test_conductor_cuenta_todo_aunque_sea_de_noche(self):
         self.assertEqual(self.reporte("conductor", (4, 30), (21, 0)).minutos, 16 * 60 + 30)
         self.assertEqual(self.reporte("acompanante", (20, 0), (5, 0)).minutos, 9 * 60)
+
+
+class CorregirHorasExtrasTests(BaseCronograma):
+    """Quien lleva las horas extras (18/11/2026), p. ej. Tatiana de bodega, corrige o borra un registro que quedó mal."""
+
+    def setUp(self):
+        super().setUp()
+        from accounts.models import Usuario
+
+        self.tatiana = Usuario.objects.create_user("tatiana", "t@x.co", "clave-prueba-123", rol="bodega",
+                                                   lleva_horas_extras=True)
+        self.r = ReporteHorasExtra.objects.create(colaborador=self.tec, rol="conductor", fecha=timezone.localdate(),
+                                                  hora_salida="18:00", hora_llegada="23:00", cliente="Cliente X")
+        self.url = reverse("cronograma:horas_extras_corregir", args=[self.r.pk])
+
+    def test_tatiana_ve_todo_y_el_enlace_para_corregir(self):
+        self.client.force_login(self.tatiana)
+        lista = self.client.get(reverse("cronograma:horas_extras"))
+        self.assertEqual(lista.status_code, 200)
+        self.assertContains(lista, "Cliente X")
+        self.assertContains(lista, self.url)
+
+    def test_corregir_deja_aprobado_con_el_motivo(self):
+        self.client.force_login(self.tatiana)
+        r = self.client.post(self.url, {"accion": "guardar", "rol": "acompanante", "fecha": timezone.localdate().isoformat(),
+                                        "hora_salida": "19:00", "hora_llegada": "22:00", "cliente": "Cliente X",
+                                        "motivo": "La hora de inicio quedó mal"})
+        self.assertEqual(r.status_code, 302)
+        self.r.refresh_from_db()
+        self.assertEqual((self.r.rol, self.r.minutos, self.r.validacion), ("acompanante", 180, "aprobado"))
+        self.assertEqual(self.r.validado_por, self.tatiana)
+        self.assertIn("La hora de inicio quedó mal", self.r.nota_validacion)
+
+    def test_borrar_pide_motivo_y_borra(self):
+        self.client.force_login(self.tatiana)
+        self.client.post(self.url, {"accion": "borrar", "motivo": ""})
+        self.assertTrue(ReporteHorasExtra.objects.filter(pk=self.r.pk).exists())
+        self.client.post(self.url, {"accion": "borrar", "motivo": "Quedó repetido"})
+        self.assertFalse(ReporteHorasExtra.objects.filter(pk=self.r.pk).exists())
+
+    def test_el_tecnico_no_puede_corregir_ni_borrar(self):
+        self.client.force_login(self.tec)
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.assertEqual(self.client.post(self.url, {"accion": "borrar", "motivo": "Quedó repetido"}).status_code, 403)
+        self.assertTrue(ReporteHorasExtra.objects.filter(pk=self.r.pk).exists())
+        self.assertNotContains(self.client.get(reverse("cronograma:horas_extras")), "Corregir o borrar")
+
+    def test_bodega_sin_la_marca_no_entra(self):
+        self.tatiana.lleva_horas_extras = False
+        self.tatiana.save()
+        self.client.force_login(self.tatiana)
+        self.assertEqual(self.client.get(reverse("cronograma:horas_extras")).status_code, 403)

@@ -45,7 +45,7 @@ USUARIOS = [
     ("prueba.financiera", "Financiera", "financiera", {},
      "Paga las órdenes de compra (de contado o con anticipo y su saldo) y valida la factura contra la orden."),
 ]
-OPCIONES = ("tambien_comercial", "tambien_administrativo", "tambien_financiera", "tambien_tecnico", "revisa_compras")
+OPCIONES = ("tambien_comercial", "tambien_administrativo", "tambien_financiera", "tambien_tecnico", "revisa_compras", "lleva_horas_extras")
 
 
 def q_de_prueba(prefijo=""):

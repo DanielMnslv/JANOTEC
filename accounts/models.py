@@ -155,6 +155,10 @@ class Usuario(AbstractUser):
         "revisa las órdenes de compra", default=False,
         help_text="Coordinación administrativa: revisa las órdenes de compra antes de que pasen a dirección (firma «Revisó»).",
     )
+    lleva_horas_extras = models.BooleanField(
+        "lleva las horas extras", default=False,
+        help_text="Revisa las horas extras de todos: valida, corrige o borra un registro que quedó mal y descarga el Excel.",
+    )
     firma = models.ImageField("firma escaneada", upload_to="firmas/usuarios/", blank=True,
                               help_text="PNG con fondo blanco o transparente. Sale en «Elaboró» de las propuestas que arma.")
 
@@ -201,6 +205,11 @@ class Usuario(AbstractUser):
     def es_supervisor(self):
         """Dirige el área técnica: asigna técnicos, fija prioridad, programa visitas."""
         return self.is_superuser or self.rol in (self.Rol.SUPERVISOR, self.Rol.DIRECCION)
+
+    @property
+    def gestiona_horas_extras(self):
+        """Ve las horas extras de todos, las valida, corrige o borra: coordinación, dirección y quien las lleva."""
+        return self.es_supervisor or self.lleva_horas_extras
 
     # --- Comercial y administrativa: dos áreas sobre el mismo requerimiento ---------------------------
     # Comercial trae los requerimientos y les hace seguimiento (radica, pide el levantamiento, registra la respuesta

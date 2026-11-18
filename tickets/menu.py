@@ -71,6 +71,8 @@ def areas_propias(usuario):
                         ("tambien_administrativo", "administrativa"), ("tambien_financiera", "financiera")):
         if getattr(usuario, marca, False):
             areas.add(area)
+    if getattr(usuario, "lleva_horas_extras", False):
+        areas.add("horas")
     return areas
 
 
@@ -186,9 +188,10 @@ def _grupos(request, datos):
         else:
             material = None
         cronograma = Enlace("Cronograma", reverse("cronograma:semana"), "bi-calendar-week",
-                            ns == "cronograma" and u not in ("horas_extras", "viaticos") and "mantenimiento" not in u)
+                            ns == "cronograma" and u not in ("horas_extras", "horas_extras_corregir", "viaticos") and "mantenimiento" not in u)
         actas = Enlace("Actas", reverse("actas_lista"), "bi-clipboard-check", u in ("actas_lista", "acta_detalle"))
-        horas = Enlace("Horas extras", reverse("cronograma:horas_extras"), "bi-clock-history", u == "horas_extras")
+        horas = Enlace("Horas extras", reverse("cronograma:horas_extras"), "bi-clock-history",
+                       u in ("horas_extras", "horas_extras_corregir"))
         if usuario.es_supervisor:
             # El paso a paso del ticket (tickets/pasos.py): recepcionar → asignar → programar → visita y acta → informe → cierre
             c = _conteo_tecnica(usuario)
@@ -271,6 +274,11 @@ def _grupos(request, datos):
                      Enlace("Mis solicitudes", reverse("mis_tickets"), "bi-list-check", u == "mis_tickets"),
                      Enlace("Historial de servicio", reverse("actas_lista"), "bi-clock-history",
                             u in ("actas_lista", "acta_detalle"))))
+    if usuario.lleva_horas_extras and not usuario.es_personal:
+        # Quien lleva las horas extras sin ser del área técnica (p. ej. Tatiana): valida, corrige o borra
+        grupo("horas", "Horas extras", "horas",
+              Enlace("Horas extras", reverse("cronograma:horas_extras"), "bi-clock-history",
+                     u in ("horas_extras", "horas_extras_corregir")))
     return grupos
 
 

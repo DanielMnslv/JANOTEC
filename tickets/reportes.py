@@ -151,7 +151,7 @@ REPORTES = [
             lambda u: u.es_supervisor, actas),
     Reporte("horas_extras", "Horas extras", "Técnica", "bi-clock-history",
             "Cada reporte del periodo con sus horas, el cliente, la validación de la coordinación y sus alertas.",
-            lambda u: u.es_supervisor, horas_extras),
+            lambda u: u.gestiona_horas_extras, horas_extras),
     Reporte("viaticos", "Viáticos", "Financiera", "bi-wallet2",
             "Cada solicitud de viáticos del periodo: destino, para quién, conceptos, estado y valor entregado.",
             lambda u: u.es_supervisor or u.ve_financiera, viaticos),

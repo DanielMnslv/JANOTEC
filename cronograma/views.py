@@ -1,5 +1,6 @@
 import json
 from datetime import date, timedelta
+from functools import wraps
 
 from django.conf import settings
 from django.contrib import messages
@@ -576,8 +577,19 @@ def correo_sst(request, pk):
                                                           "destino": destino, "lunes": Actividad.lunes_de(actividad.fecha)})
 
 
+def horas_extras_requerido(vista):
+    """Horas extras: el personal técnico (cada uno lo suyo) y quien las lleva (p. ej. Tatiana), aunque no sea técnico."""
+    @wraps(vista)
+    def envoltura(request, *args, **kwargs):
+        if not (request.user.es_personal or request.user.lleva_horas_extras):
+            raise PermissionDenied
+        return vista(request, *args, **kwargs)
+
+    return envoltura
+
+
 @login_required
-@personal_requerido
+@horas_extras_requerido
 def horas_extras(request):
     """Auto reporte de salida a campo, con la validación de cada momento (ver ``cronograma/horas_validacion.py``).
 
@@ -607,7 +619,7 @@ def horas_extras(request):
         activo = form_tardio if tardio else form
         if activo.is_valid():
             reporte = activo.save(commit=False)
-            if not request.user.es_supervisor:
+            if not request.user.gestiona_horas_extras:
                 reporte.colaborador = request.user
             reporte.registrado_por = request.user
             if tardio:
@@ -628,7 +640,7 @@ def horas_extras(request):
     # --- Fin ---
     if accion in ("cerrar", "cerrar_tardio"):
         reporte = get_object_or_404(ReporteHorasExtra, pk=request.POST.get("reporte"), hora_llegada__isnull=True)
-        if reporte.colaborador_id != request.user.pk and not request.user.es_supervisor:
+        if reporte.colaborador_id != request.user.pk and not request.user.gestiona_horas_extras:
             raise Http404
         tarde = accion == "cerrar_tardio"
         prefijo = f"{'t' if tarde else 'c'}{reporte.pk}"
@@ -654,7 +666,7 @@ def horas_extras(request):
 
     # --- Coordinación: validar ---
     if accion == "validar":
-        if not request.user.es_supervisor:
+        if not request.user.gestiona_horas_extras:
             raise PermissionDenied
         reporte = get_object_or_404(ReporteHorasExtra, pk=request.POST.get("reporte"))
         decision, nota = request.POST.get("decision"), (request.POST.get("nota") or "").strip()[:300]
@@ -668,7 +680,7 @@ def horas_extras(request):
                                       f"{reporte.get_validacion_display().lower()}.")
         return redirect(reverse("cronograma:horas_extras") + f"?mes={reporte.fecha:%Y-%m}")
     abiertos = ReporteHorasExtra.objects.filter(hora_llegada__isnull=True).select_related("colaborador")
-    if not request.user.es_supervisor:
+    if not request.user.gestiona_horas_extras:
         abiertos = abiertos.filter(colaborador=request.user)
     abiertos = [(r, CierreHorasExtraForm(instance=r, prefix=f"c{r.pk}"),
                  CierreHorasExtraForm(instance=r, prefix=f"t{r.pk}", tardio=True)) for r in abiertos]
@@ -681,7 +693,7 @@ def horas_extras(request):
         anio, mes = hoy.year, hoy.month
     reportes = (ReporteHorasExtra.objects.filter(fecha__year=anio, fecha__month=mes)
                 .select_related("colaborador", "registrado_por", "cerrado_por", "validado_por"))
-    if not request.user.es_supervisor:
+    if not request.user.gestiona_horas_extras:
         reportes = reportes.filter(colaborador=request.user)
     reportes = list(reportes)
     for r in reportes:
@@ -694,7 +706,7 @@ def horas_extras(request):
         totales[r.colaborador] = totales.get(r.colaborador, 0) + r.minutos
     totales = [(c, f"{m // 60}:{m % 60:02d}") for c, m in sorted(totales.items(), key=lambda x: x[0].get_full_name())]
 
-    if request.user.es_supervisor and request.GET.get("formato") == "excel":
+    if request.user.gestiona_horas_extras and request.GET.get("formato") == "excel":
         return _excel_horas_extras(reportes, anio, mes)
 
     return render(request, "cronograma/horas_extras.html", {
@@ -744,13 +756,51 @@ def _excel_horas_extras(reportes, anio, mes):
 
 
 @login_required
-@personal_requerido
+@horas_extras_requerido
+def horas_extras_corregir(request, pk):
+    """Quien lleva las horas extras corrige o borra un registro que quedó mal (18/11/2026).
+
+    Siempre con el motivo: al corregir, el registro queda «Aprobado por la coordinación» con la nota «Corregido: …»
+    (quién y cuándo quedan en validado_por / validado_en); al borrar, desaparece y deja de sumar."""
+    from .forms import CorregirHorasExtraForm
+    from .models import ReporteHorasExtra
+
+    if not request.user.gestiona_horas_extras:
+        raise PermissionDenied
+    reporte = get_object_or_404(ReporteHorasExtra.objects.select_related("colaborador"), pk=pk)
+    volver = reverse("cronograma:horas_extras") + f"?mes={reporte.fecha:%Y-%m}"
+    form = CorregirHorasExtraForm(request.POST or None, instance=reporte)
+    if request.method == "POST" and request.POST.get("accion") == "borrar":
+        motivo = (request.POST.get("motivo") or "").strip()
+        if len(motivo) < 5:
+            messages.error(request, "Para borrar el registro escriba el motivo.")
+        else:
+            descripcion = f"{reporte.colaborador} del {reporte.fecha:%d/%m/%Y} ({reporte.cliente})"
+            reporte.delete()
+            messages.success(request, f"Se borró el registro de horas extras de {descripcion}. Motivo: {motivo}")
+            return redirect(volver)
+    elif request.method == "POST" and form.is_valid():
+        reporte = form.save(commit=False)
+        if reporte.hora_llegada and not reporte.cerrado_en:
+            reporte.cerrado_en, reporte.cerrado_por = timezone.now(), request.user
+        reporte.validacion = ReporteHorasExtra.Validacion.APROBADO
+        reporte.validado_por, reporte.validado_en = request.user, timezone.now()
+        reporte.nota_validacion = f"Corregido: {form.cleaned_data['motivo'].strip()}"[:300]
+        reporte.save()
+        messages.success(request, f"Registro corregido: {reporte.colaborador} del {reporte.fecha:%d/%m/%Y}, "
+                                  f"{reporte.duracion} h.")
+        return redirect(volver)
+    return render(request, "cronograma/horas_extras_corregir.html", {"r": reporte, "form": form, "volver": volver})
+
+
+@login_required
+@horas_extras_requerido
 def horas_extras_foto(request, pk, cual):
     """La foto de inicio o de fin de un reporte de horas extras: la ve quien lo hizo y la coordinación."""
     from .models import ReporteHorasExtra
 
     reporte = get_object_or_404(ReporteHorasExtra, pk=pk)
-    if reporte.colaborador_id != request.user.pk and not request.user.es_supervisor:
+    if reporte.colaborador_id != request.user.pk and not request.user.gestiona_horas_extras:
         raise Http404
     archivo = {"salida": reporte.evidencia_salida, "llegada": reporte.evidencia_llegada}.get(cual)
     if not archivo:
