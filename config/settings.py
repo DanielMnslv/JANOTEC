@@ -155,7 +155,8 @@ if EMAIL_CERTIFICADO_NOMBRE and EMAIL_BACKEND == "django.core.mail.backends.smtp
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Soporte JANOTEC <soporte@janotec.com.co>")
 NOTIFICAR_SOPORTE_EMAIL = os.getenv("NOTIFICAR_SOPORTE_EMAIL", "")  # buzón del área
 NOTIFICAR_COMERCIAL_EMAIL = os.getenv("NOTIFICAR_COMERCIAL_EMAIL", "")  # oportunidades detectadas en campo
-NOTIFICAR_SST_EMAIL = os.getenv("NOTIFICAR_SST_EMAIL", "")  # recibe las solicitudes de acompañamiento SST (HSE)
+NOTIFICAR_SST_EMAIL = os.getenv("NOTIFICAR_SST_EMAIL", "")
+NOTIFICAR_VEHICULOS_EMAIL = os.getenv("NOTIFICAR_VEHICULOS_EMAIL", "")  # si no está en el Directorio: quien asigna los vehículos  # recibe las solicitudes de acompañamiento SST (HSE)
 NOTIFICAR_ADMINISTRATIVA_EMAIL = os.getenv("NOTIFICAR_ADMINISTRATIVA_EMAIL", "")  # recibe el cronograma consolidado de la semana
 # Fase de pruebas: lo que iba para un cliente llega a este correo (el personal JANOTEC recibe normal). Vacío = real.
 CORREO_CLIENTES_PRUEBA = os.getenv("CORREO_CLIENTES_PRUEBA", "").strip()

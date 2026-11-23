@@ -438,7 +438,7 @@ a.kpi:hover { transform: translateY(-1px); }
 .alert { border-radius: var(--jn-radio); }
 
 @media print {
-  .barra-lateral, .barra-superior { display: none !important; }
+  .barra-lateral, .barra-superior, .barra-inferior { display: none !important; }
   .app-jn { display: block; }
 }
 

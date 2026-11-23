@@ -60,7 +60,7 @@ def semana(request):
             for i, (f, lista) in enumerate(por_dia.items()) if i < 6 or lista]
     contexto = {"lunes": lunes, "domingo": domingo, "dias": dias, "editable": editable, "pestana": "cronograma",
                 "vista": "tablero" if request.GET.get("vista") == "tablero" else "tabla",  # la tabla por defecto: se ve toda la información
-                "contactos_dir": Contacto.objects.filter(activo=True).exclude(email=""),
+                "contactos_dir": Contacto.objects.filter(activo=True).exclude(email="").exclude(tipo=Contacto.Tipo.VEHICULOS),
                 "todas": [a for d in dias for a in d["actividades"]],
                 "anterior": lunes - timedelta(days=7), "siguiente": lunes + timedelta(days=7),
                 "total": sum(len(d["actividades"]) for d in dias),
@@ -92,6 +92,8 @@ def semana(request):
                              hora_fin=a.hora_fin.strftime("%H:%M"), ticket=a.ticket_id or "",
                              radicado=a.ticket.radicado if a.ticket else "",
                              encargados=[u.pk for u in a.encargados.all()], bodega=a.material_de_bodega is not None,
+                             vehiculo_placa=a.vehiculo_placa, vehiculo_conductor=a.vehiculo_conductor_id or "",
+                             vehiculo_hasta=a.vehiculo_hasta.isoformat() if a.vehiculo_hasta else "",
                              **viaticos.campos_actividad(getattr(a, "solicitud_viaticos", None)))
                 actividades_json[a.pk] = datos
         cambio = semanal.cambios(lunes)
@@ -141,6 +143,11 @@ def guardar(request, pk=None):
         messages.warning(request, f"{actividad.cliente}: sin correo para notificar; la actividad quedó en rojo.")
     else:
         messages.success(request, f"Actividad guardada: {actividad.cliente} · {servicios.cuando(actividad)}.")
+    if actividad.vehiculo and not servicios.correo_vehiculos():
+        messages.warning(request, "Esta visita requiere vehículo, pero no hay a quién pedirlo: agregue el correo de quien "
+                                  "asigna los vehículos en Cronograma → Directorio (tipo «Vehículos»).")
+    elif actividad.vehiculo:
+        messages.info(request, f"Solicitud del vehículo {actividad.vehiculo_placa} enviada a {servicios.correo_vehiculos()}.")
     if actividad.sst and not servicios.correo_sst():
         messages.warning(request, "Esta visita requiere acompañamiento SST, pero el área SST no tiene correo: agréguelo en "
                                   "Cronograma → Directorio o la solicitud no le llegará a nadie.")

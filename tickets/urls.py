@@ -20,6 +20,7 @@ urlpatterns = [
     # Historial de servicio (actas de soporte)
     path("historial/", views.actas_lista, name="actas_lista"),
     path("historial/<int:numero>/", views.acta_detalle, name="acta_detalle"),
+    path("historial/<int:numero>/pdf/", views.acta_pdf, name="acta_pdf"),
     path("historial/<int:numero>/evidencias/", views.acta_evidencias, name="acta_evidencias"),
     path("historial/nueva/", views.acta_sin_programar, name="acta_sin_programar"),
     path("historial/archivo/<str:tipo>/<int:pk>/", views.archivo_acta, name="archivo_acta"),

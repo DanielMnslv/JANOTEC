@@ -3,7 +3,7 @@
 {% block contenido %}
 <div class="d-flex justify-content-between align-items-center no-imprimir">
   <a href="{% url 'actas_lista' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Historial de servicio</a>
-  <button type="button" class="btn btn-sm btn-outline-primary" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir / guardar PDF</button>
+  <a class="btn btn-sm btn-primary" href="{% url 'acta_pdf' acta.numero %}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> Descargar PDF</a>
 </div>
 <div class="solo-impresion mb-3">
   <div class="d-flex justify-content-between align-items-center border-bottom pb-2">

@@ -31,9 +31,10 @@ class ActividadForm(BootstrapMixin, forms.ModelForm):
         model = Actividad
         fields = ["ticket", "fecha", "hora_inicio", "hora_fin", "cliente", "sede", "actividad", "tipo", "linea",
                   "encargados", "insumos", "notificar_a", "trabajo_alturas", "sst", "sst_persona",
-                  "sst_trabajo", "sst_duracion", "vehiculo"]
+                  "sst_trabajo", "sst_duracion", "vehiculo", "vehiculo_placa", "vehiculo_conductor", "vehiculo_hasta"]
         widgets = {
             "fecha": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "vehiculo_hasta": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "hora_inicio": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
             "hora_fin": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
             "actividad": forms.Textarea(attrs={"rows": 3}),
@@ -56,6 +57,9 @@ class ActividadForm(BootstrapMixin, forms.ModelForm):
         personas = (Actividad.objects.exclude(sst_persona="").order_by().values_list("sst_persona", flat=True).distinct()[:50])
         self.fields["sst_persona"].widget = ConSugerencias(personas, attrs={"placeholder": "Ej.: Javier Jaramillo"})
         self.fields["encargados"].queryset = tecnicos_queryset()
+        self.fields["vehiculo_conductor"].queryset = tecnicos_queryset()
+        self.fields["vehiculo_conductor"].label_from_instance = lambda u: u.get_full_name() or u.username
+        self.fields["vehiculo_placa"].choices = [("", "— Elija el vehículo —")] + list(self.fields["vehiculo_placa"].choices)[1:]
         self.fields["sst_duracion"].required = False
         self.fields["notificar_a"].help_text = "Reciben la autorización de ingreso. Sin correo, la actividad queda en rojo."
         self._aplicar_estilos()
@@ -82,6 +86,19 @@ class ActividadForm(BootstrapMixin, forms.ModelForm):
         if ticket and self.instance.pk is None and ticket.estado not in Ticket.ESTADOS_PROGRAMABLES:
             self.add_error(None, f"{ticket.radicado} está «{ticket.get_estado_display()}»: solo se programan "
                                  "tickets recepcionados o pendientes de nueva visita.")
+        if datos.get("vehiculo"):
+            # Se pide por correo a quien asigna los vehículos: necesita cuál, quién lo maneja y hasta cuándo
+            if not datos.get("vehiculo_placa"):
+                self.add_error("vehiculo_placa", "Elija qué vehículo se solicita.")
+            if not datos.get("vehiculo_conductor"):
+                self.add_error("vehiculo_conductor", "Indique quién conduce el vehículo.")
+            fecha, hasta = datos.get("fecha"), datos.get("vehiculo_hasta")
+            if fecha and not hasta:
+                datos["vehiculo_hasta"] = fecha
+            elif fecha and hasta and hasta < fecha:
+                self.add_error("vehiculo_hasta", "La finalización del recorrido no puede ser antes de la salida.")
+        else:
+            datos["vehiculo_placa"], datos["vehiculo_conductor"], datos["vehiculo_hasta"] = "", None, None
         if not datos.get("sst_duracion"):
             datos["sst_duracion"] = "medio día"
         if (datos.get("via_sst") or datos.get("via_tecnicos")) and not any(

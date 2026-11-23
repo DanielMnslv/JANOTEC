@@ -108,6 +108,10 @@ class PublicacionSemana(models.Model):
         return f"Semana del {self.lunes:%d/%m/%Y}"
 
 
+# Los vehículos de JANOTEC que se piden para ir a las sedes (placa, nombre)
+VEHICULOS = [("JSN758", "JSN758 · Nissan"), ("JSP949", "JSP949 · Suzuki híbrido")]
+
+
 class Actividad(models.Model):
     """Una fila del cronograma semanal (las mismas columnas de la plataforma anterior)."""
 
@@ -152,6 +156,14 @@ class Actividad(models.Model):
                                     choices=[(x, x) for x in DURACIONES_SST])
     sst_enviada = models.DateTimeField("solicitud SST enviada", null=True, blank=True)
     vehiculo = models.BooleanField("requiere vehículo", default=False)
+    # Solicitud del vehículo de JANOTEC (23/11/2026): antes era un correo manual a quien asigna los vehículos
+    vehiculo_placa = models.CharField("vehículo", max_length=10, choices=VEHICULOS, blank=True)
+    vehiculo_conductor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                           related_name="+", verbose_name="conductor")
+    vehiculo_hasta = models.DateField("fecha de finalización del recorrido", null=True, blank=True)
+    vehiculo_enviada = models.DateTimeField("solicitud de vehículo enviada", null=True, blank=True)
+    vehiculo_enviado = models.CharField(max_length=200, blank=True, editable=False,
+                                        help_text="Lo que se pidió en la última solicitud (si cambia, se envía la actualización).")
     viaticos = models.BooleanField("requiere viáticos", default=False)
     # Autorización de ingreso
     autorizacion = models.CharField(max_length=20, choices=Autorizacion.choices, default=Autorizacion.SIN_ENVIAR)
@@ -317,6 +329,7 @@ class Contacto(models.Model):
     class Tipo(models.TextChoices):
         ADMINISTRATIVA = "administrativa", "Administrativa (recibe el consolidado de todas las sedes)"
         SST = "sst", "SST (recibe las solicitudes de acompañamiento HSE)"
+        VEHICULOS = "vehiculos", "Vehículos (recibe las solicitudes de vehículo)"
         CONTACTO = "contacto", "Contacto (cliente o almacén: se le avisa de sus visitas)"
 
     nombre = models.CharField("nombre / referencia", max_length=150)

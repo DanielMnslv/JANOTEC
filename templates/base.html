@@ -15,7 +15,7 @@
   <link href="{% static 'css/janotec.css' %}?v=20261118" rel="stylesheet">
   {% block head %}{% endblock %}
 </head>
-<body>
+<body{% if user.is_authenticated %} data-usuario="{{ user.pk }}"{% endif %}>
 {% block cuerpo %}
 <div class="app-jn">
 {# Menú lateral: fijo a la izquierda en pantallas grandes; en el celular se abre con el botón ☰ #}
@@ -96,5 +96,6 @@
 <script src="{% static 'js/redaccion.js' %}?v=20261118"></script>{% endif %}
 {% block scripts %}{% endblock %}
 <script src="{% static 'js/borrador_acta.js' %}?v=20261113"></script>
+<script src="{% static 'js/autoguardado.js' %}?v=20261123"></script>
 </body>
 </html>

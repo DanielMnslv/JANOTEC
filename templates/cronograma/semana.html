@@ -96,7 +96,7 @@
                 <div class="mt-1">
                   {% if a.trabajo_alturas %}<span class="badge text-bg-danger">Alturas</span>{% endif %}
                   {% if a.sst %}<span class="badge text-bg-warning">SST</span>{% endif %}
-                  {% if a.vehiculo %}<span class="badge text-bg-light border">Vehículo</span>{% endif %}
+                  {% if a.vehiculo %}<span class="badge text-bg-light border" title="{% if a.vehiculo_conductor %}Conduce {{ a.vehiculo_conductor.get_full_name }}{% endif %}{% if a.vehiculo_enviada %} · solicitud enviada{% endif %}"><i class="bi bi-car-front"></i> {{ a.vehiculo_placa|default:"Vehículo" }}</span>{% endif %}
                   {% if a.viaticos %}<span class="badge text-bg-light border">Viáticos</span>{% endif %}
                 </div>
                 {% if a.en_rojo %}<div class="small text-danger fw-semibold mt-1"><i class="bi bi-exclamation-triangle"></i> {{ a.motivo_rojo }}</div>{% endif %}
@@ -170,6 +170,14 @@
               <div class="col-12 small text-muted-jn"><i class="bi bi-wallet2"></i> Al guardar, a financiera le llega la solicitud de viáticos para gestionarlos.</div>
             </div>
           </div>
+          <div class="col-12" id="bloque-vehiculo" hidden>
+            <div class="row g-2 p-2 rounded" style="background:#eef2fb">
+              <div class="col-md-4"><label class="form-label small mb-1" for="{{ form.vehiculo_placa.id_for_label }}">Vehículo <span class="text-danger">*</span></label>{{ form.vehiculo_placa }}</div>
+              <div class="col-md-4"><label class="form-label small mb-1" for="{{ form.vehiculo_conductor.id_for_label }}">Conductor <span class="text-danger">*</span></label>{{ form.vehiculo_conductor }}</div>
+              <div class="col-md-4"><label class="form-label small mb-1" for="{{ form.vehiculo_hasta.id_for_label }}">Finalización del recorrido</label>{{ form.vehiculo_hasta }}</div>
+              <div class="col-12 small text-muted-jn"><i class="bi bi-car-front"></i> Al guardar se le envía la solicitud a quien asigna los vehículos (Directorio → «Vehículos»), con copia a usted. Si cambia el vehículo, el conductor o las fechas, le llega la actualización.</div>
+            </div>
+          </div>
           <div class="col-12" id="bloque-sst">
             <div class="row g-2 p-2 rounded" style="background:#fff8e6">
               <div class="col-md-4"><label class="form-label small mb-1">Persona HSE solicitada</label>{{ form.sst_persona }}</div>
@@ -227,7 +235,7 @@
   const csrf = form.querySelector('[name=csrfmiddlewaretoken]').value;
   const campo = function (n) { return form.querySelector('[name=' + n + ']'); };
   const textos = ['fecha', 'hora_inicio', 'hora_fin', 'cliente', 'sede', 'actividad', 'tipo', 'linea', 'insumos', 'notificar_a',
-                  'sst_persona', 'sst_trabajo', 'sst_duracion', 'via_detalle'];
+                  'sst_persona', 'sst_trabajo', 'sst_duracion', 'via_detalle', 'vehiculo_placa', 'vehiculo_conductor', 'vehiculo_hasta'];
   const casillas = ['trabajo_alturas', 'sst', 'vehiculo', 'via_sst', 'via_tecnicos', 'via_alimentacion', 'via_transporte',
                     'via_gasolina', 'via_otros'];
 
@@ -253,6 +261,7 @@
     form.dataset.bodega = v.bodega ? '1' : '';
     modoInsumos();
     sst();
+    vehiculo();
     viaticos();
     modal.show();
   }
@@ -262,6 +271,15 @@
     llenar(v, 'Programar ' + v.radicado);
   }
   function sst() { document.getElementById('bloque-sst').hidden = !campo('sst').checked; }
+  function vehiculo() {
+    const si = campo('vehiculo').checked;
+    document.getElementById('bloque-vehiculo').hidden = !si;
+    campo('vehiculo_placa').required = si;
+    campo('vehiculo_conductor').required = si;
+    // Por defecto el recorrido termina el mismo día de la salida
+    if (si && !campo('vehiculo_hasta').value) campo('vehiculo_hasta').value = campo('fecha').value;
+    campo('vehiculo_hasta').min = campo('fecha').value;
+  }
   function viaticos() { document.getElementById('bloque-viaticos').hidden = !(campo('via_sst').checked || campo('via_tecnicos').checked); }
   // Los insumos dependen del tipo de visita: la 1.ª visita no pide a bodega y la instalación lleva lo ya entregado
   function modoInsumos() {
@@ -278,6 +296,11 @@
   }
   campo('tipo').addEventListener('change', modoInsumos);
   campo('sst').addEventListener('change', sst);
+  campo('vehiculo').addEventListener('change', vehiculo);
+  campo('fecha').addEventListener('change', function () {
+    if (campo('vehiculo_hasta').value && campo('vehiculo_hasta').value < campo('fecha').value) campo('vehiculo_hasta').value = campo('fecha').value;
+    campo('vehiculo_hasta').min = campo('fecha').value;
+  });
   campo('via_sst').addEventListener('change', viaticos);
   campo('via_tecnicos').addEventListener('change', viaticos);
 

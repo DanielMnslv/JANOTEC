@@ -111,6 +111,7 @@ def guardar(actividad, autor, horario_anterior=None, tecnicos_antes=None):
         actividad.version_enlace += 1
         actividad.motivo_rechazo = ""
     actividad.save()
+    solicitar_vehiculo(actividad, autor)  # solo si se pide, cambia o se cancela el vehículo
     if tecnicos_antes is not None or reprogramada:
         antes = list(actividad.tecnicos()) if tecnicos_antes is None else tecnicos_antes
         transaction.on_commit(lambda: avisar_tecnicos(actividad, antes, reprogramada))
@@ -153,6 +154,9 @@ def quitar(actividad, autor):
     avisar_tecnicos(actividad, list(actividad.tecnicos()), False, quedan=[])
     from .viaticos import desde_actividad as viaticos_de
     viaticos_de(actividad, {}, autor)  # si tenía viáticos pendientes, financiera sabe que ya no van
+    if actividad.vehiculo_enviada:  # quien asigna los vehículos sabe que ya no se necesita
+        actividad.vehiculo = False
+        solicitar_vehiculo(actividad, autor)
     actividad.delete()
     if ticket and not ticket.actividades.exists() and ticket.estado in (E.EN_CRONOGRAMA, E.AUTORIZADO):
         ticket.visita_programada = None
@@ -374,6 +378,85 @@ def texto_sst(actividad):
         "El cliente ya autorizó el ingreso.", "", "Agradezco de antemano su apoyo y gestión. Quedo atento a sus comentarios.",
         "", "Cordialmente,", ConfiguracionEnvio.actual().remitente,
     ])
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Solicitud del vehículo (23/11/2026): reemplaza el correo que coordinación escribía a mano
+# ---------------------------------------------------------------------------------------------------------------------
+def correo_vehiculos():
+    return Contacto.correo_de(Contacto.Tipo.VEHICULOS, settings.NOTIFICAR_VEHICULOS_EMAIL)
+
+
+def _pedido_vehiculo(actividad):
+    """Lo que se pide (vehículo, conductor, fechas y horario): si cambia, se envía la actualización."""
+    if not actividad.vehiculo:
+        return ""
+    hasta = actividad.vehiculo_hasta or actividad.fecha
+    return (f"{actividad.vehiculo_placa}|{actividad.vehiculo_conductor_id or ''}|{actividad.fecha:%Y-%m-%d}|"
+            f"{hasta:%Y-%m-%d}|{actividad.hora_inicio:%H:%M}|{actividad.cliente}|{actividad.sede}")
+
+
+def texto_vehiculo(actividad, motivo="nueva"):
+    """El correo de solicitud de vehículo, como lo escribía coordinación. ``motivo``: nueva, cambio o cancelada."""
+    from django.utils import timezone as tz
+
+    conductor = actividad.vehiculo_conductor
+    nombre_conductor = (conductor.get_full_name() or conductor.username) if conductor else "Por definir"
+    hasta = actividad.vehiculo_hasta or actividad.fecha
+    recorrido = " · ".join(x for x in (actividad.cliente, actividad.sede) if x)
+    if motivo == "cancelada":
+        intro = ["Me permito informarle que ya no se requiere el vehículo solicitado para el siguiente recorrido:"]
+    elif motivo == "cambio":
+        intro = ["Me permito informarle que cambió la solicitud de vehículo enviada anteriormente.",
+                 "A continuación, detallo la información actualizada:"]
+    else:
+        intro = ["Me permito solicitar su amable colaboración para la asignación de un vehículo.",
+                 "A continuación, detallo la información de la solicitud:"]
+    tecnicos = ", ".join(u.get_full_name() or u.username for u in actividad.tecnicos())
+    return "\n".join([
+        "Buen día,", "", "Cordial saludo.", "", *intro, "",
+        f"- Fecha de solicitud: {tz.localdate():%d/%m/%Y}",
+        f"- Fecha de salida: {actividad.fecha:%d/%m/%Y} a las {actividad.hora_inicio:%I:%M %p}".replace("AM", "a. m.").replace("PM", "p. m."),
+        f"- Fecha de finalización del recorrido: {hasta:%d/%m/%Y}",
+        f"- Tipo de vehículo: {actividad.get_vehiculo_placa_display() or 'El asignado'}",
+        f"- Recorrido: {recorrido.upper()}",
+        f"- Nombre del conductor: {nombre_conductor}",
+        f"- Personal técnico: {tecnicos or '—'}",
+        f"- Servicio: {actividad.get_tipo_display()}" + (f" · {actividad.ticket.radicado}" if actividad.ticket else ""),
+        "", "Agradezco de antemano su atención y colaboración.", "", "Cordialmente,",
+        ConfiguracionEnvio.actual().remitente,
+    ])
+
+
+def solicitar_vehiculo(actividad, autor=None):
+    """Envía la solicitud de vehículo a quien los asigna (Directorio → «Vehículos») cuando la actividad lo requiere,
+    la actualización si cambió el vehículo, el conductor o las fechas, y la cancelación si ya no se requiere.
+    Con copia a quien programó. Devuelve el motivo enviado ("nueva", "cambio", "cancelada") o "" si no envió nada."""
+    pedido = _pedido_vehiculo(actividad)
+    if pedido == actividad.vehiculo_enviado:
+        return ""
+    motivo = "cancelada" if not pedido else ("cambio" if actividad.vehiculo_enviado else "nueva")
+    destino = correo_vehiculos()
+    if not destino:
+        log.warning("Actividad %s requiere vehículo pero no hay correo de «Vehículos» en el Directorio", actividad.pk)
+        return ""
+    tipo = {"nueva": "SOLICITUD", "cambio": "ACTUALIZACIÓN DE SOLICITUD", "cancelada": "CANCELACIÓN DE SOLICITUD"}[motivo]
+    servicio = actividad.get_tipo_display().upper()
+    asunto = f"{tipo} DE VEHÍCULO PARA SERVICIO DE {servicio} {actividad.cliente.upper()}"
+    if actividad.sede:
+        asunto += f" · {actividad.sede.upper()}"
+    copia = [autor.email] if autor is not None and getattr(autor, "email", "") else []
+    notif._enviar(asunto, texto_vehiculo(actividad, motivo), [destino] + copia)
+    if actividad.pk and Actividad.objects.filter(pk=actividad.pk).exists():
+        Actividad.objects.filter(pk=actividad.pk).update(vehiculo_enviado=pedido,
+                                                         vehiculo_enviada=timezone.now() if pedido else None)
+    actividad.vehiculo_enviado, actividad.vehiculo_enviada = pedido, (timezone.now() if pedido else None)
+    if actividad.ticket:
+        _seguimiento(actividad.ticket, None, {"nueva": f"Se pidió el vehículo {actividad.vehiculo_placa} a {destino}.",
+                                              "cambio": f"Se actualizó la solicitud del vehículo con {destino}.",
+                                              "cancelada": f"Se avisó a {destino} que ya no se requiere el vehículo."}[motivo],
+                     interno=True)
+    return motivo
 
 
 def correo_sst():

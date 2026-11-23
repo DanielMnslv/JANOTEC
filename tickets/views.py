@@ -771,6 +771,19 @@ def acta_detalle(request, numero):
     })
 
 
+@login_required
+def acta_pdf(request, numero):
+    """El acta en PDF con el membrete de JANOTEC (tickets/acta_pdf.py): igual desde el celular o el computador."""
+    from . import acta_pdf as generador
+
+    acta = get_object_or_404(actas_visibles(request.user).prefetch_related("equipos__fotos", "firmas", "evidencias"),
+                             numero=numero)
+    nombre, contenido = generador.pdf(acta)
+    respuesta = HttpResponse(contenido, content_type="application/pdf")
+    respuesta["Content-Disposition"] = f'inline; filename="{nombre}"'
+    return respuesta
+
+
 def _puede_subir_evidencias(usuario, acta):
     """Coordinación o el técnico que firmó el acta pueden agregarle evidencias."""
     return usuario.es_supervisor or (acta.tecnico_id is not None and acta.tecnico_id == usuario.pk)
