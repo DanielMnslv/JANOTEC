@@ -1363,3 +1363,39 @@ class MetaIndicador(models.Model):
 
     def __str__(self):
         return f"{self.clave}: {self.valor if self.valor is not None else 'sin meta'}"
+
+
+class EjemploRedaccion(models.Model):
+    """Un ejemplo de cómo quiere JANOTEC que quede un texto: lo que se escribió y cómo debía quedar (23/11/2026).
+
+    Es la forma de «entrenar» el botón «Mejorar redacción» sin reentrenar el modelo: antes de cada mejora se le
+    muestran a Claude los ejemplos activos del mismo tipo de texto (y los de «Todos los textos»), y él imita su
+    estructura, su tono y su presentación. Los crea coordinación, dirección o administrativa desde
+    «Ejemplos de redacción», o desde la propuesta con «No quedó como quería».
+    """
+
+    class Aplica(models.TextChoices):
+        TODOS = "general", "Todos los textos"
+        INFORME = "informe", "Informes y requerimientos de visita"
+        DIAGNOSTICO = "diagnostico", "Acta · Diagnóstico"
+        RESULTADO = "resultado", "Acta · Resultado del soporte"
+        EQUIPO = "equipo", "Acta · Observaciones de un equipo"
+        OPORTUNIDAD = "oportunidad", "Oportunidad comercial"
+        PROPUESTA = "propuesta", "Propuestas y cotizaciones"
+
+    titulo = models.CharField("título", max_length=120, help_text="Para reconocerlo en la lista, p. ej. «Informe de requerimientos por áreas».")
+    aplica = models.CharField("aplica a", max_length=20, choices=Aplica.choices, default=Aplica.TODOS)
+    original = models.TextField("texto como se escribió", max_length=8000)
+    mejorado = models.TextField("cómo debía quedar", max_length=12000)
+    activo = models.BooleanField(default=True, help_text="Solo los activos se le muestran a Claude.")
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    creado = models.DateTimeField(auto_now_add=True)
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-actualizado"]
+        verbose_name = "ejemplo de redacción"
+        verbose_name_plural = "ejemplos de redacción"
+
+    def __str__(self):
+        return self.titulo

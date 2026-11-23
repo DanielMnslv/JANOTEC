@@ -1235,12 +1235,11 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
          "Lo que hace falta para solucionar y no se tenía en la visita. Ej.: fuente de 12 V, disco duro de 2 TB. "
          "Pasa sola a la tabla de «equipos y materiales requeridos» del informe."),
     ]
-    from . import historial_cliente, redaccion
+    from . import historial_cliente
 
     equipos_sede, sistema_plan = _equipos_de_la_sede(sede, ticket)
     return render(request, "tickets/acta_form.html", {
         "equipos_sede": equipos_sede, "sistema_plan": sistema_plan,
-        "redaccion": redaccion.configuracion(reverse("mejorar_redaccion"), reverse("revisar_ortografia")),
         "ticket": ticket, "empresa": empresa, "sede": sede, "grupos_equipos": grupos_equipos,
         "form": form, "equipos": equipos, "utilizados": utilizados, "retirados": retirados, "requeridos": requeridos,
         "mat_activos": mat_activos,

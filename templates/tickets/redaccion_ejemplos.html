@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block titulo %}Ejemplos de redacción{% endblock %}
+{% block contenido %}
+{# Ejemplos de redacción (tickets/ensenar_redaccion.py): enseñarle a «Mejorar redacción» cómo deben quedar los textos. #}
+<h1 class="h3 page-title mb-1">Ejemplos de redacción</h1>
+<p class="text-secondary mb-3" style="max-width:820px">
+  Enséñele a «Mejorar redacción» cómo quiere JANOTEC sus textos: pegue lo que se escribió y cómo debía quedar.
+  Antes de cada mejora, Claude ve hasta tres ejemplos activos del mismo tipo de texto e imita su estructura,
+  su tono y su presentación con los datos nuevos. Entre más claros los ejemplos, mejor el resultado.
+</p>
+
+<form method="post" class="card mb-4" data-autoguardado="si">{% csrf_token %}
+  <div class="card-header fw-semibold">
+    {% if ejemplo.pk %}<i class="bi bi-pencil"></i> Editar «{{ ejemplo.titulo }}»{% else %}<i class="bi bi-mortarboard"></i> Nuevo ejemplo{% endif %}
+  </div>
+  <div class="card-body"><div class="row g-3">
+    <div class="col-md-6">{% with campo=form.titulo %}{% include "tickets/_campo.html" %}{% endwith %}</div>
+    <div class="col-md-6">{% with campo=form.aplica %}{% include "tickets/_campo.html" %}{% endwith %}</div>
+    <div class="col-lg-6">{% with campo=form.original %}{% include "tickets/_campo.html" %}{% endwith %}</div>
+    <div class="col-lg-6">{% with campo=form.mejorado %}{% include "tickets/_campo.html" %}{% endwith %}</div>
+    <div class="col-12">{% with campo=form.activo %}{% include "tickets/_campo.html" %}{% endwith %}</div>
+  </div></div>
+  <div class="card-footer d-flex gap-2 justify-content-end">
+    {% if ejemplo.pk %}<a href="{% url 'redaccion_ejemplos' %}" class="btn btn-light">Cancelar</a>{% endif %}
+    <button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar ejemplo</button>
+  </div>
+</form>
+
+<h2 class="h5 mb-2">Ejemplos guardados <span class="badge text-bg-secondary">{{ ejemplos|length }}</span></h2>
+{% if ejemplos %}
+<div class="list-group mb-4">
+  {% for e in ejemplos %}
+  <div class="list-group-item d-flex flex-wrap align-items-center gap-2{% if not e.activo %} opacity-50{% endif %}">
+    <div class="me-auto">
+      <div class="fw-semibold">{{ e.titulo }}{% if not e.activo %} <span class="badge text-bg-light border">Inactivo</span>{% endif %}</div>
+      <div class="small text-secondary">{{ e.get_aplica_display }} · {{ e.original|length }} → {{ e.mejorado|length }} caracteres ·
+        {% if e.creado_por %}{{ e.creado_por.get_full_name|default:e.creado_por.username }} · {% endif %}{{ e.actualizado|date:"d/m/Y" }}</div>
+    </div>
+    <a href="{% url 'redaccion_ejemplo' e.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i> Editar</a>
+    <form method="post" action="{% url 'redaccion_ejemplo_eliminar' e.pk %}" onsubmit="return confirm('¿Eliminar este ejemplo?')">{% csrf_token %}
+      <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="text-secondary">Todavía no hay ejemplos. El primero puede ser un informe que no quedó como quería.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Llegó desde «No quedó como quería»: se llena con lo que se escribió y la propuesta, para corregirla aquí
+  (function () {
+    let datos = null;
+    try { datos = JSON.parse(localStorage.getItem('redaccion-ensenar') || 'null'); localStorage.removeItem('redaccion-ensenar'); } catch (e) { /* nada */ }
+    if (!datos) return;
+    const f = document.querySelector('form[data-autoguardado]');
+    f.elements.original.value = datos.original || '';
+    f.elements.mejorado.value = datos.propuesta || '';
+    if (datos.aplica && [...f.elements.aplica.options].some(function (o) { return o.value === datos.aplica; })) f.elements.aplica.value = datos.aplica;
+    if (!f.elements.titulo.value) f.elements.titulo.value = (datos.campo || 'Ejemplo').slice(0, 120);
+    f.elements.mejorado.focus();
+    f.elements.mejorado.dispatchEvent(new Event('input', { bubbles: true }));
+  })();
+</script>
+{% endblock %}

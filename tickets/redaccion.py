@@ -23,7 +23,7 @@ import os
 log = logging.getLogger(__name__)
 
 MODELO = "claude-haiku-5-5"  # 23/11/2026: Haiku 5.5, unas 40 veces más barato que Opus; alcanza de sobra para redactar
-LARGO_MAXIMO = 4000  # caracteres que se aceptan para mejorar (un campo de la plataforma no debería pasar de esto)
+LARGO_MAXIMO = 8000  # caracteres que se aceptan para mejorar o revisar (un informe largo de visita cabe de sobra)
 CLAVE = "REDACCION_API_KEY"  # variable del .env, solo para este botón
 MEJORAS_POR_DIA = 100  # por persona: cuida el saldo prepagado (con Haiku cada mejora cuesta menos de 0,1 centavos de dólar)
 
@@ -61,19 +61,87 @@ TIPOS = {
 }
 
 INSTRUCCIONES = (
-    "Eres el corrector de estilo de los textos de JANOTEC, empresa colombiana de seguridad electrónica "
+    "Eres el redactor de los textos de JANOTEC, empresa colombiana de seguridad electrónica "
     "(CCTV, alarmas, control de acceso, redes y cableado). Una persona del equipo (técnico, comercial, administrativa, "
     "bodega o coordinación) escribió el texto en la plataforma, a veces desde el celular y con prisa. Reescríbelo para "
-    "que quede bien presentado: puede terminar en un acta, un informe o una propuesta para el cliente.\n\n"
-    "Reglas:\n"
-    "- Español de Colombia, formal y claro. En actas, informes y diagnósticos usa forma impersonal («Se realizó…», "
-    "«Se encontró…»); en un mensaje, motivo o comentario conserva a quién se dirige y su propósito.\n"
-    "- Corrige ortografía, tildes, puntuación y mayúsculas; ordena las ideas en oraciones completas.\n"
-    "- No agregues hechos, causas, cifras, equipos, recomendaciones ni conclusiones que no estén en el texto.\n"
-    "- Conserva tal cual marcas, referencias, modelos, seriales, cantidades, medidas, zonas y nombres.\n"
-    "- Si el texto ya es breve y claro, solo corrígelo: no lo alargues.\n"
-    "- Devuelve únicamente el texto final, sin comillas, títulos, viñetas ni comentarios."
+    "que quede impecable y profesional: puede terminar en un acta, un informe o una propuesta para el cliente.\n\n"
+    "Reglas generales:\n"
+    "- Español de Colombia, formal, técnico y claro, con ortografía, tildes, puntuación y mayúsculas impecables. "
+    "En actas, informes y diagnósticos usa forma impersonal («Se realizó…», «Se identificó…»); en un mensaje, motivo "
+    "o comentario conserva a quién se dirige y su propósito.\n"
+    "- Usa el vocabulario técnico correcto (cámara IP de doble lente, grabador XVR de 32 canales, rack de piso de 18U, "
+    "UPS de 3 kVA, punto de cámara, cableado estructurado…), sin cambiar lo que se pidió.\n"
+    "- No inventes hechos: ni cifras, ni equipos, ni marcas, ni causas, ni lugares que no estén en el texto. Conserva "
+    "tal cual marcas, modelos, seriales, cantidades, medidas, zonas y nombres propios.\n"
+    "- Si el texto ya es breve y claro (una o dos oraciones), solo corrígelo: no lo alargues ni le pongas títulos.\n\n"
+    "Cuando el texto es un informe, un levantamiento o una lista (requerimientos, hallazgos, actividades, equipos o "
+    "materiales en varias líneas), entrégalo como un informe ordenado y bien presentado:\n"
+    "1. Un título en una línea (p. ej. «Informe de requerimientos identificados») y, si se sabe, el cliente y el "
+    "lugar en la línea siguiente.\n"
+    "2. Un párrafo de introducción que diga qué se hizo y con qué fin, usando solo lo que dice el texto.\n"
+    "3. Las secciones numeradas («1. Oficinas – Planta extractora»), en el mismo orden del texto, y debajo de cada "
+    "una sus ítems, cada uno en su propia línea con viñeta «• », empezando con un sustantivo de acción "
+    "(Instalación de…, Reemplazo de…, Suministro de…, Reubicación de…). Si un ítem tiene partes, ponlas debajo "
+    "con «   – ».\n"
+    "4. Una sección final «Conclusiones» de uno o dos párrafos que resuma el alcance (ampliar cobertura, reemplazar "
+    "equipos, modernizar el monitoreo…) sin agregar datos nuevos.\n"
+    "En una lista NO omitas, fusiones ni dupliques ítems: cada línea del original debe quedar exactamente una vez, con "
+    "su cantidad y su lugar. Si una línea es confusa, mantén su sentido literal en lugar de interpretarla.\n\n"
+    "Formato de la respuesta: texto plano (se pega en un campo de texto). Nada de Markdown: sin #, sin ** ni __, sin "
+    "tablas. Separa las secciones con una línea en blanco. Devuelve únicamente el texto final, sin comillas ni "
+    "comentarios tuyos."
 )
+
+# Los ejemplos de estilo que se le muestran a Claude (EjemploRedaccion): cuántos y cuánto texto como máximo
+EJEMPLOS_MAXIMOS = 3
+EJEMPLOS_CARACTERES = 24000
+PALABRAS_INFORME = ("informe", "requerim", "visita", "levantamiento", "hallazg", "inspecci", "recorrido")
+PALABRAS_PROPUESTA = ("propuesta", "cotiza", "alcance", "oferta")
+
+
+def aplica_para(tipo, campo="", pagina="", texto=""):
+    """A qué grupos de ejemplos corresponde el texto (EjemploRedaccion.Aplica), del más específico al general.
+
+    Los campos del acta traen su tipo; los demás se reconocen por el nombre del campo o de la página, y un texto de
+    seis líneas o más se trata como informe o lista.
+    """
+    if tipo in TIPOS and tipo != "general":
+        return [tipo, "general"]
+    nombre = f"{campo} {pagina}".lower()
+    grupos = []
+    if any(p in nombre for p in PALABRAS_PROPUESTA):
+        grupos.append("propuesta")
+    if any(p in nombre for p in PALABRAS_INFORME) or (texto or "").count("\n") >= 5:
+        grupos.append("informe")
+    return grupos + ["general"]
+
+
+def ejemplos_para(grupos):
+    """Los ejemplos activos de esos grupos, los específicos primero, sin pasar del tope de cantidad ni de texto."""
+    from .models import EjemploRedaccion
+
+    activos = sorted(EjemploRedaccion.objects.filter(activo=True, aplica__in=grupos),
+                     key=lambda e: grupos.index(e.aplica))  # estable: dentro de cada grupo, el más reciente primero
+    elegidos, total = [], 0
+    for e in activos:
+        largo = len(e.original) + len(e.mejorado)
+        if len(elegidos) < EJEMPLOS_MAXIMOS and total + largo <= EJEMPLOS_CARACTERES:
+            elegidos.append(e)
+            total += largo
+    return elegidos
+
+
+def instrucciones_con_ejemplos(ejemplos):
+    """Las instrucciones y, si hay, los ejemplos de JANOTEC: lo que se escribió y cómo debía quedar."""
+    if not ejemplos:
+        return INSTRUCCIONES
+    partes = [INSTRUCCIONES, "\n\nEjemplos reales de cómo quiere JANOTEC que queden sus textos. Cuando el texto que "
+              "recibas sea del mismo tipo, imita su estructura, su nivel de detalle, su tono y su presentación, "
+              "pero con los datos del texto recibido (nunca copies datos del ejemplo):"]
+    for n, e in enumerate(ejemplos, 1):
+        partes.append(f'\n\n<ejemplo numero="{n}" tema="{_limpio(e.titulo)}">\n<como_se_escribio>\n{e.original.strip()}\n'
+                      f"</como_se_escribio>\n<como_debe_quedar>\n{e.mejorado.strip()}\n</como_debe_quedar>\n</ejemplo>")
+    return "".join(partes)
 
 
 def ia_disponible():
@@ -190,13 +258,14 @@ def mejorar(texto, tipo, campo="", pagina=""):
     import anthropic
 
     contexto = descripcion(tipo, campo, pagina)
-    cliente = anthropic.Anthropic(api_key=os.environ[CLAVE], timeout=60.0, max_retries=1)
+    ejemplos = ejemplos_para(aplica_para(tipo, campo, pagina, texto))
+    cliente = anthropic.Anthropic(api_key=os.environ[CLAVE], timeout=90.0, max_retries=1)
     try:
         respuesta = cliente.messages.create(
             model=MODELO,
             max_tokens=8000,
             output_config={"effort": "medium"},  # equilibrio entre buena ortografía y costo
-            system=INSTRUCCIONES,
+            system=instrucciones_con_ejemplos(ejemplos),
             messages=[{"role": "user", "content": f"El texto corresponde a {contexto}.\n\n<texto>\n{texto}\n</texto>"}],
         )
     except anthropic.AuthenticationError:

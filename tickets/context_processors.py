@@ -27,6 +27,9 @@ def empresa(request):
         from . import redaccion
         # «Revisar ortografía» y «Mejorar redacción» en todos los textos largos del personal (static/js/redaccion.js)
         datos["redaccion"] = redaccion.configuracion(reverse("mejorar_redaccion"), reverse("revisar_ortografia"))
+        from .ensenar_redaccion import puede_ensenar
+        if datos["redaccion"]["url"] and puede_ensenar(usuario):  # «No quedó como quería» → Ejemplos de redacción
+            datos["redaccion"]["ensenar"] = reverse("redaccion_ejemplos")
     if usuario is not None and usuario.is_authenticated:
         from . import menu
         datos["menu"] = menu.construir(request, datos)  # menú lateral: lo de su rol desplegado, lo demás en «Más áreas»

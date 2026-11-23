@@ -245,6 +245,8 @@ def _grupos(request, datos):
             grupo("gestion", "Gestión", "gestion",
                   Enlace("Indicadores", reverse("indicadores_centro"), "bi-graph-up", u in ("indicadores_centro", "indicadores_metas")),
                   descargables,
+                  Enlace("Ejemplos de redacción", reverse("redaccion_ejemplos"), "bi-mortarboard",
+                         u in ("redaccion_ejemplos", "redaccion_ejemplo")),
                   Enlace("Configuración", reverse("admin:index"), "bi-gear"))
     elif usuario.es_bodega:
         # Primero su paso a paso (abierto); el resto de bodega en grupos que se abren con un toque

@@ -7,7 +7,7 @@ from django.urls import path
 
 from comercial import trimestre
 
-from . import calificacion, centro, clientes, consulta, reportes, views
+from . import calificacion, centro, clientes, consulta, ensenar_redaccion, reportes, views
 
 urlpatterns = [
     path("", views.inicio, name="inicio"),
@@ -29,6 +29,10 @@ urlpatterns = [
     path("ticket/<str:radicado>/devolver/", views.devolver_ticket, name="devolver_ticket"),
     path("devolucion/<int:pk>/corregida/", views.resolver_devolucion, name="resolver_devolucion"),
     path("acta/revisar-ortografia/", views.revisar_ortografia, name="revisar_ortografia"),
+    # Ejemplos de redacción: así se le enseña a «Mejorar redacción» cómo deben quedar los textos
+    path("soporte/redaccion/ejemplos/", ensenar_redaccion.lista, name="redaccion_ejemplos"),
+    path("soporte/redaccion/ejemplos/<int:pk>/", ensenar_redaccion.lista, name="redaccion_ejemplo"),
+    path("soporte/redaccion/ejemplos/<int:pk>/eliminar/", ensenar_redaccion.eliminar, name="redaccion_ejemplo_eliminar"),
     path("ticket/<str:radicado>/acta/vincular/", views.vincular_acta, name="vincular_acta"),
     path("ticket/<str:radicado>/acta/<int:numero>/desvincular/", views.desvincular_acta, name="desvincular_acta"),
     # Oportunidades comerciales detectadas en campo

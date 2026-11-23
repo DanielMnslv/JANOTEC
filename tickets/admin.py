@@ -6,6 +6,7 @@ Las actas firmadas y sus equipos y firmas solo se consultan: un documento firmad
 from django.contrib import admin
 
 from .models import (
+    EjemploRedaccion,
     Devolucion,
     ActaSoporte, Adjunto, Categoria, ContadorRadicado, EquipoActa, FirmaActa, OportunidadComercial, Seguimiento, Ticket,
     TipoFalla,
@@ -133,3 +134,11 @@ class DevolucionAdmin(admin.ModelAdmin):
     list_filter = ("tramo",)
     search_fields = ("ticket__radicado", "motivo", "nota_resuelta")
     raw_id_fields = ("ticket", "autor", "asignado_previo", "resuelta_por")
+
+
+@admin.register(EjemploRedaccion)
+class EjemploRedaccionAdmin(admin.ModelAdmin):
+    """Ejemplos de redacción (también se administran en Gestión → Ejemplos de redacción)."""
+    list_display = ("titulo", "aplica", "activo", "creado_por", "actualizado")
+    list_filter = ("aplica", "activo")
+    search_fields = ("titulo", "original", "mejorado")

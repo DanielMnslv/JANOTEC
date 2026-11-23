@@ -227,6 +227,22 @@
         dejar.type = 'button';
         dejar.addEventListener('click', function () { propuesta.hidden = true; });
         propuesta.append(texto, usar, dejar);
+        // «No quedó como quería»: lleva lo escrito y la propuesta a «Ejemplos de redacción» para corregirla y enseñar
+        if (config.ensenar) {
+          const ensenar = el('a', 'btn btn-sm btn-link', 'No quedó como quería: enseñarle');
+          ensenar.href = config.ensenar;
+          ensenar.target = '_blank';
+          ensenar.title = 'Abre «Ejemplos de redacción» con este texto para escribir cómo debía quedar';
+          ensenar.addEventListener('click', function () {
+            try {
+              localStorage.setItem('redaccion-ensenar', JSON.stringify({
+                original: campo.value, propuesta: r.texto, aplica: clave !== 'general' ? clave : '',
+                campo: nombreDelCampo(campo) }));
+            } catch (e) { /* sin almacenamiento: se abre vacío */ }
+          });
+          ensenar.prepend(Object.assign(document.createElement('i'), { className: 'bi bi-mortarboard me-1' }));
+          propuesta.append(ensenar);
+        }
       }
       propuesta.hidden = false;
     }
