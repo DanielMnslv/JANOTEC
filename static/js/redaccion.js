@@ -218,6 +218,7 @@
         const usar = el('button', 'btn btn-sm btn-primary me-1', 'Usar esta');
         usar.type = 'button';
         usar.addEventListener('click', function () {
+          usada = { original: campo.value, propuesta: r.texto };  // si la corrige antes de guardar, se aprende de ella
           campo.value = r.texto;
           campo.dispatchEvent(new Event('input', { bubbles: true }));
           propuesta.hidden = true;
@@ -258,6 +259,27 @@
         const limpio = pulir(campo.value);
         if (limpio !== campo.value) campo.value = limpio;
         revisar();
+      });
+    }
+
+    // Aprender de las correcciones: si usó la propuesta de Claude y la cambió antes de guardar, se envía su versión
+    // como ejemplo candidato (queda «Por revisar» en Ejemplos de redacción). No frena ni cambia el envío.
+    let usada = null;
+    if (config.correccion && campo.form) {
+      campo.form.addEventListener('submit', function () {
+        if (!usada || !navigator.sendBeacon) return;
+        const final = campo.value.trim();
+        if (!final || final === usada.propuesta.trim()) return;
+        const datos = new FormData();
+        datos.append('csrfmiddlewaretoken', token(campo));
+        datos.append('original', usada.original);
+        datos.append('propuesta', usada.propuesta);
+        datos.append('final', final);
+        datos.append('tipo', clave);
+        datos.append('campo', nombreDelCampo(campo));
+        datos.append('pagina', (document.querySelector('h1') || {}).textContent || document.title);
+        navigator.sendBeacon(config.correccion, datos);
+        usada = null;
       });
     }
 

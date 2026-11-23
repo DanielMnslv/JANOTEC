@@ -33,6 +33,8 @@ urlpatterns = [
     path("soporte/redaccion/ejemplos/", ensenar_redaccion.lista, name="redaccion_ejemplos"),
     path("soporte/redaccion/ejemplos/<int:pk>/", ensenar_redaccion.lista, name="redaccion_ejemplo"),
     path("soporte/redaccion/ejemplos/<int:pk>/eliminar/", ensenar_redaccion.eliminar, name="redaccion_ejemplo_eliminar"),
+    path("soporte/redaccion/ejemplos/<int:pk>/aprobar/", ensenar_redaccion.aprobar, name="redaccion_ejemplo_aprobar"),
+    path("acta/redaccion/correccion/", ensenar_redaccion.correccion, name="redaccion_correccion"),
     path("ticket/<str:radicado>/acta/vincular/", views.vincular_acta, name="vincular_acta"),
     path("ticket/<str:radicado>/acta/<int:numero>/desvincular/", views.desvincular_acta, name="desvincular_acta"),
     # Oportunidades comerciales detectadas en campo

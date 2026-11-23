@@ -9,6 +9,51 @@
   su tono y su presentación con los datos nuevos. Entre más claros los ejemplos, mejor el resultado.
 </p>
 
+<div class="alert alert-light border small d-flex gap-2 align-items-start" style="max-width:820px">
+  <i class="bi bi-lightbulb text-primary fs-5"></i>
+  <div>
+    <strong>Además aprende solo</strong> de lo que ya está aprobado en la plataforma: en cada mejora busca los dos
+    documentos más parecidos y los nombres de equipos del catálogo de bodega. Hoy conoce
+    {{ aprendidos.diagnostico }} diagnósticos y {{ aprendidos.resultado }} resultados de actas,
+    {{ aprendidos.informe }} informe{{ aprendidos.informe|pluralize }} aprobado{{ aprendidos.informe|pluralize }} y
+    {{ aprendidos.propuesta }} propuesta{{ aprendidos.propuesta|pluralize }} aprobada{{ aprendidos.propuesta|pluralize }}.
+    Antes de enviarlos, los nombres de clientes, sedes y personas, los NIT, correos y celulares se cambian por
+    marcadores como [CLIENTE] o [SEDE]. Los ejemplos de esta página mandan sobre lo aprendido.
+  </div>
+</div>
+
+{% if por_revisar %}
+<h2 class="h5 mb-2">Correcciones por revisar <span class="badge text-bg-warning">{{ por_revisar|length }}</span></h2>
+<p class="small text-secondary mb-2">Alguien usó la propuesta de Claude y la corrigió antes de guardar. Si su versión
+  está bien escrita, apruébela y quedará como ejemplo.</p>
+<div class="list-group mb-4">
+  {% for e in por_revisar %}
+  <div class="list-group-item">
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+      <div class="me-auto">
+        <div class="fw-semibold">{{ e.titulo }}</div>
+        <div class="small text-secondary">{{ e.get_aplica_display }} ·
+          {% if e.creado_por %}{{ e.creado_por.get_full_name|default:e.creado_por.username }} · {% endif %}{{ e.actualizado|date:"d/m/Y H:i" }}</div>
+      </div>
+      <form method="post" action="{% url 'redaccion_ejemplo_aprobar' e.pk %}">{% csrf_token %}
+        <button class="btn btn-sm btn-success"><i class="bi bi-check2"></i> Aprobar</button>
+      </form>
+      <a href="{% url 'redaccion_ejemplo' e.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i> Ajustar</a>
+      <form method="post" action="{% url 'redaccion_ejemplo_eliminar' e.pk %}">{% csrf_token %}
+        <button class="btn btn-sm btn-outline-danger" title="Descartar"><i class="bi bi-trash"></i></button>
+      </form>
+    </div>
+    <div class="row g-2 small">
+      <div class="col-md-6"><div class="text-secondary mb-1">Se escribió</div>
+        <div class="border rounded p-2 bg-body-tertiary" style="white-space:pre-line;max-height:12rem;overflow:auto">{{ e.original }}</div></div>
+      <div class="col-md-6"><div class="text-secondary mb-1">Quedó así</div>
+        <div class="border rounded p-2" style="white-space:pre-line;max-height:12rem;overflow:auto">{{ e.mejorado }}</div></div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <form method="post" class="card mb-4" data-autoguardado="si">{% csrf_token %}
   <div class="card-header fw-semibold">
     {% if ejemplo.pk %}<i class="bi bi-pencil"></i> Editar «{{ ejemplo.titulo }}»{% else %}<i class="bi bi-mortarboard"></i> Nuevo ejemplo{% endif %}

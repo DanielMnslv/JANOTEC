@@ -1387,7 +1387,14 @@ class EjemploRedaccion(models.Model):
     aplica = models.CharField("aplica a", max_length=20, choices=Aplica.choices, default=Aplica.TODOS)
     original = models.TextField("texto como se escribió", max_length=8000)
     mejorado = models.TextField("cómo debía quedar", max_length=12000)
+    class Origen(models.TextChoices):
+        MANUAL = "manual", "Enseñado a mano"
+        CORRECCION = "correccion", "Corrección de un usuario (por revisar)"
+
     activo = models.BooleanField(default=True, help_text="Solo los activos se le muestran a Claude.")
+    # Cuando alguien usa la propuesta de Claude y la corrige antes de guardar, su versión queda como candidata
+    # (inactiva) para que coordinación la apruebe con un clic: así la plataforma aprende de las correcciones.
+    origen = models.CharField(max_length=12, choices=Origen.choices, default=Origen.MANUAL)
     creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     creado = models.DateTimeField(auto_now_add=True)
     actualizado = models.DateTimeField(auto_now=True)

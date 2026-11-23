@@ -28,6 +28,8 @@ def empresa(request):
         # «Revisar ortografía» y «Mejorar redacción» en todos los textos largos del personal (static/js/redaccion.js)
         datos["redaccion"] = redaccion.configuracion(reverse("mejorar_redaccion"), reverse("revisar_ortografia"))
         from .ensenar_redaccion import puede_ensenar
+        if datos["redaccion"]["url"]:  # al guardar, si corrigió la propuesta de Claude, se aprende de su versión
+            datos["redaccion"]["correccion"] = reverse("redaccion_correccion")
         if datos["redaccion"]["url"] and puede_ensenar(usuario):  # «No quedó como quería» → Ejemplos de redacción
             datos["redaccion"]["ensenar"] = reverse("redaccion_ejemplos")
     if usuario is not None and usuario.is_authenticated:

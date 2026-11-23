@@ -65,3 +65,60 @@ class EjemplosRedaccionTests(BaseTickets):
     def test_sin_ejemplos_quedan_solo_las_instrucciones(self):
         self.assertEqual(redaccion.instrucciones_con_ejemplos([]), redaccion.INSTRUCCIONES)
         self.assertNotIn("**", redaccion.INSTRUCCIONES.replace("sin ** ni", ""))
+
+
+class AprendizajeTests(BaseTickets):
+    """Lo aprendido del historial (anonimizado) y de las correcciones de los usuarios."""
+
+    def setUp(self):
+        super().setUp()
+        from django.core.cache import cache
+        cache.clear()
+
+    def test_anonimiza_clientes_sedes_personas_y_datos_de_contacto(self):
+        from .aprendizaje import anonimizar
+        texto = ("Visita a POLIGROW Colombia S.A.S. sede Mapiripán con Juan Pérez, NIT 900.123.456-7, "
+                 "cel 310 555 1234, correo juan@poligrow.co. Sede principal sin novedad.")
+        r = anonimizar(texto, ["Poligrow Colombia S.A.S."], ["Mapiripan", "Principal"], ["Juan Perez"])
+        for dato in ("POLIGROW", "Mapiripán", "Juan", "900.123", "310", "juan@"):
+            self.assertNotIn(dato, r)
+        for marca in ("[CLIENTE]", "[SEDE]", "[PERSONA]", "[NIT]", "[TELÉFONO]", "[CORREO]"):
+            self.assertIn(marca, r)
+        self.assertIn("Sede principal", r)  # los nombres genéricos de sede no se tocan
+
+    def test_busca_actas_parecidas_y_las_manda_sin_el_nombre_del_cliente(self):
+        from django.utils import timezone
+
+        from . import aprendizaje
+        from .models import ActaSoporte
+        ActaSoporte.objects.create(
+            numero=900001, fecha=timezone.now(), empresa=self.emp_a, sede=self.sede_a, sistema="CCTV",
+            observaciones="Se realizó mantenimiento preventivo al DVR de Empresa A; se reemplazó el conector BNC "
+                          "de la cámara de portería y la fuente de poder. El sistema quedó operativo.")
+        docs = aprendizaje.documentos_parecidos(["resultado", "general"], "se cambio conector BNC camara porteria dvr")
+        self.assertEqual(len(docs), 1)
+        self.assertNotIn("Empresa A", docs[0]["texto"])
+        self.assertIn("[CLIENTE]", docs[0]["texto"])
+        self.assertEqual(aprendizaje.documentos_parecidos(["propuesta"], "conector BNC"), [])
+
+    def test_la_correccion_queda_por_revisar_y_se_aprueba(self):
+        url = reverse("redaccion_correccion")
+        self.client.force_login(self.agente)
+        datos = {"original": "camara sin imagen", "propuesta": "La cámara no tenía imagen.",
+                 "final": "La cámara de portería no presentaba imagen.", "tipo": "diagnostico", "campo": "Diagnóstico"}
+        self.assertEqual(self.client.post(url, datos).status_code, 204)
+        self.client.post(url, {**datos, "final": datos["propuesta"]})  # sin cambios: no se aprende nada
+        e = EjemploRedaccion.objects.get()
+        self.assertEqual((e.origen, e.activo, e.aplica, e.mejorado), ("correccion", False, "diagnostico", datos["final"]))
+        self.assertEqual(redaccion.ejemplos_para(["diagnostico", "general"]), [])
+        self.client.force_login(self.supervisor)
+        self.assertContains(self.client.get(reverse("redaccion_ejemplos")), "Correcciones por revisar")
+        self.client.post(reverse("redaccion_ejemplo_aprobar", args=[e.pk]))
+        self.assertEqual(redaccion.ejemplos_para(["diagnostico", "general"]), [e])
+
+    def test_las_instrucciones_llevan_documentos_y_vocabulario(self):
+        sistema = redaccion.instrucciones_con_ejemplos(
+            [], [{"titulo": "Resultado de un acta", "texto": "Se reemplazó la fuente de [CLIENTE]."}],
+            ["Fuente 12 V 5 A"])
+        self.assertIn("<documento_aprobado", sistema)
+        self.assertIn("- Fuente 12 V 5 A", sistema)

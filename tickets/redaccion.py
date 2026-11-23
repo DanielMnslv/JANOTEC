@@ -131,16 +131,33 @@ def ejemplos_para(grupos):
     return elegidos
 
 
-def instrucciones_con_ejemplos(ejemplos):
-    """Las instrucciones y, si hay, los ejemplos de JANOTEC: lo que se escribió y cómo debía quedar."""
-    if not ejemplos:
-        return INSTRUCCIONES
-    partes = [INSTRUCCIONES, "\n\nEjemplos reales de cómo quiere JANOTEC que queden sus textos. Cuando el texto que "
-              "recibas sea del mismo tipo, imita su estructura, su nivel de detalle, su tono y su presentación, "
-              "pero con los datos del texto recibido (nunca copies datos del ejemplo):"]
-    for n, e in enumerate(ejemplos, 1):
-        partes.append(f'\n\n<ejemplo numero="{n}" tema="{_limpio(e.titulo)}">\n<como_se_escribio>\n{e.original.strip()}\n'
-                      f"</como_se_escribio>\n<como_debe_quedar>\n{e.mejorado.strip()}\n</como_debe_quedar>\n</ejemplo>")
+def instrucciones_con_ejemplos(ejemplos, documentos=(), vocabulario=()):
+    """Las instrucciones y lo aprendido: los ejemplos enseñados (lo que se escribió y cómo debía quedar), los
+    documentos aprobados parecidos y los nombres del catálogo. Todo sale anonimizado (tickets/aprendizaje.py)."""
+    partes = [INSTRUCCIONES]
+    if ejemplos:
+        from .aprendizaje import anonimizar, marcadores
+
+        clientes, personas = marcadores()
+        partes.append("\n\nEjemplos reales de cómo quiere JANOTEC que queden sus textos. Cuando el texto que recibas "
+                      "sea del mismo tipo, imita su estructura, su nivel de detalle, su tono y su presentación, pero con "
+                      "los datos del texto recibido (nunca copies datos del ejemplo):")
+        for n, e in enumerate(ejemplos, 1):
+            original = anonimizar(e.original.strip(), clientes, (), personas)
+            mejorado = anonimizar(e.mejorado.strip(), clientes, (), personas)
+            partes.append(f'\n\n<ejemplo numero="{n}" tema="{_limpio(e.titulo)}">\n<como_se_escribio>\n{original}\n'
+                          f"</como_se_escribio>\n<como_debe_quedar>\n{mejorado}\n</como_debe_quedar>\n</ejemplo>")
+    if documentos:
+        partes.append("\n\nDocumentos que JANOTEC ya aprobó y que se parecen al texto recibido. Úsalos como referencia "
+                      "del lenguaje técnico y comercial de la empresa (cómo nombra los equipos, los trabajos y los "
+                      "resultados). Los datos están cambiados por marcadores como [CLIENTE] o [SEDE]: no copies sus "
+                      "datos ni sus marcadores, y si hay ejemplos arriba, mandan los ejemplos.")
+        for d in documentos:
+            partes.append(f'\n\n<documento_aprobado tipo="{_limpio(d["titulo"])}">\n{d["texto"]}\n</documento_aprobado>')
+    if vocabulario:
+        partes.append("\n\nNombres de equipos y materiales tal como los registra la bodega de JANOTEC. Si el texto "
+                      "menciona alguno, escríbelo de esa forma (sin agregar los que no menciona):\n"
+                      + "\n".join(f"- {t}" for t in vocabulario))
     return "".join(partes)
 
 
@@ -258,14 +275,21 @@ def mejorar(texto, tipo, campo="", pagina=""):
     import anthropic
 
     contexto = descripcion(tipo, campo, pagina)
-    ejemplos = ejemplos_para(aplica_para(tipo, campo, pagina, texto))
+    grupos = aplica_para(tipo, campo, pagina, texto)
+    ejemplos = ejemplos_para(grupos)
+    try:  # lo aprendido del historial es una ayuda: si falla, la mejora sigue con las instrucciones y los ejemplos
+        from . import aprendizaje
+        documentos, terminos = aprendizaje.documentos_parecidos(grupos, texto), aprendizaje.vocabulario(texto)
+    except Exception:
+        log.exception("Redacción: no se pudo consultar lo aprendido del historial")
+        documentos, terminos = [], []
     cliente = anthropic.Anthropic(api_key=os.environ[CLAVE], timeout=90.0, max_retries=1)
     try:
         respuesta = cliente.messages.create(
             model=MODELO,
             max_tokens=8000,
             output_config={"effort": "medium"},  # equilibrio entre buena ortografía y costo
-            system=instrucciones_con_ejemplos(ejemplos),
+            system=instrucciones_con_ejemplos(ejemplos, documentos, terminos),
             messages=[{"role": "user", "content": f"El texto corresponde a {contexto}.\n\n<texto>\n{texto}\n</texto>"}],
         )
     except anthropic.AuthenticationError:

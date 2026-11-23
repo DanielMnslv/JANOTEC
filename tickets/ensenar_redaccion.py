@@ -67,8 +67,71 @@ def lista(request, pk=None):
         messages.success(request, f"Se guardó el ejemplo «{guardado.titulo}». Desde ya, «Mejorar redacción» lo tiene "
                                   "en cuenta" + ("." if guardado.activo else " cuando lo active."))
         return redirect("redaccion_ejemplos")
+    from . import aprendizaje
+
+    todos = EjemploRedaccion.objects.select_related("creado_por")
+    try:
+        aprendidos = aprendizaje.historial()
+    except Exception:  # la página sirve igual aunque no se pueda leer el historial
+        aprendidos = []
     return render(request, "tickets/redaccion_ejemplos.html", {
-        "form": form, "ejemplo": ejemplo, "ejemplos": EjemploRedaccion.objects.select_related("creado_por")})
+        "form": form, "ejemplo": ejemplo,
+        "por_revisar": [e for e in todos if e.origen == EjemploRedaccion.Origen.CORRECCION],
+        "ejemplos": [e for e in todos if e.origen != EjemploRedaccion.Origen.CORRECCION],
+        "aprendidos": {g: sum(1 for d in aprendidos if d["grupo"] == g)
+                       for g in ("diagnostico", "resultado", "informe", "propuesta")}})
+
+
+CORRECCIONES_POR_DIA = 30  # por persona: evita llenar la lista de candidatos
+
+
+@login_required
+@require_POST
+def correccion(request):
+    """Alguien usó la propuesta de Claude y la corrigió antes de guardar: su versión queda como ejemplo candidato.
+
+    Lo manda el navegador al enviar el formulario (static/js/redaccion.js). Queda inactivo, marcado «Por revisar»,
+    hasta que coordinación, dirección o administrativa lo aprueba en «Ejemplos de redacción». No responde nada útil:
+    el formulario sigue su curso aunque esto falle.
+    """
+    from django.core.cache import cache
+    from django.http import HttpResponse
+    from django.utils import timezone
+
+    from . import redaccion
+
+    if not request.user.es_interno:
+        raise PermissionDenied
+    original = (request.POST.get("original") or "").strip()
+    propuesta = (request.POST.get("propuesta") or "").strip()
+    final = (request.POST.get("final") or "").strip()
+    if not (original and propuesta and final) or final == propuesta or len(final) > 12000 or len(original) > 8000:
+        return HttpResponse(status=204)
+    clave = f"redaccion:correcciones:{request.user.pk}:{timezone.localdate():%Y%m%d}"
+    if cache.get(clave, 0) >= CORRECCIONES_POR_DIA:
+        return HttpResponse(status=204)
+    cache.set(clave, cache.get(clave, 0) + 1, 60 * 60 * 26)
+    campo = redaccion._limpio(request.POST.get("campo"), 60) or "texto"
+    grupos = redaccion.aplica_para(request.POST.get("tipo", ""), campo, request.POST.get("pagina", ""), original)
+    aplica = grupos[0] if grupos[0] in EjemploRedaccion.Aplica.values else EjemploRedaccion.Aplica.TODOS
+    EjemploRedaccion.objects.update_or_create(
+        original=original, origen=EjemploRedaccion.Origen.CORRECCION,
+        defaults={"titulo": f"Corrección · {campo}"[:120], "aplica": aplica, "mejorado": final, "activo": False,
+                  "creado_por": request.user})
+    return HttpResponse(status=204)
+
+
+@login_required
+@_ensenar_requerido
+@require_POST
+def aprobar(request, pk):
+    """Aprueba una corrección candidata: queda activa y Claude la usa desde la siguiente mejora."""
+    ejemplo = get_object_or_404(EjemploRedaccion, pk=pk)
+    ejemplo.activo = True
+    ejemplo.origen = EjemploRedaccion.Origen.MANUAL
+    ejemplo.save(update_fields=["activo", "origen", "actualizado"])
+    messages.success(request, f"Aprobado: «{ejemplo.titulo}» ya se usa como ejemplo.")
+    return redirect("redaccion_ejemplos")
 
 
 @login_required
