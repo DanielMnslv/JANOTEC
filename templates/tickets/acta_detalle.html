@@ -40,6 +40,7 @@
         <td class="text-end">{{ m.usado|floatformat:"-2" }}</td><td class="text-end {% if m.sobrante %}fw-semibold text-warning-emphasis{% endif %}">{{ m.sobrante|floatformat:"-2" }}</td></tr>{% endfor %}</tbody></table></div></div>{% endif %}{% endwith %}
     {% include "tickets/_tabla_equipos_acta.html" with lista=acta.equipos_retirados titulo="Equipos retirados" icono="bi-box-arrow-left" %}
     {% include "tickets/_tabla_equipos_acta.html" with lista=acta.equipos_requeridos titulo="Materiales y equipos requeridos" icono="bi-cart-plus" %}
+    {% include "tickets/_tabla_equipos_acta.html" with lista=acta.equipos_existentes titulo="Equipos que ya estaban instalados en la sede" icono="bi-hdd-stack" %}
     {% include "inventario/_acta_detalle_materiales.html" %}
     {% if evidencias or form_evidencias %}
     <div class="card mb-4" id="evidencias">

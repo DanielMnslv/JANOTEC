@@ -1058,6 +1058,8 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
                      if "retirados-TOTAL_FORMS" in request.POST else EquipoActaFormSet(prefix="retirados", form_kwargs={"clase": "retirado"}))
         requeridos = (EquipoActaFormSet(request.POST, request.FILES, prefix="requeridos", form_kwargs={"clase": "requerido"})
                       if "requeridos-TOTAL_FORMS" in request.POST else EquipoActaFormSet(prefix="requeridos", form_kwargs={"clase": "requerido"}))
+        existentes = (EquipoActaFormSet(request.POST, request.FILES, prefix="existentes", form_kwargs={"clase": "existente"})
+                      if "existentes-TOTAL_FORMS" in request.POST else EquipoActaFormSet(prefix="existentes", form_kwargs={"clase": "existente"}))
     elif ticket is None:
         correos = [c for c in (empresa.email_contacto, settings.NOTIFICAR_SOPORTE_EMAIL) if c]
         form = ActaForm(initial={
@@ -1068,6 +1070,7 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
         utilizados = EquipoActaFormSet(prefix="utilizados", form_kwargs={"clase": "utilizado"})
         retirados = EquipoActaFormSet(prefix="retirados", form_kwargs={"clase": "retirado"})
         requeridos = EquipoActaFormSet(prefix="requeridos", form_kwargs={"clase": "requerido"})
+        existentes = EquipoActaFormSet(prefix="existentes", form_kwargs={"clase": "existente"})
     else:
         correos = ticket.correos_respuesta + ([settings.NOTIFICAR_SOPORTE_EMAIL] if settings.NOTIFICAR_SOPORTE_EMAIL else [])
         form = ActaForm(initial={
@@ -1084,6 +1087,7 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
         utilizados = EquipoActaFormSet(prefix="utilizados", form_kwargs={"clase": "utilizado"})
         retirados = EquipoActaFormSet(prefix="retirados", form_kwargs={"clase": "retirado"})
         requeridos = EquipoActaFormSet(prefix="requeridos", form_kwargs={"clase": "requerido"})
+        existentes = EquipoActaFormSet(prefix="existentes", form_kwargs={"clase": "existente"})
     if ticket is None:
         del form.fields["marcar_resuelto"]  # sin ticket no hay visita que avanzar
 
@@ -1121,7 +1125,8 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
 
     if (request.method == "POST" and form.is_valid() and equipos.is_valid()
             and (not utilizados.is_bound or utilizados.is_valid()) and (not retirados.is_bound or retirados.is_valid())
-            and (not requeridos.is_bound or requeridos.is_valid()) and not material_errores):
+            and (not requeridos.is_bound or requeridos.is_valid())
+            and (not existentes.is_bound or existentes.is_valid()) and not material_errores):
         d = form.cleaned_data
         with transaction.atomic():
             acta = ActaSoporte.objects.create(
@@ -1142,6 +1147,9 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
                 filas += [(f, EquipoActa.Clase.RETIRADO) for f in retirados]
             if requeridos.is_bound:
                 filas += [(f, EquipoActa.Clase.REQUERIDO) for f in requeridos]
+            if existentes.is_bound:
+                filas += [(f, EquipoActa.Clase.EXISTENTE) for f in existentes]
+            cargados_en_sede = 0
             # Solo se enlaza a la hoja de vida un equipo cargado en esta misma sede
             de_la_sede = set(sede.equipos_instalados.values_list("pk", flat=True)) if sede else set()
             for f, clase in filas:
@@ -1153,9 +1161,14 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
                                                    equipo_instalado_id=instalado,
                                                    referencia=e.get("referencia") or "", serial=e.get("serial") or "", cantidad=e["cantidad"], observaciones=e["observaciones"],
                                                    propiedad=e.get("propiedad") or "", placa=(e.get("placa") or "").strip().upper(),
-                                                   trabajo=e.get("accion") if e.get("accion") in EquipoActa.Trabajo.values else "")
+                                                   trabajo=e.get("accion") if e.get("accion") in EquipoActa.Trabajo.values else "",
+                                                   sistema_equipo=e.get("sistema_equipo") or "", ubicacion=e.get("ubicacion") or "",
+                                                   estado_equipo=e.get("estado_equipo") or "")
                 for foto in e["fotos"]:
                     FotoEquipo.objects.create(equipo=equipo, archivo=foto, nombre_original=foto.name[:255])
+                if clase == EquipoActa.Clase.EXISTENTE and sede:  # lo encontró instalado: queda en los equipos de la sede
+                    from . import equipos_existentes
+                    cargados_en_sede += equipos_existentes.cargar_en_sede(equipo, sede, request.user, e["fotos"])
                 if instalado and clase == EquipoActa.Clase.RETIRADO:  # se desmontó: sale de la sede, queda su hoja de vida
                     from cronograma.models import EquipoInstalado
                     EquipoInstalado.objects.filter(pk=instalado).update(estado=EquipoInstalado.Estado.RETIRADO,
@@ -1208,7 +1221,8 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
                          + (f" Se descontaron del inventario {len(usar_activos)} activo(s) y {len(usar_insumos)} insumo(s)."
                             if usar_activos or usar_insumos else "")
                          + (" Gracias por reportar la oportunidad comercial." if oportunidad else "")
-                         + (f" Bodega ya sabe que sobraron {len(sobrantes)} ítem(s) de la propuesta para recibírselos." if sobrantes else ""),
+                         + (f" Bodega ya sabe que sobraron {len(sobrantes)} ítem(s) de la propuesta para recibírselos." if sobrantes else "")
+                         + (f" Se cargaron {cargados_en_sede} equipo(s) encontrados en la sede a su hoja de vida." if cargados_en_sede else ""),
                          extra_tags="acta-guardada")  # borra el borrador del dispositivo (borrador_acta.js)
         if levantamiento:
             # El acta es la constancia de la visita; lo que cotiza comercial es el informe del requerimiento
@@ -1223,8 +1237,10 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
     equipos.abierto = _abierta(equipos)
     utilizados.abierto = _abierta(utilizados, bool(elegidos) or bool(usados) or bool(material_errores) or bool(propuesta))
     requeridos.abierto = _abierta(requeridos)
+    existentes.abierto = _abierta(existentes)
     equipos.boton, utilizados.boton = "Agregar equipo intervenido", "Agregar material o equipo que no está en el inventario"
     requeridos.boton = "Agregar material o equipo requerido"
+    existentes.boton = "Agregar equipo encontrado en la sede"
     grupos_equipos = [
         ("intervenido", equipos, "Equipos intervenidos", "bi-wrench-adjustable",
          "Los equipos que revisó, reparó, configuró o retiró. Ej.: cámara IP bala, DVR, panel de alarma. Si lo desmontó, "
@@ -1234,6 +1250,11 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
         ("requerido", requeridos, "Materiales y equipos requeridos", "bi-cart-plus",
          "Lo que hace falta para solucionar y no se tenía en la visita. Ej.: fuente de 12 V, disco duro de 2 TB. "
          "Pasa sola a la tabla de «equipos y materiales requeridos» del informe."),
+        ("existente", existentes, "Equipos que ya estaban instalados", "bi-hdd-stack",
+         "Todo lo que encontró instalado en la sede y no aparece en «Equipos cargados en la sede»: cámaras, grabadores, "
+         "paneles, lectoras, switches, UPS… Queda en la hoja de vida de la sede para que el próximo técnico sepa qué hay. "
+         "Si son varios iguales en el mismo lugar, una fila con la cantidad (ej.: 4 cámaras domo en el parqueadero)."
+         + (" <b>Esta acta no tiene sede: los equipos quedan solo en el acta.</b>" if not sede else "")),
     ]
     from . import historial_cliente
 
@@ -1242,6 +1263,7 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
         "equipos_sede": equipos_sede, "sistema_plan": sistema_plan,
         "ticket": ticket, "empresa": empresa, "sede": sede, "grupos_equipos": grupos_equipos,
         "form": form, "equipos": equipos, "utilizados": utilizados, "retirados": retirados, "requeridos": requeridos,
+        "existentes": existentes,
         "mat_activos": mat_activos,
         "mat_insumos": [(i, c, usados.get(i.pk, "")) for i, c in mat_insumos],
         "elegidos": {int(pk) for pk in elegidos if str(pk).isdigit()}, "material_errores": material_errores,

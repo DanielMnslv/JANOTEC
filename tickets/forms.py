@@ -1061,12 +1061,19 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
     placa = forms.CharField(label="Placa de inventario", max_length=40, required=False)
     # El equipo de la hoja de vida de la sede, cuando se trajo de «Equipos cargados en la sede» (23/11/2026)
     equipo_instalado = forms.IntegerField(required=False, widget=forms.HiddenInput)
+    # Solo en «Equipos que ya estaban instalados»: con esto se cargan en los equipos instalados de la sede
+    sistema_equipo = forms.ChoiceField(label="Sistema", required=False)
+    ubicacion = forms.CharField(label="Ubicación en la sede", max_length=150, required=False,
+                                widget=forms.TextInput(attrs={"placeholder": "Ej.: Parqueadero, poste de portería"}))
+    estado_equipo = forms.ChoiceField(label="¿Cómo lo encontró?", required=False, initial="operativo", choices=[
+        ("operativo", "Funcionando"), ("con_falla", "Con falla"), ("fuera", "Fuera de servicio")])
 
     # Ejemplos que orientan al técnico según la lista
     EJEMPLOS = {"intervenido": ("Ej.: Cámara IP bala", "Ej.: Hikvision", "Qué se le hizo: revisión, ajuste, cambio de conector…"),
                 "utilizado": ("Ej.: Router Ruijie", "Ej.: Ruijie", "Para qué se usó o dónde quedó instalado"),
                 "retirado": ("Ej.: Panel de alarma", "Ej.: Honeywell", "Estado en que se retiró: funciona, dañado, batería mala…"),
-                "requerido": ("Ej.: Fuente de poder 12 V 5 A", "Ej.: Hikvision", "Para qué se necesita o dónde va: zona, punto, cámara…")}
+                "requerido": ("Ej.: Fuente de poder 12 V 5 A", "Ej.: Hikvision", "Para qué se necesita o dónde va: zona, punto, cámara…"),
+                "existente": ("Ej.: Cámara domo", "Ej.: Hikvision", "Características: resolución, canales, capacidad del disco, IP…")}
 
     def __init__(self, *args, clase="intervenido", **kwargs):
         super().__init__(*args, **kwargs)
@@ -1075,6 +1082,15 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
         self.clase = clase
         if clase != "intervenido":
             del self.fields["accion"]  # solo un equipo intervenido puede haberse retirado
+        if clase == "existente":
+            from cronograma.models import PlanMantenimiento
+            self.fields["sistema_equipo"].choices = [("", "— El del acta —")] + list(PlanMantenimiento.Sistema.choices)
+            del self.fields["propiedad"]  # lo que se encuentra instalado es del cliente; si es de JANOTEC, lleva placa
+            del self.fields["equipo_instalado"]
+            self.fields["cantidad"].help_text = "Si son varios iguales, la cantidad: se carga uno por uno en la sede."
+        else:
+            for nombre in ("sistema_equipo", "ubicacion", "estado_equipo"):
+                del self.fields[nombre]
         if clase in ("utilizado", "requerido"):
             del self.fields["propiedad"]
             del self.fields["placa"]
@@ -1105,7 +1121,7 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
         if "fotos" in cambios and not self.files.getlist(self.add_prefix("fotos")):
             cambios = [c for c in cambios if c != "fotos"]
         # Elegir «qué se hizo» o «de quién es» sin escribir el equipo no convierte la fila en diligenciada
-        if not set(cambios) - {"propiedad", "accion", "equipo_instalado"}:
+        if not set(cambios) - {"propiedad", "accion", "equipo_instalado", "estado_equipo"}:
             cambios = []
         return cambios
 

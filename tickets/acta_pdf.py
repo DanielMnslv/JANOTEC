@@ -69,7 +69,7 @@ def _tabla_equipos(equipos, ancho, material=False):
         nombre = _esc(e.equipo or "—") + (f"<br/><font color='#686975' size='7'>{_esc(detalle)}</font>" if detalle else "")
         filas.append([_p(i, E_CENTRO), Paragraph(nombre, E_CELDA), _p(e.marca or "—", E_CELDA),
                       _p(e.referencia or "—", E_CELDA), _p(e.serial or "—", E_CELDA), _p(e.cantidad or "1", E_CENTRO),
-                      _p(e.observaciones or "", E_CELDA)])
+                      _p(e.detalle, E_CELDA)])
     titulo = "MATERIAL O EQUIPO" if material else "EQUIPO"
     return _tabla(("N.°", titulo, "MARCA", "REFERENCIA", "SERIAL", "CANT.", "OBSERVACIONES"), filas,
                   (0.05, 0.24, 0.11, 0.14, 0.14, 0.08, 0.24), ancho)
@@ -151,7 +151,8 @@ def pdf(acta):
     for lista, nombre, material in ((acta.equipos_intervenidos, "EQUIPOS INTERVENIDOS", False),
                                     (acta.equipos_utilizados, "MATERIALES Y EQUIPOS UTILIZADOS", True),
                                     (acta.equipos_retirados, "EQUIPOS RETIRADOS", False),
-                                    (acta.equipos_requeridos, "MATERIALES Y EQUIPOS REQUERIDOS", True)):
+                                    (acta.equipos_requeridos, "MATERIALES Y EQUIPOS REQUERIDOS", True),
+                                    (acta.equipos_existentes, "EQUIPOS QUE YA ESTABAN INSTALADOS EN LA SEDE", False)):
         if lista:
             h += [seccion(nombre), _tabla_equipos(lista, ancho, material)]
 

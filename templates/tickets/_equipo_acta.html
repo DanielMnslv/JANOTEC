@@ -8,6 +8,12 @@
     {% include "tickets/_campo.html" with campo=f.serial clase="col-md-2" %}
     {% include "tickets/_campo.html" with campo=f.cantidad clase="col-md-2" %}
   </div>
+  {% if f.ubicacion %}<div class="row">
+    {% include "tickets/_campo.html" with campo=f.sistema_equipo clase="col-md-4" %}
+    {% include "tickets/_campo.html" with campo=f.ubicacion clase="col-md-5" %}
+    {% include "tickets/_campo.html" with campo=f.estado_equipo clase="col-md-3" %}
+  </div>
+  <div class="row">{% include "tickets/_campo.html" with campo=f.placa clase="col-md-5" %}</div>{% endif %}
   {% if f.accion %}<div class="row">{% include "tickets/_campo.html" with campo=f.accion clase="col-md-5" %}</div>{% endif %}
   {% if f.propiedad %}<div class="row">
     {% include "tickets/_campo.html" with campo=f.propiedad clase="col-md-7" %}

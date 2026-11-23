@@ -846,6 +846,11 @@ class ActaSoporte(models.Model):
         """Material o equipos que hacen falta para solucionar (no se tenían en la visita): van al informe."""
         return [e for e in self.equipos.all() if e.clase == EquipoActa.Clase.REQUERIDO]
 
+    @property
+    def equipos_existentes(self):
+        """Equipos que ya estaban instalados en la sede y el técnico reportó: pasan a la hoja de vida de la sede."""
+        return [e for e in self.equipos.all() if e.clase == EquipoActa.Clase.EXISTENTE]
+
 
 class EquipoActa(models.Model):
     """Equipo o material de un acta: lo que se intervino o lo que se usó para dejar el servicio funcionando."""
@@ -856,6 +861,8 @@ class EquipoActa(models.Model):
         UTILIZADO = "utilizado", "Material o equipo utilizado"  # se instaló o gastó para que el servicio funcione
         RETIRADO = "retirado", "Equipo retirado"  # desmonte: se entrega al cliente o vuelve a bodega si es de JANOTEC
         REQUERIDO = "requerido", "Material o equipo requerido"  # hace falta para solucionar: pasa a la tabla del informe
+        # Lo que el técnico encontró instalado de antes (23/11/2026): alimenta los equipos instalados de la sede
+        EXISTENTE = "existente", "Equipo ya instalado en la sede"
 
     class Trabajo(models.TextChoices):
         """Qué se le hizo a un equipo intervenido."""
@@ -885,6 +892,20 @@ class EquipoActa(models.Model):
     serial = models.CharField(max_length=100, blank=True)
     cantidad = models.CharField(max_length=20, blank=True)
     observaciones = models.TextField(blank=True)
+    # Solo para los equipos que ya estaban instalados: con esto se cargan en la hoja de vida de la sede
+    sistema_equipo = models.CharField("sistema", max_length=15, blank=True)
+    ubicacion = models.CharField("ubicación en la sede", max_length=150, blank=True)
+    estado_equipo = models.CharField("estado en que se encontró", max_length=10, blank=True)
+
+    ESTADOS_ENCONTRADO = {"operativo": "Funcionando", "con_falla": "Con falla", "fuera": "Fuera de servicio"}
+
+    @property
+    def detalle(self):
+        """Las observaciones y, en un equipo que ya estaba instalado, dónde está y cómo se encontró."""
+        partes = [p for p in (self.ubicacion and f"Ubicación: {self.ubicacion}",
+                              self.ESTADOS_ENCONTRADO.get(self.estado_equipo, "") if self.clase == self.Clase.EXISTENTE else "",
+                              self.observaciones) if p]
+        return " · ".join(partes)
 
     class Meta:
         verbose_name = "equipo del acta"
