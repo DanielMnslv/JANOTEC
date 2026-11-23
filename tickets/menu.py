@@ -59,6 +59,12 @@ class Grupo:
         return any(e.activo for e in self.enlaces)
 
 
+# Las páginas de «Clientes y sedes» (para marcar el enlace del menú)
+URLS_CLIENTES = ("clientes", "cliente_detalle", "cliente_nuevo_admin", "cliente_editar_admin", "encargado_nuevo",
+                 "encargado_editar", "sede_detalle", "sede_plan_nuevo", "sede_plan_editar", "equipo_nuevo", "equipo_detalle",
+                 "equipo_editar")
+
+
 def areas_propias(usuario):
     """Las áreas que la persona trabaja; ``None`` = todas (superusuario sin área asignada)."""
     if usuario.is_superuser and usuario.rol in ("", "cliente"):
@@ -192,6 +198,8 @@ def _grupos(request, datos):
         actas = Enlace("Actas", reverse("actas_lista"), "bi-clipboard-check", u in ("actas_lista", "acta_detalle"))
         horas = Enlace("Horas extras", reverse("cronograma:horas_extras"), "bi-clock-history",
                        u in ("horas_extras", "horas_extras_corregir"))
+        # Clientes y sedes: sedes, mantenimiento por sistema, equipos instalados y su hoja de vida (tickets/clientes.py)
+        clientes = Enlace("Clientes y sedes", reverse("clientes"), "bi-building", not ns and u in URLS_CLIENTES)
         if usuario.es_supervisor:
             # El paso a paso del ticket (tickets/pasos.py): recepcionar → asignar → programar → visita y acta → informe → cierre
             c = _conteo_tecnica(usuario)
@@ -212,8 +220,7 @@ def _grupos(request, datos):
                 Enlace("Confirmar y cerrar", panel + "?estado=informe", "bi-check2-square", en_panel("informe"),
                        n(E.INFORME), "secondary", "Esperando la confirmación del cliente")),
                 Enlace("Todos los pendientes", panel + "?estado=abiertos", "bi-kanban", en_panel("abiertos")),
-                Enlace("Mantenimientos", reverse("cronograma:mantenimiento"), "bi-arrow-repeat", "mantenimiento" in u),
-                horas, viaticos, material]
+                clientes, horas, viaticos, material]
         else:
             # El técnico: sus visitas → cronograma → acta → informe; luego sus horas y su material
             tecnica = [*pasos(
@@ -221,7 +228,7 @@ def _grupos(request, datos):
                 cronograma, actas,
                 Enlace("Informes pendientes", panel + "?estado=visita_ejecutada", "bi-file-earmark-text",
                        en_panel("visita_ejecutada"))),
-                horas, usuario.ve_financiera and viaticos, material,
+                clientes, horas, usuario.ve_financiera and viaticos, material,
                 Enlace("Todos mis tickets", panel + "?estado=", "bi-kanban", en_panel(""))]
         grupo("tecnica", "Área técnica", "tecnica", *tecnica)
         if usuario.ve_comercial:
@@ -238,7 +245,6 @@ def _grupos(request, datos):
             grupo("gestion", "Gestión", "gestion",
                   Enlace("Indicadores", reverse("indicadores_centro"), "bi-graph-up", u in ("indicadores_centro", "indicadores_metas")),
                   descargables,
-                  Enlace("Clientes", reverse("clientes"), "bi-building", "cliente" in u),
                   Enlace("Configuración", reverse("admin:index"), "bi-gear"))
     elif usuario.es_bodega:
         # Primero su paso a paso (abierto); el resto de bodega en grupos que se abren con un toque

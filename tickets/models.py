@@ -871,6 +871,9 @@ class EquipoActa(models.Model):
         JANOTEC = "janotec", "De JANOTEC"
 
     acta = models.ForeignKey(ActaSoporte, on_delete=models.CASCADE, related_name="equipos")
+    # El equipo de la hoja de vida de la sede (23/11/2026); las actas anteriores quedan sin él
+    equipo_instalado = models.ForeignKey("cronograma.EquipoInstalado", on_delete=models.SET_NULL, null=True, blank=True,
+                                         related_name="registros_acta", verbose_name="equipo de la sede")
     propiedad = models.CharField("¿de quién es?", max_length=10, choices=Propiedad.choices, blank=True)
     placa = models.CharField("placa de inventario", max_length=40, blank=True,
                              help_text="Equipos de JANOTEC: la placa con la que está en el inventario.")

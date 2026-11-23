@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import (Actividad, DocumentoPersonal, EjecucionMantenimiento, PlanMantenimiento, ReporteHorasExtra,
+from .models import (Actividad, DocumentoPersonal, EjecucionMantenimiento, EquipoInstalado, PlanMantenimiento, ReporteHorasExtra,
                      SolicitudViaticos)
 
 
@@ -48,3 +48,12 @@ class PlanMantenimientoAdmin(admin.ModelAdmin):
     search_fields = ("sede__nombre", "sede__empresa__razon_social", "detalle", "contrato")
     raw_id_fields = ("sede",)
     inlines = [EjecucionMantenimientoInline]
+
+
+@admin.register(EquipoInstalado)
+class EquipoInstaladoAdmin(admin.ModelAdmin):
+    """Equipos instalados en las sedes (se cargan en «Clientes y sedes»; aquí solo para consultar o corregir)."""
+    list_display = ("tipo", "marca", "modelo", "serial", "sede", "sistema", "propiedad", "estado")
+    list_filter = ("sistema", "propiedad", "estado")
+    search_fields = ("tipo", "marca", "modelo", "serial", "placa", "sede__nombre", "sede__empresa__razon_social")
+    raw_id_fields = ("sede", "creado_por")

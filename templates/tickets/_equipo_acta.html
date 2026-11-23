@@ -1,4 +1,5 @@
 <div class="equipo-acta">
+  {% if f.equipo_instalado %}{{ f.equipo_instalado }}<div class="small text-success mb-1 marca-hoja-vida"{% if not f.equipo_instalado.value %} hidden{% endif %}><i class="bi bi-journal-check"></i> Equipo de la hoja de vida de la sede: la visita queda en su historial.</div>{% endif %}
   {% for e in f.non_field_errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
   <div class="row">
     {% include "tickets/_campo.html" with campo=f.equipo clase="col-md-4" %}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block titulo %}{{ sede.nombre }} · {{ sede.empresa }}{% endblock %}
+{% block contenido %}
+{# Ficha de la sede: mantenimiento por sistema, equipos instalados agrupados por sistema e historial de visitas. #}
+<a href="{% url 'cliente_detalle' sede.empresa_id %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ sede.empresa }}</a>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 my-2">
+  <div>
+    <h1 class="h3 page-title mb-1">{{ sede.nombre }}{% if not sede.activa %} <span class="badge text-bg-secondary fs-6 align-middle">Inactiva</span>{% endif %} <span class="fs-6 align-middle">{% include "tickets/_estado_mant.html" with estado=estado_sede %}</span></h1>
+    <p class="small text-muted-jn mb-0">{{ sede.empresa }}{% if sede.ciudad %} · {{ sede.ciudad }}{% endif %}{% if sede.departamento %} ({{ sede.departamento }}){% endif %}{% if sede.direccion %} · {{ sede.direccion }}{% endif %}{% if sede.abonado %} · Abonado {{ sede.abonado }}{% endif %}<br>
+      Contacto: {{ sede.contacto_nombre|default:"—" }}{% if sede.contacto_cargo %} · {{ sede.contacto_cargo }}{% endif %} {{ sede.contacto_telefono }} {{ sede.contacto_email }}</p>
+  </div>
+  {% if puede_editar_datos %}<a class="btn btn-sm btn-light border" href="{% url 'cliente_detalle' sede.empresa_id %}?sede={{ sede.pk }}#form-sede"><i class="bi bi-pencil"></i> Editar datos de la sede</a>{% endif %}
+</div>
+
+<div class="card mb-4" id="mantenimiento">
+  <div class="card-header small fw-semibold d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <span><i class="bi bi-arrow-repeat"></i> Mantenimiento preventivo por sistema <span class="fw-normal text-muted-jn">· se avisa a coordinación {{ dias_antes }} días antes</span></span>
+    {% if puede_editar %}<a class="btn btn-sm btn-primary py-0" href="{% url 'sede_plan_nuevo' sede.pk %}"><i class="bi bi-plus"></i> Agregar sistema</a>{% endif %}
+  </div>
+  <div class="table-responsive">
+    <table class="table mb-0 align-middle small">
+      <thead><tr><th>Sistema</th><th>Frecuencia</th><th>Último realizado</th><th>Próximo</th><th>Estado</th><th>Contrato</th><th></th></tr></thead>
+      <tbody>
+      {% for p in planes %}
+        <tr{% if not p.activo %} class="text-muted-jn"{% endif %}>
+          <td class="fw-semibold">{{ p.get_sistema_display }}{% if p.detalle %}<div class="fw-normal text-muted-jn">{{ p.detalle }}</div>{% endif %}</td>
+          <td>{{ p.get_frecuencia_display }}</td>
+          <td>{{ p.ultimo|date:"d/m/Y"|default:"Sin registro" }}</td>
+          <td>{{ p.proxima|date:"d/m/Y" }}</td>
+          <td>{% include "tickets/_estado_mant.html" with estado=p.estado %}{% if p.curso and p.curso.ticket %}<div><a href="{{ p.curso.ticket.get_absolute_url }}" class="radicado">{{ p.curso.ticket.radicado }}</a></div>{% endif %}</td>
+          <td>{% if p.con_contrato %}{{ p.contrato|default:"Sí" }}{% if p.contrato_vence %}<div class="{% if p.contrato_vencido %}text-danger{% else %}text-muted-jn{% endif %}">Vence {{ p.contrato_vence|date:"d/m/Y" }}</div>{% endif %}{% else %}—{% endif %}</td>
+          <td class="text-end text-nowrap">{% if puede_editar %}
+            {% if p.activo and not p.curso %}<form method="post" class="d-inline">{% csrf_token %}<input type="hidden" name="plan" value="{{ p.pk }}">
+              <button class="btn btn-sm {% if p.estado == 'vencido' or p.estado == 'proximo' %}btn-accent{% else %}btn-outline-primary{% endif %} py-0" name="accion" value="programar" onclick="return confirm('¿Crear el ticket del mantenimiento de {{ p.get_sistema_display|escapejs }} del {{ p.proxima|date:"d/m/Y" }}? Llega a «Recepcionar» con los equipos de este sistema.')"><i class="bi bi-calendar-plus"></i> Programar mantenimiento</button></form>{% endif %}
+            <a class="btn btn-sm btn-light border py-0" href="{% url 'sede_plan_editar' sede.pk p.pk %}" aria-label="Editar el mantenimiento de {{ p.get_sistema_display }}"><i class="bi bi-pencil"></i></a>{% endif %}</td>
+        </tr>
+      {% empty %}<tr><td colspan="7" class="text-muted-jn">Esta sede no tiene mantenimiento preventivo{% if puede_editar %}: agréguelo por sistema con su frecuencia y el último que se hizo{% endif %}.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card mb-4" id="equipos">
+  <div class="card-header small fw-semibold d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <span><i class="bi bi-hdd-network"></i> Equipos instalados ({{ en_servicio }})</span>
+    <span class="d-flex gap-2">{% if retirados %}<a class="btn btn-sm btn-light border py-0" href="?{% if not ver_retirados %}retirados=1{% endif %}#equipos">{% if ver_retirados %}Ocultar{% else %}Ver{% endif %} retirados ({{ retirados }})</a>{% endif %}
+    {% if puede_editar %}<a class="btn btn-sm btn-primary py-0" href="{% url 'equipo_nuevo' sede.pk %}"><i class="bi bi-plus"></i> Agregar equipo</a>{% endif %}</span>
+  </div>
+  {% for g in grupos %}
+    <div class="px-3 pt-3 pb-1 small fw-semibold text-uppercase text-muted-jn d-flex justify-content-between">{{ g.nombre }} · {{ g.equipos|length }}
+      {% if puede_editar %}<a class="text-decoration-none text-normal" href="{% url 'equipo_nuevo' sede.pk %}?sistema={{ g.equipos.0.sistema }}"><i class="bi bi-plus"></i> Otro de {{ g.nombre|lower }}</a>{% endif %}</div>
+    <div class="table-responsive"><table class="table table-hover mb-0 align-middle small">
+      <thead><tr><th style="width:56px"></th><th>Equipo</th><th>Modelo o referencia</th><th>Serial</th><th>Ubicación</th><th>¿De quién es?</th><th>Estado</th></tr></thead>
+      <tbody>{% for e in g.equipos %}<tr{% if e.estado == 'retirado' %} class="text-muted-jn"{% endif %}>
+        <td>{% if e.foto %}<img src="{{ e.foto.url }}" alt="Foto de {{ e.tipo }}" width="48" height="48" style="object-fit:cover" class="rounded border">{% else %}<span class="d-inline-flex align-items-center justify-content-center rounded border text-muted-jn" style="width:48px;height:48px"><i class="bi bi-camera"></i></span>{% endif %}</td>
+        <td><a href="{% url 'equipo_detalle' e.pk %}" class="fw-semibold">{{ e.tipo }}</a>{% if e.marca %}<div class="text-muted-jn">{{ e.marca }}</div>{% endif %}</td>
+        <td>{{ e.modelo|default:"—" }}</td>
+        <td class="radicado">{{ e.serial|default:"—" }}</td>
+        <td>{{ e.ubicacion }}</td>
+        <td>{{ e.get_propiedad_display }}{% if e.placa %}<div class="radicado text-muted-jn">{{ e.placa }}</div>{% endif %}</td>
+        <td>{% if e.estado == 'operativo' %}<span class="badge text-bg-success">Operativo</span>{% elif e.estado == 'con_falla' %}<span class="badge text-bg-warning">Con falla</span>{% elif e.estado == 'fuera' %}<span class="badge text-bg-danger">Fuera de servicio</span>{% else %}<span class="badge text-bg-secondary">Retirado</span>{% endif %}</td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+  {% empty %}<div class="card-body small text-muted-jn">Todavía no se han cargado los equipos de esta sede{% if puede_editar %}. Agréguelos uno por uno con su sistema, modelo, serial, ubicación y foto: así el técnico los elige en el acta y cada equipo arma su hoja de vida{% endif %}.</div>{% endfor %}
+</div>
+
+{% include "tickets/_historial_cliente.html" with h=historial %}
+{% endblock %}

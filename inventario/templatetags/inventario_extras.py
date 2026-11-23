@@ -78,7 +78,7 @@ MENU_BODEGA = [
     ("Configuración", "bi-gear", [
         ("Marcas", "inventario:catalogo", "marcas", "bi-tag"),
         ("Categorías", "inventario:catalogo", "categorias", "bi-diagram-3"),
-        ("Clientes", "inventario:contactos", "", "bi-building"),
+        ("Clientes y sedes", "clientes", "", "bi-building"),
         ("Funcionarios", "inventario:funcionarios", "", "bi-people"),
     ]),
 ]

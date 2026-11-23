@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block titulo %}{{ e.tipo }} · {{ e.sede.nombre }}{% endblock %}
+{% block contenido %}
+{# Hoja de vida del equipo instalado: sus datos y cada acta en que se intervino. #}
+<a href="{% url 'sede_detalle' e.sede_id %}#equipos" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ e.sede.empresa }} · {{ e.sede.nombre }}</a>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 my-2">
+  <div>
+    <h1 class="h3 page-title mb-1">{{ e.tipo }}{% if e.marca or e.modelo %} <span class="text-muted-jn fw-normal">{{ e.marca }} {{ e.modelo }}</span>{% endif %}</h1>
+    <p class="small text-muted-jn mb-0">Hoja de vida · {{ e.get_sistema_display }} · {{ e.ubicacion }}</p>
+  </div>
+  {% if puede_editar %}<a class="btn btn-sm btn-light border" href="{% url 'equipo_editar' e.pk %}"><i class="bi bi-pencil"></i> Editar</a>{% endif %}
+</div>
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card mb-4">
+      {% if e.foto %}<a href="{{ e.foto.url }}" target="_blank" rel="noopener"><img src="{{ e.foto.url }}" alt="Foto de {{ e.tipo }}" class="card-img-top" style="max-height:320px;object-fit:contain;background:var(--bs-tertiary-bg)"></a>{% endif %}
+      <dl class="card-body row small mb-0">
+        <dt class="col-5">Sistema</dt><dd class="col-7">{{ e.get_sistema_display }}</dd>
+        <dt class="col-5">Equipo</dt><dd class="col-7">{{ e.tipo }}</dd>
+        <dt class="col-5">Marca</dt><dd class="col-7">{{ e.marca|default:"—" }}</dd>
+        <dt class="col-5">Modelo o referencia</dt><dd class="col-7">{{ e.modelo|default:"—" }}</dd>
+        <dt class="col-5">Serial</dt><dd class="col-7 radicado">{{ e.serial|default:"—" }}</dd>
+        <dt class="col-5">Ubicación</dt><dd class="col-7">{{ e.ubicacion }}</dd>
+        <dt class="col-5">¿De quién es?</dt><dd class="col-7">{{ e.get_propiedad_display }}{% if e.placa %} · <span class="radicado">{{ e.placa }}</span>{% endif %}</dd>
+        <dt class="col-5">Estado</dt><dd class="col-7">{{ e.get_estado_display }}</dd>
+        <dt class="col-5">Instalado</dt><dd class="col-7">{{ e.fecha_instalacion|date:"d/m/Y"|default:"—" }}</dd>
+        <dt class="col-5">Garantía</dt><dd class="col-7">{% if e.garantia_hasta %}Hasta {{ e.garantia_hasta|date:"d/m/Y" }}{% if e.garantia_hasta < hoy %} <span class="badge text-bg-secondary">Vencida</span>{% else %} <span class="badge text-bg-success">Vigente</span>{% endif %}{% else %}—{% endif %}</dd>
+        {% if e.caracteristicas %}<dt class="col-12 mt-2">Características técnicas</dt><dd class="col-12" style="white-space:pre-line">{{ e.caracteristicas }}</dd>{% endif %}
+        {% if e.observaciones %}<dt class="col-12 mt-2">Observaciones</dt><dd class="col-12" style="white-space:pre-line">{{ e.observaciones }}</dd>{% endif %}
+        <dt class="col-12 mt-2 text-muted-jn fw-normal">Cargado {{ e.creado|date:"d/m/Y" }}{% if e.creado_por %} por {{ e.creado_por.get_full_name|default:e.creado_por.username }}{% endif %} · actualizado {{ e.actualizado|date:"d/m/Y" }}</dt>
+      </dl>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header small fw-semibold"><i class="bi bi-clock-history"></i> Intervenciones ({{ registros|length }})</div>
+      <ul class="list-group list-group-flush small">
+        {% for r in registros %}<li class="list-group-item">
+          <div class="d-flex flex-wrap justify-content-between gap-2"><span><a href="{{ r.acta.get_absolute_url }}" class="radicado">Acta {{ r.acta.numero }}</a> · {{ r.acta.fecha|date:"d/m/Y" }}{% if r.acta.actividad %} · {{ r.acta.actividad }}{% endif %}</span>
+            <span>{% if r.trabajo %}<span class="badge text-bg-light border">{{ r.get_trabajo_display }}</span>{% endif %} {% if r.acta.ticket %}<a href="{{ r.acta.ticket.get_absolute_url }}" class="radicado">{{ r.acta.ticket.radicado }}</a>{% endif %}</span></div>
+          <div class="text-muted-jn">{{ r.acta.tecnico_texto|default:"" }}</div>
+          {% if r.observaciones %}<div style="white-space:pre-line">{{ r.observaciones }}</div>{% endif %}
+          {% if r.fotos.all %}<div class="d-flex flex-wrap gap-1 mt-1">{% for f in r.fotos.all %}<a href="{{ f.archivo.url }}" target="_blank" rel="noopener"><img src="{{ f.archivo.url }}" alt="Foto de la intervención" width="56" height="56" style="object-fit:cover" class="rounded border"></a>{% endfor %}</div>{% endif %}
+        </li>{% empty %}<li class="list-group-item text-muted-jn">Aún no se ha intervenido en un acta. Cuando el técnico lo elija en «Equipos intervenidos» del acta, la visita queda aquí.</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

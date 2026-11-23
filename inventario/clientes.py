@@ -115,6 +115,9 @@ class SedeForm(BootstrapMixin, forms.ModelForm):
 @login_required
 @inventario_requerido
 def cliente(request, pk):
+    """Desde el 23/11/2026 la ficha del cliente es una sola: la de «Clientes y sedes»."""
+    if request.GET.get("vieja") != "1":
+        return redirect("cliente_detalle", pk=pk)
     e = get_object_or_404(Empresa.objects.prefetch_related("encargados", "sedes"), pk=pk, es_prospecto=False)
     sedes, sin_sede = sedes_de(e)
     return render(request, "inventario/cliente.html", {
@@ -132,7 +135,7 @@ def encargado_form(request, empresa_pk, pk=None):
         guardado = form.save()
         _registro(request.user, guardado, CHANGE if pk else ADDITION, f"Encargado de {e}: {', '.join(form.changed_data)}")
         messages.success(request, f"Se guardó el encargado {guardado.nombre}.")
-        return redirect("inventario:cliente", e.pk)
+        return redirect("cliente_detalle", pk=e.pk)
     return render(request, "inventario/cliente_dato_form.html", {
         "form": form, "e": e, "titulo": encargado.nombre if pk else f"¿Quién es el encargado en {e.razon_social}?"})
 
@@ -150,7 +153,7 @@ def sede_form(request, empresa_pk, pk=None):
         guardada = form.save()
         _registro(request.user, guardada, CHANGE if pk else ADDITION, f"Sede de {e}: {', '.join(form.changed_data)}")
         messages.success(request, f"Se guardó la sede {guardada.nombre}.")
-        return redirect("inventario:cliente", e.pk)
+        return redirect("cliente_detalle", pk=e.pk)
     return render(request, "inventario/cliente_dato_form.html", {
         "form": form, "e": e, "titulo": sede.nombre if pk else f"Nueva sede de {e.razon_social}",
         "sugerido": inicial.get("ciudad")})

@@ -1059,6 +1059,8 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
         ("", "— Elija —"), ("cliente", "Del cliente"), ("janotec", "De JANOTEC")],
         help_text="Define el seguimiento: lo de JANOTEC queda en la hoja de vida del equipo; si se retira, vuelve a bodega.")
     placa = forms.CharField(label="Placa de inventario", max_length=40, required=False)
+    # El equipo de la hoja de vida de la sede, cuando se trajo de «Equipos cargados en la sede» (23/11/2026)
+    equipo_instalado = forms.IntegerField(required=False, widget=forms.HiddenInput)
 
     # Ejemplos que orientan al técnico según la lista
     EJEMPLOS = {"intervenido": ("Ej.: Cámara IP bala", "Ej.: Hikvision", "Qué se le hizo: revisión, ajuste, cambio de conector…"),
@@ -1076,6 +1078,7 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
         if clase in ("utilizado", "requerido"):
             del self.fields["propiedad"]
             del self.fields["placa"]
+            del self.fields["equipo_instalado"]
             if clase == "requerido":  # aún no existe: no tiene serial
                 del self.fields["serial"]
         else:
@@ -1102,7 +1105,7 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
         if "fotos" in cambios and not self.files.getlist(self.add_prefix("fotos")):
             cambios = [c for c in cambios if c != "fotos"]
         # Elegir «qué se hizo» o «de quién es» sin escribir el equipo no convierte la fila en diligenciada
-        if not set(cambios) - {"propiedad", "accion"}:
+        if not set(cambios) - {"propiedad", "accion", "equipo_instalado"}:
             cambios = []
         return cambios
 

@@ -69,6 +69,7 @@
               <div class="collapse{% if fs.abierto %} show{% endif %}" id="grupo-{{ fs.prefix }}">
                 <div class="px-3 pb-3">
                   <p class="small text-muted-jn mb-2">{{ ayuda|safe }}</p>
+                  {% if clave == "intervenido" and equipos_sede %}{% include "tickets/_acta_equipos_sede.html" %}{% endif %}
                   {% if clave == "utilizado" %}{% if propuesta_material %}{% include "tickets/_acta_material_propuesta.html" %}{% endif %}{% include "inventario/_acta_materiales.html" %}{% endif %}
                   {{ fs.management_form }}
                   {% for e in fs.non_form_errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
@@ -228,6 +229,38 @@
       document.getElementById('lista-' + prefijo).insertAdjacentHTML('beforeend', html);
       total.value = n + 1;
     });
+  });
+
+  // --- Traer equipos cargados en la sede a «Equipos intervenidos» -------------
+  const traer = document.getElementById('traer-equipos-sede');
+  if (traer) traer.addEventListener('click', function () {
+    const prefijo = 'equipos', total = document.getElementById('id_equipos-TOTAL_FORMS');
+    const lista = document.getElementById('lista-equipos');
+    const ya = new Set([...lista.querySelectorAll('input[name$="-equipo_instalado"]')].map(function (c) { return c.value; }).filter(Boolean));
+    let traidos = 0;
+    document.querySelectorAll('.equipo-sede:checked').forEach(function (c) {
+      const d = c.dataset;
+      if (ya.has(d.id)) { c.checked = false; return; }
+      // Se reutiliza una fila vacía; si no hay, se agrega una
+      let fila = [...lista.querySelectorAll('.equipo-acta')].find(function (f) {
+        const eq = f.querySelector('input[name$="-equipo"]'); return eq && !eq.value.trim();
+      });
+      if (!fila) {
+        const n = parseInt(total.value, 10);
+        lista.insertAdjacentHTML('beforeend', document.getElementById('plantilla-' + prefijo).innerHTML.replace(/__prefix__/g, n));
+        total.value = n + 1;
+        fila = lista.lastElementChild;
+      }
+      const poner = function (campo, valor) { const x = fila.querySelector('[name$="-' + campo + '"]'); if (x) x.value = valor || ''; };
+      poner('equipo', d.tipo); poner('marca', d.marca); poner('referencia', d.modelo); poner('serial', d.serial);
+      poner('cantidad', '1'); poner('propiedad', d.propiedad); poner('placa', d.placa); poner('equipo_instalado', d.id);
+      if (d.ubicacion) poner('observaciones', 'Ubicación: ' + d.ubicacion + '. ');
+      const marca = fila.querySelector('.marca-hoja-vida'); if (marca) marca.hidden = false;
+      c.checked = false; c.disabled = true; traidos++;
+    });
+    contar();
+    const aviso = document.getElementById('traidos-sede');
+    if (aviso) aviso.textContent = traidos ? traidos + ' equipo(s) agregado(s) abajo: complete qué se hizo y las observaciones.' : 'Marque los equipos que intervino.';
   });
 
   // --- Contador en el encabezado de cada lista plegable -----------------------

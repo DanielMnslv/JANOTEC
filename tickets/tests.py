@@ -1306,10 +1306,15 @@ class ClientesYSedesTests(BaseTickets):
         self.assertTrue(Ticket.objects.filter(empresa=self.emp_a).exists())
 
     def test_solo_el_area_tecnica(self):
-        for usuario in (self.agente, self.cli_a):
-            self.client.force_login(usuario)
-            self.assertEqual(self.client.get(reverse("clientes")).status_code, 403)
-            self.assertEqual(self.client.post(reverse("cliente_eliminar", args=[self.emp_a.pk])).status_code, 403)
+        # El técnico consulta (sedes, equipos y mantenimiento) pero no edita; el cliente no entra
+        self.client.force_login(self.agente)
+        self.assertEqual(self.client.get(reverse("clientes")).status_code, 200)
+        self.assertNotContains(self.client.get(reverse("cliente_detalle", args=[self.emp_a.pk])), "Agregar sede")
+        self.assertEqual(self.client.post(reverse("cliente_eliminar", args=[self.emp_a.pk])).status_code, 403)
+        self.assertEqual(self.client.post(reverse("cliente_detalle", args=[self.emp_a.pk]), {"nombre": "X"}).status_code, 403)
+        self.client.force_login(self.cli_a)
+        self.assertEqual(self.client.get(reverse("clientes")).status_code, 403)
+        self.assertEqual(self.client.post(reverse("cliente_eliminar", args=[self.emp_a.pk])).status_code, 403)
 
 
 class ActaDelTecnicoAsignadoTests(BaseTickets):

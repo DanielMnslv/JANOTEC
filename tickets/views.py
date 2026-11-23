@@ -481,7 +481,7 @@ def panel(request):
     alertas.revisar_si_toca()
     if request.user.es_supervisor:
         from cronograma import mantenimiento
-        mantenimiento.revisar_si_toca()  # los planes de mantenimiento crean sus tickets
+        mantenimiento.revisar_si_toca()  # avisa a coordinación los mantenimientos que llegan a los 15 días
     todos = tickets_visibles(request.user).filter(area=Ticket.Area.TECNICA)  # la bandeja técnica
     datos = request.GET.copy()
     if not request.GET:
@@ -1129,16 +1129,24 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
                 filas += [(f, EquipoActa.Clase.RETIRADO) for f in retirados]
             if requeridos.is_bound:
                 filas += [(f, EquipoActa.Clase.REQUERIDO) for f in requeridos]
+            # Solo se enlaza a la hoja de vida un equipo cargado en esta misma sede
+            de_la_sede = set(sede.equipos_instalados.values_list("pk", flat=True)) if sede else set()
             for f, clase in filas:
                 if not f.has_changed() or not f.cleaned_data.get("equipo"):
                     continue
                 e = f.cleaned_data
+                instalado = e.get("equipo_instalado") if e.get("equipo_instalado") in de_la_sede else None
                 equipo = EquipoActa.objects.create(acta=acta, clase=clase, equipo=e["equipo"], marca=e["marca"],
+                                                   equipo_instalado_id=instalado,
                                                    referencia=e.get("referencia") or "", serial=e.get("serial") or "", cantidad=e["cantidad"], observaciones=e["observaciones"],
                                                    propiedad=e.get("propiedad") or "", placa=(e.get("placa") or "").strip().upper(),
                                                    trabajo=e.get("accion") if e.get("accion") in EquipoActa.Trabajo.values else "")
                 for foto in e["fotos"]:
                     FotoEquipo.objects.create(equipo=equipo, archivo=foto, nombre_original=foto.name[:255])
+                if instalado and clase == EquipoActa.Clase.RETIRADO:  # se desmontó: sale de la sede, queda su hoja de vida
+                    from cronograma.models import EquipoInstalado
+                    EquipoInstalado.objects.filter(pk=instalado).update(estado=EquipoInstalado.Estado.RETIRADO,
+                                                                        actualizado=timezone.now())
             for etapa in EvidenciaActa.Etapa.values:
                 for archivo in d.get(f"evidencias_{etapa}") or []:
                     EvidenciaActa.objects.create(acta=acta, etapa=etapa, archivo=archivo, nombre_original=archivo.name[:255],
@@ -1216,7 +1224,9 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
     ]
     from . import historial_cliente, redaccion
 
+    equipos_sede, sistema_plan = _equipos_de_la_sede(sede, ticket)
     return render(request, "tickets/acta_form.html", {
+        "equipos_sede": equipos_sede, "sistema_plan": sistema_plan,
         "redaccion": redaccion.configuracion(reverse("mejorar_redaccion"), reverse("revisar_ortografia")),
         "ticket": ticket, "empresa": empresa, "sede": sede, "grupos_equipos": grupos_equipos,
         "form": form, "equipos": equipos, "utilizados": utilizados, "retirados": retirados, "requeridos": requeridos,
@@ -1225,6 +1235,22 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
         "elegidos": {int(pk) for pk in elegidos if str(pk).isdigit()}, "material_errores": material_errores,
         "propuesta_material": propuesta, "historial": historial_cliente.resumen(empresa, sede, excluir_ticket=ticket),
     })
+
+
+def _equipos_de_la_sede(sede, ticket=None):
+    """Los equipos cargados en la sede (en servicio) para traerlos a «Equipos intervenidos» del acta, y el sistema del
+    plan si el ticket es de un mantenimiento programado (esos vienen marcados)."""
+    if not sede:
+        return [], ""
+    from cronograma.models import EjecucionMantenimiento, EquipoInstalado
+
+    equipos = list(sede.equipos_instalados.exclude(estado=EquipoInstalado.Estado.RETIRADO)
+                   .order_by("sistema", "ubicacion", "tipo"))
+    sistema = ""
+    if ticket is not None:
+        sistema = (EjecucionMantenimiento.objects.filter(ticket=ticket).values_list("plan__sistema", flat=True).first()
+                   or "")
+    return equipos, sistema
 
 
 @login_required

@@ -1,0 +1,22 @@
+{# Equipos cargados en la sede (hoja de vida): el técnico marca los que intervino y se agregan como filas del acta. #}
+<div class="border rounded p-2 mb-3 bg-body-tertiary">
+  <div class="small fw-semibold mb-1"><i class="bi bi-hdd-network"></i> Equipos cargados en la sede ({{ equipos_sede|length }}){% if sistema_plan %} <span class="fw-normal text-muted-jn">· vienen marcados los del mantenimiento</span>{% endif %}</div>
+  <div class="d-flex flex-wrap gap-2 mb-2 small">
+    <button type="button" class="btn btn-link btn-sm p-0" onclick="this.closest('.border').querySelectorAll('.equipo-sede:not(:disabled)').forEach(c => c.checked = true)">Marcar todos</button>
+    <button type="button" class="btn btn-link btn-sm p-0" onclick="this.closest('.border').querySelectorAll('.equipo-sede').forEach(c => c.checked = false)">Ninguno</button>
+  </div>
+  <div style="max-height:260px;overflow:auto">
+  {% regroup equipos_sede by get_sistema_display as por_sistema %}
+  {% for g in por_sistema %}
+    <div class="small text-uppercase text-muted-jn mt-1">{{ g.grouper }}</div>
+    {% for e in g.list %}<div class="form-check small">
+      <input class="form-check-input equipo-sede" type="checkbox" id="equipo-sede-{{ e.pk }}"{% if sistema_plan and e.sistema == sistema_plan %} checked{% endif %}
+             data-id="{{ e.pk }}" data-tipo="{{ e.tipo }}" data-marca="{{ e.marca }}" data-modelo="{{ e.modelo }}" data-serial="{{ e.serial }}"
+             data-placa="{{ e.placa }}" data-ubicacion="{{ e.ubicacion }}" data-propiedad="{% if e.de_janotec %}janotec{% else %}cliente{% endif %}">
+      <label class="form-check-label" for="equipo-sede-{{ e.pk }}">{{ e.tipo }}{% if e.marca or e.modelo %} · {{ e.marca }} {{ e.modelo }}{% endif %}{% if e.serial %} · <span class="radicado">{{ e.serial }}</span>{% endif %} <span class="text-muted-jn">· {{ e.ubicacion }}</span>{% if e.estado != "operativo" %} <span class="badge text-bg-warning">{{ e.get_estado_display }}</span>{% endif %}</label>
+    </div>{% endfor %}
+  {% endfor %}
+  </div>
+  <button type="button" class="btn btn-sm btn-primary mt-2" id="traer-equipos-sede"><i class="bi bi-box-arrow-in-down"></i> Agregar los marcados al acta</button>
+  <span class="small text-muted-jn ms-2" id="traidos-sede"></span>
+</div>

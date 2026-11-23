@@ -125,6 +125,9 @@ def coordinacion(usuario):
              for t in tecnicos.filter(estado__in=Ticket.ESTADOS_PROGRAMABLES).select_related("asignado_a").order_by("actualizado")]
     grupos.append(_grupo("programar", "Por programar", "bi-calendar-plus", items,
                          "Recepcionados o pendientes de nueva visita: póngalos en el cronograma."))
+    grupos.append(_grupo("mantenimientos", "Mantenimientos por programar", "bi-arrow-repeat", _mantenimientos_por_programar(),
+                         "Vencen en los próximos 15 días o ya vencieron: créelos con «Programar mantenimiento» en la sede.",
+                         reverse("clientes") + "?mantenimiento=por_programar"))
     grupos.append(_grupo("sin_acta", "Visitas pasadas sin acta", "bi-clipboard-x", _visitas_sin_acta(usuario),
                          "La fecha de la visita ya pasó y nadie diligenció el acta. Si no se hizo, aplácela o reprográmela."))
     grupos.append(_grupo("informes", "Informes técnicos", "bi-file-earmark-text", _informes_coordinacion(usuario),
@@ -157,6 +160,18 @@ def coordinacion(usuario):
                          "Registradas tarde, sin ubicación, lejos del sitio o por otra persona: apruébelas o recházelas.",
                          ver_todo=reverse("cronograma:horas_extras")))
     return grupos
+
+
+def _mantenimientos_por_programar():
+    """Los planes de mantenimiento que ya llegaron al aviso y todavía no tienen ticket (ver cronograma/mantenimiento.py)."""
+    from cronograma import mantenimiento
+
+    hoy = timezone.localdate()
+    return [_item(f"{p.sede.empresa} · {p.sede.nombre}",
+                  f"{p.get_sistema_display()} ({p.get_frecuencia_display().lower()}) · "
+                  f"{'venció' if p.proxima < hoy else 'toca'} el {p.proxima:%d/%m/%Y}.",
+                  reverse("sede_detalle", args=[p.sede_id]) + "#mantenimiento", "Programar", p.proxima < hoy)
+            for p in mantenimiento.por_programar(hoy)]
 
 
 def _horas_por_validar():

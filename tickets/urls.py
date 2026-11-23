@@ -64,11 +64,19 @@ urlpatterns = [
     path("soporte/reportes/descargables/", login_required(reportes.vista), name="reportes_descargables"),
     path("soporte/reportes/", views.reportes, name="reportes"),  # antiguo: lleva al Centro de indicadores
     path("soporte/reportes/trimestre/", login_required(trimestre.vista), name="reportes_trimestre"),
-    # Clientes y sedes (los administra el área técnica)
+    # Clientes y sedes: el módulo principal (sedes, mantenimiento por sistema, equipos instalados y su hoja de vida)
     path("soporte/clientes/", clientes.clientes, name="clientes"),
     path("soporte/clientes/nuevo/", clientes.cliente_form, name="cliente_nuevo_admin"),
     path("soporte/clientes/<int:pk>/", clientes.cliente_detalle, name="cliente_detalle"),
     path("soporte/clientes/<int:pk>/editar/", clientes.cliente_form, name="cliente_editar_admin"),
     path("soporte/clientes/<int:pk>/eliminar/", clientes.cliente_eliminar, name="cliente_eliminar"),
     path("soporte/sedes/<int:pk>/eliminar/", clientes.sede_eliminar, name="sede_eliminar"),
+    path("soporte/clientes/<int:empresa_pk>/encargado/nuevo/", clientes.encargado_form, name="encargado_nuevo"),
+    path("soporte/clientes/<int:empresa_pk>/encargado/<int:pk>/", clientes.encargado_form, name="encargado_editar"),
+    path("soporte/sedes/<int:pk>/", clientes.sede_detalle, name="sede_detalle"),
+    path("soporte/sedes/<int:sede_pk>/mantenimiento/nuevo/", clientes.plan_form, name="sede_plan_nuevo"),
+    path("soporte/sedes/<int:sede_pk>/mantenimiento/<int:pk>/", clientes.plan_form, name="sede_plan_editar"),
+    path("soporte/sedes/<int:sede_pk>/equipos/nuevo/", clientes.equipo_form, name="equipo_nuevo"),
+    path("soporte/equipos/<int:pk>/", clientes.equipo_detalle, name="equipo_detalle"),
+    path("soporte/equipos/<int:pk>/editar/", clientes.equipo_form, name="equipo_editar"),
 ]

@@ -1,18 +1,19 @@
-"""Crea los tickets de los planes de mantenimiento que ya tocan (ver ``cronograma/mantenimiento.py``).
+"""Avisa a coordinación los mantenimientos que llegan a los 15 días (ver ``cronograma/mantenimiento.py``).
 
+Desde el 23/11/2026 no crea tickets: coordinación los programa desde la ficha de la sede en «Clientes y sedes».
 Programarlo una vez al día en el servidor:
     Linux (crontab -e):   30 6 * * *  cd /ruta/janotec_tickets && python3 manage.py generar_mantenimientos
 """
 from django.core.management.base import BaseCommand
 
-from cronograma.mantenimiento import dias_antes, generar
+from cronograma.mantenimiento import avisar, dias_antes
 
 
 class Command(BaseCommand):
-    help = "Crea los tickets de mantenimiento preventivo de los planes por sede que vencen en los próximos días."
+    help = "Avisa a coordinación los mantenimientos preventivos que vencen en los próximos días (no crea tickets)."
 
     def handle(self, *args, **opts):
-        creados = generar()
-        for t in creados:
-            self.stdout.write(f"  creado {t.radicado} · {t.empresa} · {t.sede}")
-        self.stdout.write(self.style.SUCCESS(f"{len(creados)} mantenimiento(s) generados ({dias_antes()} días antes)."))
+        avisados = avisar()
+        for p in avisados:
+            self.stdout.write(f"  aviso {p.proxima:%d/%m/%Y} · {p.sede.empresa} · {p.sede} · {p.get_sistema_display()}")
+        self.stdout.write(self.style.SUCCESS(f"{len(avisados)} mantenimiento(s) avisados ({dias_antes()} días antes)."))

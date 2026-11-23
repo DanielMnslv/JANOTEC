@@ -1,35 +1,55 @@
 {% extends "base.html" %}
 {% block titulo %}Clientes y sedes{% endblock %}
 {% block contenido %}
+{# Módulo principal de clientes: sedes, equipos instalados y estado del mantenimiento; arriba, lo que hay que programar. #}
 <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
   <div>
     <h1 class="h3 page-title mb-1">Clientes y sedes</h1>
-    <p class="small text-muted-jn mb-0">Es el listado que se sugiere al radicar y programar tickets. Lo inactivo deja de sugerirse pero conserva su historial.</p>
+    <p class="small text-muted-jn mb-0">Cada cliente con sus sedes, los equipos instalados y el mantenimiento. Es también el listado que se sugiere al radicar y programar tickets.</p>
   </div>
-  <a class="btn btn-accent" href="{% url 'cliente_nuevo_admin' %}"><i class="bi bi-plus-lg"></i> Nuevo cliente</a>
+  {% if puede_editar %}<a class="btn btn-accent" href="{% url 'cliente_nuevo_admin' %}"><i class="bi bi-plus-lg"></i> Nuevo cliente</a>{% endif %}
 </div>
+
+{% if por_programar %}
+<div class="card border-warning mb-3">
+  <div class="card-header small fw-semibold"><i class="bi bi-bell"></i> Mantenimientos por programar ({{ por_programar|length }}) <span class="fw-normal text-muted-jn">· vencen en los próximos {{ dias_antes }} días o ya vencieron</span></div>
+  <ul class="list-group list-group-flush small">
+    {% for p in por_programar %}<li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <span>{% include "tickets/_estado_mant.html" with estado=p.estado %} <b>{{ p.proxima|date:"d/m/Y" }}</b> · {{ p.sede.empresa }} · {{ p.sede.nombre }} · {{ p.get_sistema_display }} <span class="text-muted-jn">({{ p.get_frecuencia_display|lower }})</span></span>
+      <a class="btn btn-sm btn-outline-primary py-0" href="{% url 'sede_detalle' p.sede_id %}#mantenimiento">Ver y programar</a></li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
 <div class="d-flex flex-wrap gap-2 mb-3">
   <div class="btn-group">
-    <a class="btn btn-sm {% if estado == 'activos' %}btn-primary{% else %}btn-light border{% endif %}" href="?estado=activos&q={{ q|urlencode }}">Activos</a>
-    <a class="btn btn-sm {% if estado == 'inactivos' %}btn-primary{% else %}btn-light border{% endif %}" href="?estado=inactivos&q={{ q|urlencode }}">Inactivos</a>
-    <a class="btn btn-sm {% if estado == 'todos' %}btn-primary{% else %}btn-light border{% endif %}" href="?estado=todos&q={{ q|urlencode }}">Todos</a>
+    <a class="btn btn-sm {% if estado == 'activos' %}btn-primary{% else %}btn-light border{% endif %}" href="?estado=activos&mantenimiento={{ mant }}&q={{ q|urlencode }}">Activos</a>
+    <a class="btn btn-sm {% if estado == 'inactivos' %}btn-primary{% else %}btn-light border{% endif %}" href="?estado=inactivos&mantenimiento={{ mant }}&q={{ q|urlencode }}">Inactivos</a>
+    <a class="btn btn-sm {% if estado == 'todos' %}btn-primary{% else %}btn-light border{% endif %}" href="?estado=todos&mantenimiento={{ mant }}&q={{ q|urlencode }}">Todos</a>
   </div>
-  <form class="d-flex gap-2 flex-grow-1" method="get"><input type="hidden" name="estado" value="{{ estado }}"><input class="form-control form-control-sm" name="q" value="{{ q }}" placeholder="Cliente, NIT, ciudad o sede…" aria-label="Buscar"><button class="btn btn-sm btn-primary"><i class="bi bi-search"></i></button></form>
+  <div class="btn-group">
+    <a class="btn btn-sm {% if not mant %}btn-primary{% else %}btn-light border{% endif %}" href="?estado={{ estado }}&q={{ q|urlencode }}">Todo mantenimiento</a>
+    <a class="btn btn-sm {% if mant == 'por_programar' %}btn-primary{% else %}btn-light border{% endif %}" href="?estado={{ estado }}&mantenimiento=por_programar&q={{ q|urlencode }}">Por programar</a>
+    <a class="btn btn-sm {% if mant == 'con' %}btn-primary{% else %}btn-light border{% endif %}" href="?estado={{ estado }}&mantenimiento=con&q={{ q|urlencode }}">Con mantenimiento</a>
+    <a class="btn btn-sm {% if mant == 'sin' %}btn-primary{% else %}btn-light border{% endif %}" href="?estado={{ estado }}&mantenimiento=sin&q={{ q|urlencode }}">Sin mantenimiento</a>
+  </div>
+  <form class="d-flex gap-2 flex-grow-1" method="get"><input type="hidden" name="estado" value="{{ estado }}"><input type="hidden" name="mantenimiento" value="{{ mant }}"><input class="form-control form-control-sm" name="q" value="{{ q }}" placeholder="Cliente, NIT, ciudad o sede…" aria-label="Buscar"><button class="btn btn-sm btn-primary" aria-label="Buscar"><i class="bi bi-search"></i></button></form>
 </div>
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover mb-0 align-middle small">
-      <thead><tr><th>Cliente</th><th>NIT</th><th>Contacto</th><th class="text-end">Sedes activas</th><th class="text-end">Tickets</th></tr></thead>
+      <thead><tr><th>Cliente</th><th>NIT</th><th class="text-end">Sedes activas</th><th class="text-end">Equipos</th><th>Mantenimiento</th><th class="text-end">Tickets</th></tr></thead>
       <tbody>
       {% for e in lista %}
         <tr>
-          <td><a href="{% url 'cliente_detalle' e.pk %}">{{ e.razon_social }}</a>{% if not e.activa %} <span class="badge text-bg-secondary">Inactivo</span>{% endif %}{% if e.ciudad %}<div class="text-muted-jn">{{ e.ciudad }}</div>{% endif %}</td>
+          <td><a href="{% url 'cliente_detalle' e.pk %}" class="fw-semibold">{{ e.razon_social }}</a>{% if not e.activa %} <span class="badge text-bg-secondary">Inactivo</span>{% endif %}{% if e.ciudad %}<div class="text-muted-jn">{{ e.ciudad }}</div>{% endif %}</td>
           <td class="radicado">{{ e.nit|default:"—" }}</td>
-          <td>{{ e.email_contacto|default:"" }}{% if e.email_contacto and e.telefono %}<br>{% endif %}{{ e.telefono|default:"" }}{% if not e.email_contacto and not e.telefono %}—{% endif %}</td>
           <td class="text-end">{{ e.n_sedes }}</td>
+          <td class="text-end">{{ e.n_equipos|default:"—" }}</td>
+          <td>{% include "tickets/_estado_mant.html" with estado=e.estado_mant %}{% if e.proxima %}<div class="text-muted-jn">Próximo {{ e.proxima|date:"d/m/Y" }}</div>{% endif %}</td>
           <td class="text-end">{{ e.n_tickets }}</td>
         </tr>
-      {% empty %}<tr><td colspan="5" class="text-center py-4 text-muted-jn">No hay clientes con ese criterio.</td></tr>{% endfor %}
+      {% empty %}<tr><td colspan="6" class="text-center py-4 text-muted-jn">No hay clientes con ese criterio.</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>

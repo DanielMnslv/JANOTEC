@@ -1,17 +1,18 @@
-"""Plan de mantenimiento preventivo por sede (pedido por la coordinación TIC, 12/11/2026).
+"""Plan de mantenimiento preventivo por sede y sistema (12/11/2026; desde el 23/11/2026 se maneja en «Clientes y sedes»).
 
-* Cada plan es un sistema de una sede (CCTV, alarma, control de acceso…) con su frecuencia y la fecha del próximo.
-* Unos días antes de esa fecha (``settings.MANTENIMIENTO_DIAS_ANTES``, 15 por defecto) la plataforma **crea sola** el
-  ticket de mantenimiento: llega a «Recepción» del área técnica para asignarlo y programarlo en el cronograma.
-  Al cliente no le llega correo por esto; se le avisa como siempre cuando se programa la visita.
-* La siguiente fecha se corre según la frecuencia. Mientras el ticket anterior siga abierto no se crea otro: el plan
-  se marca atrasado.
+* Cada plan es un sistema de una sede (CCTV, alarma, control de acceso…) con su frecuencia (mensual, trimestral,
+  semestral o anual), el último mantenimiento realizado y la fecha del próximo.
+* Unos días antes (``settings.MANTENIMIENTO_DIAS_ANTES``, 15 por defecto) la plataforma **avisa** a coordinación por
+  correo y en «Mi día»; ya no crea el ticket sola. Coordinación lo crea con «Programar mantenimiento» en la ficha de la
+  sede: el ticket lleva la lista de los equipos instalados de ese sistema y el técnico hace el acta sobre él.
+* Al programarlo, la siguiente fecha se corre según la frecuencia. Mientras el ticket siga abierto no se crea otro.
+* El último mantenimiento sale de la fecha del acta del ticket (o del que se anotó a mano antes de la plataforma).
 * El contrato es opcional (número, vigencia y valor por visita); con el contrato vencido el ticket lo advierte.
 
-Se ejecuta de dos formas, como el cierre automático:
+El aviso se revisa de dos formas, como el cierre automático:
 
 - ``python manage.py generar_mantenimientos``, programado una vez al día en el servidor;
-- ``revisar_si_toca()``, que llaman la Recepción y la lista de planes como red de seguridad.
+- ``revisar_si_toca()``, que llaman la Recepción y «Clientes y sedes» como red de seguridad.
 """
 import calendar
 from datetime import timedelta
@@ -25,6 +26,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
 from .models import EjecucionMantenimiento, PlanMantenimiento
@@ -70,12 +72,34 @@ def _solicitante(plan):
     return coordinadores.first() or Usuario.objects.filter(is_active=True, is_superuser=True).order_by("pk").first()
 
 
+def equipos_del_plan(plan):
+    """Los equipos instalados (en servicio) del sistema del plan en esa sede."""
+    from .models import EquipoInstalado
+
+    return (EquipoInstalado.objects.filter(sede=plan.sede, sistema=plan.sistema)
+            .exclude(estado=EquipoInstalado.Estado.RETIRADO).order_by("ubicacion", "tipo"))
+
+
+def ultimo(plan):
+    """Fecha del último mantenimiento: el acta más reciente de sus tickets o la que se anotó a mano (None si no hay)."""
+    from tickets.models import ActaSoporte
+
+    tickets = plan.ejecuciones.exclude(ticket=None).values("ticket")
+    acta = ActaSoporte.objects.filter(ticket__in=tickets).order_by("-fecha").values_list("fecha", flat=True).first()
+    fechas = [f for f in (plan.ultimo_realizado, acta and timezone.localtime(acta).date()) if f]
+    return max(fechas, default=None)
+
+
 def descripcion(plan, fecha):
-    """El texto del ticket: qué se mantiene, cada cuánto, la fecha y el contrato."""
+    """El texto del ticket: qué se mantiene, cada cuánto, la fecha, el contrato y los equipos a revisar."""
     lineas = [f"Mantenimiento preventivo {plan.get_frecuencia_display().lower()} de {plan.get_sistema_display()} "
               f"previsto para el {fecha:%d/%m/%Y}."]
     if plan.detalle:
         lineas.append(f"Incluye: {plan.detalle}")
+    equipos = list(equipos_del_plan(plan))
+    if equipos:
+        lineas.append(f"Equipos instalados a revisar ({len(equipos)}):")
+        lineas += [f"- {e}" + (f" (serial {e.serial})" if e.serial else "") for e in equipos]
     if plan.con_contrato:
         texto = f"Cubierto por contrato{f' {plan.contrato}' if plan.contrato else ''}"
         if plan.contrato_vence:
@@ -88,7 +112,7 @@ def descripcion(plan, fecha):
                                                              if plan.valor else "") + ".")
     if plan.observaciones:
         lineas.append(plan.observaciones)
-    lineas.append("Generado automáticamente por el plan de mantenimiento de la sede.")
+    lineas.append("Programado desde el plan de mantenimiento de la sede.")
     return "\n".join(lineas)
 
 
@@ -114,29 +138,68 @@ def crear_ticket(plan, fecha, autor=None):
     return t
 
 
-def generar(hoy=None):
-    """Crea los tickets de los planes cuya fecha está a ``dias_antes()`` o menos y corre su próxima fecha.
-    No crea otro si el ticket anterior del plan sigue abierto. Devuelve la lista de tickets creados."""
+def programar(plan, autor=None):
+    """Crea el ticket del próximo mantenimiento del plan y corre la fecha siguiente según la frecuencia.
+    Devuelve el ticket, o None si ya hay uno abierto."""
+    if plan.en_curso:
+        return None
+    fecha = plan.proxima
+    ticket = crear_ticket(plan, fecha, autor=autor)
+    while plan.proxima <= max(fecha, timezone.localdate()):
+        plan.proxima = sumar_meses(plan.proxima, plan.frecuencia)
+    plan.save(update_fields=["proxima", "actualizado"])
+    return ticket
+
+
+def por_programar(hoy=None):
+    """Los planes activos que vencen dentro del aviso (o ya vencieron) y aún no tienen ticket abierto."""
     hoy = hoy or timezone.localdate()
-    limite = hoy + timedelta(days=dias_antes())
-    creados = []
-    planes = (PlanMantenimiento.objects.filter(activo=True, proxima__lte=limite, sede__activa=True, sede__empresa__activa=True)
-              .select_related("sede__empresa", "creado_por"))
-    for plan in planes:
-        if plan.en_curso:
-            continue
-        fecha = plan.proxima
-        creados.append(crear_ticket(plan, fecha))
-        while plan.proxima <= max(fecha, hoy):
-            plan.proxima = sumar_meses(plan.proxima, plan.frecuencia)
-        plan.save(update_fields=["proxima", "actualizado"])
-    return creados
+    planes = (PlanMantenimiento.objects.filter(activo=True, proxima__lte=hoy + timedelta(days=dias_antes()),
+                                               sede__activa=True, sede__empresa__activa=True)
+              .select_related("sede__empresa").order_by("proxima"))
+    return [p for p in planes if not p.en_curso]
+
+
+def avisar(hoy=None):
+    """Avisa a coordinación, en un solo correo, los mantenimientos que llegan a los ``dias_antes()`` días y aún no se
+    avisaron para esa fecha. No crea tickets: coordinación los programa desde la ficha de la sede. Devuelve los planes."""
+    from accounts.prueba import es_nombre_prueba
+    from tickets import notificaciones
+
+    nuevos = [p for p in por_programar(hoy) if p.aviso_para != p.proxima]
+    if not nuevos:
+        return []
+    reales = [p for p in nuevos if not es_nombre_prueba(p.sede.empresa.razon_social)]
+    if reales:
+        sitio = getattr(settings, "SITIO_URL", "").rstrip("/")
+        lineas = [f"Estos mantenimientos preventivos vencen en los próximos {dias_antes()} días (o ya vencieron) y "
+                  "todavía no tienen ticket:", ""]
+        for p in reales:
+            lineas.append(f"- {p.proxima:%d/%m/%Y} · {p.sede.empresa} · {p.sede.nombre} · {p.get_sistema_display()} "
+                          f"({p.get_frecuencia_display().lower()})")
+            lineas.append(f"  Programar: {sitio}/soporte/sedes/{p.sede_id}/")
+        lineas += ["", "Al tocar «Programar mantenimiento» en la ficha de la sede se crea el ticket con sus equipos."]
+        notificaciones._enviar(f"Mantenimientos por programar ({len(reales)})", "\n".join(lineas), correos_coordinacion())
+    for p in nuevos:
+        p.aviso_para = p.proxima
+        p.save(update_fields=["aviso_para"])
+    return nuevos
+
+
+def correos_coordinacion():
+    """Los correos de la coordinación técnica (sin usuarios de prueba); si no hay, el buzón de soporte."""
+    from accounts.models import Usuario
+    from accounts.prueba import q_de_prueba
+
+    correos = list(Usuario.objects.filter(is_active=True, rol=Usuario.Rol.SUPERVISOR).exclude(q_de_prueba())
+                   .exclude(email="").values_list("email", flat=True))
+    return correos or [getattr(settings, "NOTIFICAR_SOPORTE_EMAIL", "")]
 
 
 def revisar_si_toca():
-    """Genera los mantenimientos si no se ha hecho en los últimos 10 minutos (red de seguridad del comando diario)."""
+    """Revisa los avisos si no se ha hecho en los últimos 10 minutos (red de seguridad del comando diario)."""
     if cache.add("cronograma:mantenimientos", True, INTERVALO_SEGUNDOS):
-        generar()
+        avisar()
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -157,12 +220,13 @@ class PlanForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         from accounts.models import Sede
 
-        sedes = Sede.objects.filter(activa=True, empresa__activa=True).select_related("empresa").order_by(
-            "empresa__razon_social", "nombre")
-        if self.instance.pk:
-            sedes = sedes | Sede.objects.filter(pk=self.instance.sede_id)
-        self.fields["sede"].queryset = sedes
-        self.fields["sede"].label_from_instance = lambda s: f"{s.empresa} · {s.nombre}"
+        if "sede" in self.fields:  # en la ficha de la sede ya va dada
+            sedes = Sede.objects.filter(activa=True, empresa__activa=True).select_related("empresa").order_by(
+                "empresa__razon_social", "nombre")
+            if self.instance.pk:
+                sedes = sedes | Sede.objects.filter(pk=self.instance.sede_id)
+            self.fields["sede"].queryset = sedes
+            self.fields["sede"].label_from_instance = lambda s: f"{s.empresa} · {s.nombre}"
         for nombre, campo in self.fields.items():
             if isinstance(campo.widget, forms.CheckboxInput):
                 campo.widget.attrs["class"] = "form-check-input"
@@ -179,7 +243,8 @@ class PlanForm(forms.ModelForm):
 
 
 # ---------------------------------------------------------------------------------------------------------------------
-# Vistas (coordinación técnica y dirección)
+# Vistas antiguas: desde el 23/11/2026 todo se maneja en «Clientes y sedes» (tickets/clientes.py); se conservan las
+# direcciones para que los enlaces y correos viejos sigan llegando al lugar correcto.
 # ---------------------------------------------------------------------------------------------------------------------
 def _exigir_supervisor(request):
     if not request.user.es_supervisor:
@@ -188,77 +253,26 @@ def _exigir_supervisor(request):
 
 @login_required
 def lista(request):
-    """Los planes: atrasados, con ticket en curso y próximos, con filtro por cliente y sistema."""
+    """Lleva a «Clientes y sedes» filtrado por los clientes con mantenimiento."""
     _exigir_supervisor(request)
-    revisar_si_toca()
-    hoy = timezone.localdate()
-    planes = PlanMantenimiento.objects.select_related("sede__empresa").prefetch_related("ejecuciones__ticket")
-    q = (request.GET.get("q") or "").strip()
-    if q:
-        planes = planes.filter(Q(sede__empresa__razon_social__icontains=q) | Q(sede__nombre__icontains=q)
-                               | Q(detalle__icontains=q))
-    sistema = request.GET.get("sistema") or ""
-    if sistema:
-        planes = planes.filter(sistema=sistema)
-    if request.GET.get("inactivos") != "1":
-        planes = planes.filter(activo=True)
-
-    filas = []
-    for p in planes:
-        ejecuciones = sorted(p.ejecuciones.all(), key=lambda e: e.fecha_prevista, reverse=True)
-        en_curso = next((e for e in ejecuciones if e.ticket and e.ticket.estado not in ("cerrado", "cancelado")), None)
-        ultima = next((e for e in ejecuciones if e.ticket and e.ticket.estado == "cerrado"), None)
-        atrasado = bool(en_curso and en_curso.fecha_prevista < hoy) or (p.activo and not en_curso and p.proxima < hoy)
-        filas.append({"plan": p, "en_curso": en_curso, "ultima": ultima, "atrasado": atrasado})
-    resumen = {
-        "planes": len(filas), "sedes": len({f["plan"].sede_id for f in filas}),
-        "en_curso": sum(1 for f in filas if f["en_curso"]), "atrasados": sum(1 for f in filas if f["atrasado"]),
-        "mes": sum(1 for f in filas if f["plan"].activo and f["plan"].proxima <= sumar_meses(hoy, 1)),
-    }
-    return render(request, "cronograma/mantenimiento_lista.html", {
-        "filas": filas, "resumen": resumen, "q": q, "sistema": sistema, "sistemas": PlanMantenimiento.Sistema.choices,
-        "inactivos": request.GET.get("inactivos") == "1", "dias_antes": dias_antes(),
-    })
+    return redirect(f"{reverse('clientes')}?mantenimiento=con")
 
 
 @login_required
 def editar(request, pk=None):
-    """Crear (con ?sede= para elegirla de una vez) o editar un plan."""
+    """Lleva al plan dentro de la ficha de la sede (o a «Clientes y sedes» si no se dio la sede)."""
     _exigir_supervisor(request)
-    plan = get_object_or_404(PlanMantenimiento, pk=pk) if pk else None
-    inicial = {"sede": request.GET.get("sede")} if not plan and request.GET.get("sede") else None
-    form = PlanForm(request.POST or None, instance=plan, initial=inicial)
-    if request.method == "POST" and form.is_valid():
-        nuevo = form.save(commit=False)
-        if not nuevo.pk:
-            nuevo.creado_por = request.user
-        nuevo.save()
-        messages.success(request, f"Plan de mantenimiento guardado: {nuevo}. Próximo: {nuevo.proxima:%d/%m/%Y}.")
-        return redirect("cronograma:mantenimiento_detalle", pk=nuevo.pk)
-    return render(request, "cronograma/mantenimiento_form.html", {"form": form, "plan": plan})
+    if pk:
+        plan = get_object_or_404(PlanMantenimiento, pk=pk)
+        return redirect("sede_plan_editar", sede_pk=plan.sede_id, pk=plan.pk)
+    if (request.GET.get("sede") or "").isdigit():
+        return redirect("sede_plan_nuevo", sede_pk=request.GET["sede"])
+    return redirect("clientes")
 
 
 @login_required
 def detalle(request, pk):
-    """El plan, sus mantenimientos generados y los equipos que la plataforma conoce en la sede.
-    POST «generar»: crea ya el ticket del próximo mantenimiento (sin esperar la fecha)."""
+    """Lleva a la ficha de la sede del plan."""
     _exigir_supervisor(request)
-    plan = get_object_or_404(PlanMantenimiento.objects.select_related("sede__empresa", "creado_por"), pk=pk)
-    if request.method == "POST" and request.POST.get("accion") == "generar":
-        if plan.en_curso:
-            messages.warning(request, f"Ya hay un mantenimiento en curso: {plan.en_curso.ticket.radicado}.")
-        else:
-            fecha = plan.proxima
-            t = crear_ticket(plan, fecha, autor=request.user)
-            plan.proxima = sumar_meses(max(fecha, timezone.localdate()), plan.frecuencia)
-            plan.save(update_fields=["proxima", "actualizado"])
-            messages.success(request, f"Se creó el ticket {t.radicado}. El siguiente mantenimiento quedó para el "
-                                      f"{plan.proxima:%d/%m/%Y}.")
-        return redirect("cronograma:mantenimiento_detalle", pk=plan.pk)
-    from tickets import historial_cliente
-
-    return render(request, "cronograma/mantenimiento_detalle.html", {
-        "plan": plan, "ejecuciones": plan.ejecuciones.select_related("ticket", "ticket__asignado_a"),
-        "en_curso": plan.en_curso, "historial": historial_cliente.resumen(plan.sede.empresa, plan.sede),
-        "otros": plan.sede.planes_mantenimiento.exclude(pk=plan.pk), "dias_antes": dias_antes(),
-    })
+    plan = get_object_or_404(PlanMantenimiento, pk=pk)
+    return redirect("sede_detalle", pk=plan.sede_id)

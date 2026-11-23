@@ -1,0 +1,7 @@
+{# Semáforo del mantenimiento: recibe «estado» (vencido, proximo, programado, al_dia, inactivo o sin). #}
+{% if estado == "vencido" %}<span class="badge text-bg-danger"><i class="bi bi-exclamation-octagon"></i> Vencido</span>
+{% elif estado == "proximo" %}<span class="badge text-bg-warning"><i class="bi bi-bell"></i> Próximo</span>
+{% elif estado == "programado" %}<span class="badge text-bg-info"><i class="bi bi-calendar-check"></i> Programado</span>
+{% elif estado == "al_dia" %}<span class="badge text-bg-success"><i class="bi bi-check2-circle"></i> Al día</span>
+{% elif estado == "inactivo" %}<span class="badge text-bg-secondary">Inactivo</span>
+{% else %}<span class="badge text-bg-light border text-muted-jn">Sin mantenimiento</span>{% endif %}

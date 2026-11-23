@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block contenido %}
+{# Formulario corto de un dato del cliente (el encargado). #}
+<a href="{% url 'cliente_detalle' empresa.pk %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ empresa.razon_social }}</a>
+<h1 class="h3 page-title my-2">{{ titulo }}</h1>
+<form method="post" class="card" style="max-width:760px">{% csrf_token %}
+  <div class="card-body"><div class="row g-3">
+    {% for campo in form %}<div class="{% if campo.name == 'nombre' or campo.name == 'notas' or campo.name == 'activo' %}col-12{% else %}col-md-6{% endif %}">{% include "tickets/_campo.html" %}</div>{% endfor %}
+  </div></div>
+  <div class="card-footer text-end"><button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button></div>
+</form>
+{% endblock %}

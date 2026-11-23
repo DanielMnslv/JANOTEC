@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block titulo %}Mantenimiento · {{ sede.nombre }}{% endblock %}
+{% block contenido %}
+{# Mantenimiento preventivo de un sistema de la sede: frecuencia, último realizado y próximo. #}
+<a href="{% url 'sede_detalle' sede.pk %}#mantenimiento" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ sede.empresa }} · {{ sede.nombre }}</a>
+<h1 class="h3 page-title my-2">{% if plan %}Mantenimiento de {{ plan.get_sistema_display }}{% else %}Agregar mantenimiento a la sede{% endif %}</h1>
+<p class="small text-muted-jn" style="max-width:760px">Uno por sistema. {{ dias_antes|default:"15" }} días antes del próximo la plataforma le avisa a coordinación; el ticket se crea con «Programar mantenimiento» en la ficha de la sede y lleva los equipos de ese sistema.</p>
+<form method="post" class="card" style="max-width:760px">{% csrf_token %}
+  <div class="card-body"><div class="row g-3">
+    {% for campo in form %}<div class="{% if campo.name == 'detalle' or campo.name == 'observaciones' or campo.name == 'activo' or campo.name == 'con_contrato' %}col-12{% else %}col-md-6{% endif %}">{% include "tickets/_campo.html" %}</div>{% endfor %}
+  </div></div>
+  <div class="card-footer d-flex justify-content-end gap-2"><a class="btn btn-light border" href="{% url 'sede_detalle' sede.pk %}">Cancelar</a><button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button></div>
+</form>
+{% endblock %}

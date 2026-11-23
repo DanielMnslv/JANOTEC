@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block titulo %}{% if equipo %}Editar equipo{% else %}Agregar equipo{% endif %} · {{ sede.nombre }}{% endblock %}
+{% block contenido %}
+{# Alta ordenada de un equipo instalado en la sede: sistema, equipo, marca y modelo, serial, ubicación, de quién es y foto. #}
+<a href="{% if equipo %}{% url 'equipo_detalle' equipo.pk %}{% else %}{% url 'sede_detalle' sede.pk %}#equipos{% endif %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {% if equipo %}{{ equipo }}{% else %}{{ sede.empresa }} · {{ sede.nombre }}{% endif %}</a>
+<h1 class="h3 page-title my-2">{% if equipo %}Editar equipo{% else %}Agregar equipo a {{ sede.nombre }}{% endif %}</h1>
+<form method="post" enctype="multipart/form-data" class="card" style="max-width:860px">{% csrf_token %}
+  <div class="card-body"><div class="row g-3">
+    {% for campo in form %}
+      {% if campo.name == "fecha_instalacion" %}<div class="col-12 small fw-semibold text-muted-jn text-uppercase pt-2 border-top">Instalación y estado</div>{% endif %}
+      {% if campo.name == "caracteristicas" %}<div class="col-12 small fw-semibold text-muted-jn text-uppercase pt-2 border-top">Características y foto</div>{% endif %}
+      <div class="{% if campo.name == 'caracteristicas' or campo.name == 'observaciones' or campo.name == 'ubicacion' %}col-12{% elif campo.name == 'foto' %}col-md-8{% else %}col-md-4{% endif %}">{% include "tickets/_campo.html" %}</div>
+    {% endfor %}
+  </div></div>
+  <div class="card-footer d-flex flex-wrap justify-content-end gap-2">
+    <a class="btn btn-light border" href="{% url 'sede_detalle' sede.pk %}#equipos">Cancelar</a>
+    {% if not equipo %}<button class="btn btn-outline-primary" name="otro" value="1"><i class="bi bi-plus"></i> Guardar y agregar otro</button>{% endif %}
+    <button class="btn btn-primary"><i class="bi bi-check2"></i> Guardar</button>
+  </div>
+</form>
+<datalist id="tipos-equipo">{% for t in sugerencias %}<option value="{{ t }}">{% endfor %}</datalist>
+<datalist id="marcas-equipo">{% for m in marcas %}<option value="{{ m }}">{% endfor %}</datalist>
+<script>
+  // Sugerencias con lo ya cargado, para que se escriba igual en todas las sedes
+  document.getElementById("id_tipo")?.setAttribute("list", "tipos-equipo");
+  document.getElementById("id_marca")?.setAttribute("list", "marcas-equipo");
+  // La placa solo aplica a los equipos de JANOTEC
+  (function () {
+    const prop = document.getElementById("id_propiedad"), placa = document.getElementById("id_placa");
+    if (!prop || !placa) return;
+    const caja = placa.closest(".col-md-4");
+    const ver = () => { caja.hidden = prop.value === "cliente" && !placa.value; };
+    prop.addEventListener("change", ver); ver();
+  })();
+</script>
+{% endblock %}

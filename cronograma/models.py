@@ -615,6 +615,12 @@ class PlanMantenimiento(models.Model):
                                help_text="Ej.: 16 cámaras y NVR; limpieza, ajuste de ángulos y revisión de grabación.")
     frecuencia = models.PositiveSmallIntegerField(choices=Frecuencia.choices, default=Frecuencia.SEMESTRAL)
     proxima = models.DateField("próximo mantenimiento")
+    ultimo_realizado = models.DateField(
+        "último mantenimiento realizado", null=True, blank=True,
+        help_text="El último que se hizo. Se actualiza solo con el acta del mantenimiento; aquí se anota el anterior "
+                  "a la plataforma.")
+    aviso_para = models.DateField("aviso enviado para la fecha", null=True, blank=True, editable=False,
+                                  help_text="Ya se avisó a coordinación del mantenimiento de esta fecha (no se repite).")
     activo = models.BooleanField(default=True, help_text="Desmarque si la sede ya no tiene el mantenimiento.")
     # Contrato (opcional)
     con_contrato = models.BooleanField("cubierto por contrato", default=False)
@@ -640,6 +646,22 @@ class PlanMantenimiento(models.Model):
     def contrato_vencido(self):
         """Tiene contrato y ya pasó su vigencia."""
         return bool(self.con_contrato and self.contrato_vence and self.contrato_vence < timezone.localdate())
+
+    @property
+    def estado(self):
+        """Semáforo del plan: «programado» (hay ticket abierto), «vencido», «proximo» (dentro del aviso) o «al_dia»."""
+        from django.conf import settings as conf
+
+        if not self.activo:
+            return "inactivo"
+        if self.en_curso:
+            return "programado"
+        hoy = timezone.localdate()
+        if self.proxima < hoy:
+            return "vencido"
+        if self.proxima <= hoy + timedelta(days=int(getattr(conf, "MANTENIMIENTO_DIAS_ANTES", 15))):
+            return "proximo"
+        return "al_dia"
 
     @property
     def ultima(self):
@@ -676,3 +698,71 @@ class EjecucionMantenimiento(models.Model):
         if not t or t.estado != "cerrado" or not t.fecha_cierre:
             return None
         return timezone.localtime(t.fecha_cierre).date() <= self.fecha_prevista + timedelta(days=30)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Equipos instalados en las sedes de los clientes (hoja de vida) — 23/11/2026
+# ---------------------------------------------------------------------------------------------------------------------
+def ruta_foto_equipo(instancia, nombre):
+    ext = os.path.splitext(nombre)[1].lower()[:10]
+    return f"equipos_instalados/{instancia.sede_id}/{uuid.uuid4().hex}{ext}"
+
+
+class EquipoInstalado(models.Model):
+    """Un equipo instalado en la sede de un cliente, ordenado por sistema (CCTV, alarma, acceso…).
+
+    Lo carga la coordinación técnica, campo por campo (no al azar). En el acta de soporte se elige de la lista de la
+    sede en «Equipos intervenidos», y cada acta queda en su hoja de vida (``EquipoActa.equipo_instalado``).
+    El mantenimiento va por sede y sistema (``PlanMantenimiento``): todos los equipos del sistema van en la misma visita.
+    """
+
+    class Propiedad(models.TextChoices):
+        CLIENTE = "cliente", "Del cliente"
+        ALQUILER = "alquiler", "Alquilado (de JANOTEC)"
+        COMODATO = "comodato", "En comodato (de JANOTEC)"
+
+    class Estado(models.TextChoices):
+        OPERATIVO = "operativo", "Operativo"
+        CON_FALLA = "con_falla", "Con falla"
+        FUERA = "fuera", "Fuera de servicio"
+        RETIRADO = "retirado", "Retirado"
+
+    sede = models.ForeignKey("accounts.Sede", on_delete=models.PROTECT, related_name="equipos_instalados")
+    sistema = models.CharField(max_length=15, choices=PlanMantenimiento.Sistema.choices)
+    tipo = models.CharField("equipo", max_length=100, help_text="Ej.: Cámara domo, NVR, Panel de alarma, Lectora.")
+    marca = models.CharField(max_length=80, blank=True)
+    modelo = models.CharField("modelo o referencia", max_length=100, blank=True)
+    serial = models.CharField(max_length=100, blank=True, db_index=True)
+    ubicacion = models.CharField("ubicación en la sede", max_length=150,
+                                 help_text="Dónde está: Ej.: Portería principal, Parqueadero sótano 1, Rack del 2.º piso.")
+    caracteristicas = models.TextField(
+        "características técnicas", blank=True,
+        help_text="Lo que sirve en una visita: resolución, canales, IP, capacidad del disco, zonas, firmware…")
+    foto = models.ImageField(upload_to=ruta_foto_equipo, blank=True)
+    propiedad = models.CharField("¿de quién es?", max_length=10, choices=Propiedad.choices, default=Propiedad.CLIENTE)
+    placa = models.CharField("placa de inventario JANOTEC", max_length=40, blank=True,
+                             help_text="Solo si es de JANOTEC (alquiler o comodato).")
+    fecha_instalacion = models.DateField("fecha de instalación", null=True, blank=True)
+    garantia_hasta = models.DateField("garantía hasta", null=True, blank=True)
+    estado = models.CharField(max_length=10, choices=Estado.choices, default=Estado.OPERATIVO)
+    observaciones = models.TextField(blank=True)
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    creado = models.DateTimeField(auto_now_add=True)
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sistema", "ubicacion", "tipo"]
+        verbose_name = "equipo instalado"
+        verbose_name_plural = "equipos instalados"
+
+    def __str__(self):
+        partes = [self.tipo, " ".join(x for x in (self.marca, self.modelo) if x)]
+        return " · ".join(x for x in partes + [self.ubicacion] if x)
+
+    @property
+    def de_janotec(self):
+        return self.propiedad != self.Propiedad.CLIENTE
+
+    @property
+    def en_servicio(self):
+        return self.estado != self.Estado.RETIRADO

@@ -973,7 +973,7 @@ class ClientesEnInventarioTests(BaseInventario):
         self.colono = Sede.objects.create(empresa=self.gases, nombre="EDS Colono", ciudad="Granada", direccion="Km 1 vía San Juan")
         self.sin_ciudad = Sede.objects.create(empresa=self.gases, nombre="El Dorado")
         self.encargado = EncargadoCliente.objects.create(empresa=self.gases, nombre="Paula Parra", celular="3105550000")
-        self.ficha = reverse("inventario:cliente", args=[self.gases.pk])
+        self.ficha = reverse("cliente_detalle", args=[self.gases.pk])  # desde el 23/11/2026 la ficha es una sola
         self.client.force_login(self.bodega)
 
     def acta(self, numero, sede, ciudad, recibio="", dias=0):
@@ -1041,7 +1041,10 @@ class ClientesEnInventarioTests(BaseInventario):
 
     def test_prospecto_no_tiene_ficha(self):
         prospecto = Empresa.objects.create(razon_social="Prospecto", es_prospecto=True)
-        self.assertEqual(self.client.get(reverse("inventario:cliente", args=[prospecto.pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse("cliente_detalle", args=[prospecto.pk])).status_code, 404)
+
+    def test_la_ficha_vieja_lleva_a_clientes_y_sedes(self):
+        self.assertRedirects(self.client.get(reverse("inventario:cliente", args=[self.gases.pk])), self.ficha)
 
 
 class MaterialEscritoAManoTests(SolicitudesDeMaterialTests):
