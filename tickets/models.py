@@ -904,6 +904,7 @@ class EquipoActa(models.Model):
         """Las observaciones y, en un equipo que ya estaba instalado, dónde está y cómo se encontró."""
         partes = [p for p in (self.ubicacion and f"Ubicación: {self.ubicacion}",
                               self.ESTADOS_ENCONTRADO.get(self.estado_equipo, "") if self.clase == self.Clase.EXISTENTE else "",
+                              self.propiedad == self.Propiedad.JANOTEC and self.clase == self.Clase.EXISTENTE and "De JANOTEC",
                               self.observaciones) if p]
         return " · ".join(partes)
 

@@ -1085,7 +1085,7 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
         if clase == "existente":
             from cronograma.models import PlanMantenimiento
             self.fields["sistema_equipo"].choices = [("", "— El del acta —")] + list(PlanMantenimiento.Sistema.choices)
-            del self.fields["propiedad"]  # lo que se encuentra instalado es del cliente; si es de JANOTEC, lleva placa
+            del self.fields["placa"]  # basta con decir de quién es; la placa la completa coordinación en la sede
             del self.fields["equipo_instalado"]
             self.fields["cantidad"].help_text = "Si son varios iguales, la cantidad: se carga uno por uno en la sede."
         else:
@@ -1097,7 +1097,7 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
             del self.fields["equipo_instalado"]
             if clase == "requerido":  # aún no existe: no tiene serial
                 del self.fields["serial"]
-        else:
+        elif "placa" in self.fields:
             self.fields["placa"].widget.attrs["placeholder"] = "Ej.: CAM-BAL-2MP002 (si es de JANOTEC)"
 
         equipo, marca, observaciones = self.EJEMPLOS[clase]
@@ -1138,7 +1138,7 @@ class EquipoActaForm(BootstrapMixin, forms.Form):
         if "propiedad" in self.fields and datos.get("equipo"):
             if not datos.get("propiedad"):
                 self.add_error("propiedad", "Indique si el equipo es del cliente o de JANOTEC.")
-            elif datos["propiedad"] == "janotec" and not (datos.get("placa") or datos.get("serial")):
+            elif datos["propiedad"] == "janotec" and "placa" in self.fields and not (datos.get("placa") or datos.get("serial")):
                 self.add_error("placa", "Para devolverlo al inventario escriba la placa (o el serial) del equipo de JANOTEC."
                                if self.es_retiro else "Para hacerle seguimiento escriba la placa (o el serial) del equipo de JANOTEC.")
         return datos

@@ -13,9 +13,9 @@
     {% include "tickets/_campo.html" with campo=f.ubicacion clase="col-md-5" %}
     {% include "tickets/_campo.html" with campo=f.estado_equipo clase="col-md-3" %}
   </div>
-  <div class="row">{% include "tickets/_campo.html" with campo=f.placa clase="col-md-5" %}</div>{% endif %}
+  <div class="row">{% include "tickets/_campo.html" with campo=f.propiedad clase="col-md-5" %}</div>{% endif %}
   {% if f.accion %}<div class="row">{% include "tickets/_campo.html" with campo=f.accion clase="col-md-5" %}</div>{% endif %}
-  {% if f.propiedad %}<div class="row">
+  {% if f.propiedad and not f.ubicacion %}<div class="row">
     {% include "tickets/_campo.html" with campo=f.propiedad clase="col-md-7" %}
     {% include "tickets/_campo.html" with campo=f.placa clase="col-md-5" %}
   </div>{% endif %}

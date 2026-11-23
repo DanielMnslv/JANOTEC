@@ -31,24 +31,27 @@ class EquiposExistentesTests(ActaBase):
         r = self.client.get(reverse("acta_nueva", args=[self.ticket.radicado]))
         self.assertContains(r, "Equipos que ya estaban instalados")
         self.assertContains(r, 'name="existentes-0-ubicacion"')
-        self.assertNotContains(r, 'name="existentes-0-propiedad"')
+        self.assertContains(r, 'name="existentes-0-propiedad"')
+        self.assertNotContains(r, 'name="existentes-0-placa"')
 
     def test_carga_uno_por_uno_los_equipos_encontrados_en_la_sede(self):
         foto = SimpleUploadedFile("domo.jpg", bytes([255, 216, 255]) + b"0" * 50, content_type="image/jpeg")
         acta = self.registrar({"equipo": "Cámara domo", "marca": "Hikvision", "referencia": "DS-2CE56", "cantidad": "4",
-                               "ubicacion": "Parqueadero", "estado_equipo": "operativo", "fotos": [foto]},
+                               "ubicacion": "Parqueadero", "estado_equipo": "operativo", "propiedad": "cliente", "fotos": [foto]},
                               {"equipo": "DVR 16 canales", "marca": "Dahua", "serial": "DV123", "cantidad": "1",
-                               "sistema_equipo": "cctv", "ubicacion": "Cuarto de monitoreo", "estado_equipo": "con_falla"})
+                               "sistema_equipo": "cctv", "ubicacion": "Cuarto de monitoreo", "estado_equipo": "con_falla",
+                               "propiedad": "janotec"})
         domos = EquipoInstalado.objects.filter(sede=self.sede_a, tipo="Cámara domo")
         self.assertEqual(domos.count(), 4)
         self.assertTrue(all(d.sistema == "cctv" and d.ubicacion == "Parqueadero" and d.creado_por == self.agente
                             and f"acta N° {acta.numero}" in d.observaciones for d in domos))
         dvr = EquipoInstalado.objects.get(serial="DV123")
-        self.assertEqual(dvr.estado, "con_falla")
+        self.assertEqual((dvr.estado, dvr.propiedad), ("con_falla", "comodato"))
+        self.assertTrue(all(d.propiedad == "cliente" for d in domos))
         existentes = acta.equipos_existentes
         self.assertEqual(len(existentes), 2)
         self.assertTrue(all(e.equipo_instalado_id for e in existentes))
-        self.assertIn("Ubicación: Cuarto de monitoreo · Con falla", existentes[1].detalle)
+        self.assertIn("Ubicación: Cuarto de monitoreo · Con falla · De JANOTEC", existentes[1].detalle)
         # Se ve en el detalle del acta y en la ficha de la sede
         self.assertContains(self.client.get(acta.get_absolute_url()), "Equipos que ya estaban instalados en la sede")
         self.client.force_login(self.supervisor)
@@ -57,7 +60,7 @@ class EquiposExistentesTests(ActaBase):
     def test_un_serial_ya_cargado_no_se_duplica(self):
         previo = EquipoInstalado.objects.create(sede=self.sede_a, sistema="cctv", tipo="NVR", serial="NV9")
         acta = self.registrar({"equipo": "NVR 32 canales", "marca": "Hikvision", "serial": "nv9", "cantidad": "1",
-                               "ubicacion": "Rack", "estado_equipo": "fuera"})
+                               "ubicacion": "Rack", "estado_equipo": "fuera", "propiedad": "cliente"})
         self.assertEqual(EquipoInstalado.objects.filter(sede=self.sede_a).count(), 1)
         previo.refresh_from_db()
         self.assertEqual((previo.tipo, previo.marca, previo.ubicacion, previo.estado), ("NVR", "Hikvision", "Rack", "fuera"))
@@ -67,3 +70,11 @@ class EquiposExistentesTests(ActaBase):
         self.registrar({"equipo": "", "estado_equipo": "operativo"})
         self.assertFalse(EquipoInstalado.objects.exists())
         self.assertFalse(EquipoActa.objects.filter(clase=EquipoActa.Clase.EXISTENTE).exists())
+
+    def test_hay_que_decir_de_quien_es(self):
+        self.client.force_login(self.agente)
+        r = self.client.post(reverse("acta_nueva", args=[self.ticket.radicado]),
+                             self.datos_acta(**self.existentes({"equipo": "Lectora", "cantidad": "1", "estado_equipo": "operativo"})))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("propiedad", r.context["existentes"].forms[0].errors)
+        self.assertFalse(EquipoInstalado.objects.exists())

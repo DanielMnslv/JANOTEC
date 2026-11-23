@@ -21,6 +21,10 @@ SISTEMA_DEL_ACTA = {"CCTV": "cctv", "ALARMA": "alarma", "CONTROL DE ACCESO": "ac
                     "ENERGIA SOLAR": "fotovoltaica", "RADIO": "radio"}
 
 
+# De quién es, del acta (cliente / janotec) a la sede: lo de JANOTEC que está donde el cliente queda en comodato
+PROPIEDAD = {"cliente": "cliente", "janotec": "comodato"}
+
+
 def unidades(cantidad, serial=""):
     """Cuántos equipos representa la fila: la cantidad escrita (1 si no es un número), uno solo si trae serial."""
     if serial:
@@ -40,7 +44,8 @@ def cargar_en_sede(equipo_acta, sede, tecnico, fotos=()):
             f"({timezone.localtime(acta.fecha):%d/%m/%Y}).")
     datos = {"sistema": sistema, "tipo": equipo_acta.equipo[:100], "marca": equipo_acta.marca[:80],
              "modelo": equipo_acta.referencia[:100], "ubicacion": equipo_acta.ubicacion[:150],
-             "caracteristicas": equipo_acta.observaciones, "placa": equipo_acta.placa[:40], "estado": estado}
+             "caracteristicas": equipo_acta.observaciones, "placa": equipo_acta.placa[:40], "estado": estado,
+             "propiedad": PROPIEDAD.get(equipo_acta.propiedad, "cliente")}
 
     serial = (equipo_acta.serial or "").strip()
     if serial:
