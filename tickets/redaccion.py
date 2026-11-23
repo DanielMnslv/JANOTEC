@@ -22,10 +22,10 @@ import os
 
 log = logging.getLogger(__name__)
 
-MODELO = "claude-opus-5-5"
+MODELO = "claude-haiku-5-5"  # 23/11/2026: Haiku 5.5, unas 40 veces más barato que Opus; alcanza de sobra para redactar
 LARGO_MAXIMO = 4000  # caracteres que se aceptan para mejorar (un campo de la plataforma no debería pasar de esto)
 CLAVE = "REDACCION_API_KEY"  # variable del .env, solo para este botón
-MEJORAS_POR_DIA = 40  # por persona: cuida el saldo prepagado (cada mejora cuesta cerca de 1 centavo de dólar)
+MEJORAS_POR_DIA = 100  # por persona: cuida el saldo prepagado (con Haiku cada mejora cuesta menos de 0,1 centavos de dólar)
 
 # Guía, frases rápidas y mínimo de palabras por tipo de campo
 TIPOS = {
@@ -192,12 +192,10 @@ def mejorar(texto, tipo, campo="", pagina=""):
     contexto = descripcion(tipo, campo, pagina)
     cliente = anthropic.Anthropic(api_key=os.environ[CLAVE], timeout=60.0, max_retries=1)
     try:
-        respuesta = cliente.beta.messages.create(
+        respuesta = cliente.messages.create(
             model=MODELO,
             max_tokens=8000,
-            output_config={"effort": "low"},  # corregir estilo no necesita razonar a fondo
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",  # si el modelo se niega, la API reintenta sola con otro modelo
+            output_config={"effort": "medium"},  # equilibrio entre buena ortografía y costo
             system=INSTRUCCIONES,
             messages=[{"role": "user", "content": f"El texto corresponde a {contexto}.\n\n<texto>\n{texto}\n</texto>"}],
         )

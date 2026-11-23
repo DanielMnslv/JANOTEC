@@ -1620,15 +1620,14 @@ class AyudaRedaccionTests(ActaBase):
         self.client.force_login(self.agente)
         with mock.patch.dict(os.environ, {"REDACCION_API_KEY": "clave-de-prueba"}), \
                 mock.patch("anthropic.Anthropic") as cliente:
-            crear = cliente.return_value.beta.messages.create
+            crear = cliente.return_value.messages.create
             crear.return_value = self._respuesta("La cámara 3 no presentaba imagen. Se reemplazó el conector.")
             r = self.client.post(reverse("mejorar_redaccion"),
                                  {"texto": "camara 3 no daba imagen se cambio conector", "tipo": "diagnostico"})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["texto"], "La cámara 3 no presentaba imagen. Se reemplazó el conector.")
         kwargs = crear.call_args.kwargs
-        self.assertEqual(kwargs["model"], "claude-opus-5-5")
-        self.assertEqual(kwargs["fallbacks"], "default")
+        self.assertEqual(kwargs["model"], "claude-haiku-5-5")
         self.assertIn("camara 3 no daba imagen se cambio conector", kwargs["messages"][0]["content"])
         self.assertIn("diagnóstico", kwargs["messages"][0]["content"])
 
@@ -1639,7 +1638,7 @@ class AyudaRedaccionTests(ActaBase):
         url = reverse("mejorar_redaccion")
         with mock.patch.dict(os.environ, {"REDACCION_API_KEY": "clave-de-prueba"}), \
                 mock.patch("anthropic.Anthropic") as cliente:
-            cliente.return_value.beta.messages.create.return_value = self._respuesta("", motivo="refusal")
+            cliente.return_value.messages.create.return_value = self._respuesta("", motivo="refusal")
             r = self.client.post(url, {"texto": "algo", "tipo": "resultado"})
             self.assertEqual(r.status_code, 400)
             self.assertIn("error", r.json())
@@ -1696,7 +1695,7 @@ class AyudaRedaccionTests(ActaBase):
             pagina = self.client.get(reverse("inicio"), follow=True)
             self.assertIn("js/redaccion.js", pagina.content.decode())
             with mock.patch("anthropic.Anthropic") as cliente:
-                crear = cliente.return_value.beta.messages.create
+                crear = cliente.return_value.messages.create
                 crear.return_value = self._respuesta("El cliente necesita cámaras en el parqueadero.")
                 r = self.client.post(reverse("mejorar_redaccion"), {
                     "texto": "cliente nesesita camaras parqueadero", "tipo": "general",
@@ -1722,7 +1721,7 @@ class AyudaRedaccionTests(ActaBase):
         self.client.force_login(self.agente)
         url = reverse("mejorar_redaccion")
         with mock.patch.dict(os.environ, {"REDACCION_API_KEY": "clave-de-prueba"}),                 mock.patch("anthropic.Anthropic") as cliente, mock.patch.object(redaccion, "MEJORAS_POR_DIA", 2):
-            cliente.return_value.beta.messages.create.return_value = self._respuesta("Texto mejorado.")
+            cliente.return_value.messages.create.return_value = self._respuesta("Texto mejorado.")
             self.assertEqual(self.client.post(url, {"texto": "uno"}).status_code, 200)
             self.assertEqual(self.client.post(url, {"texto": "dos"}).status_code, 200)
             r = self.client.post(url, {"texto": "tres"})
@@ -1732,7 +1731,7 @@ class AyudaRedaccionTests(ActaBase):
             sin_saldo = anthropic.BadRequestError.__new__(anthropic.BadRequestError)  # sin armar la respuesta HTTP
             Exception.__init__(sin_saldo, "Your credit balance is too low to access the Anthropic API")
             sin_saldo.status_code = 400
-            cliente.return_value.beta.messages.create.side_effect = sin_saldo
+            cliente.return_value.messages.create.side_effect = sin_saldo
             self.assertIn("saldo", self.client.post(url, {"texto": "cuatro"}).json()["error"])
 
 
