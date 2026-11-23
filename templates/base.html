@@ -12,7 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Carlito:wght@400;700&display=swap" rel="stylesheet">
   <link href="{% static 'vendor/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
   <link href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}" rel="stylesheet">
-  <link href="{% static 'css/janotec.css' %}?v=20261118" rel="stylesheet">
+  <link href="{% static 'css/janotec.css' %}?v=20261123" rel="stylesheet">
   {% block head %}{% endblock %}
 </head>
 <body{% if user.is_authenticated %} data-usuario="{{ user.pk }}"{% endif %}>
@@ -93,7 +93,7 @@
 {% if user.is_authenticated and user.es_supervisor %}{% include "tickets/_confirmar_recepcion.html" %}{% endif %}
 <script src="{% static 'js/firmas.js' %}?v=20261113"></script>
 {% if redaccion %}{{ redaccion|json_script:"redaccion-config" }}
-<script src="{% static 'js/redaccion.js' %}?v=20261118"></script>{% endif %}
+<script src="{% static 'js/redaccion.js' %}?v=20261123"></script>{% endif %}
 {% block scripts %}{% endblock %}
 <script src="{% static 'js/borrador_acta.js' %}?v=20261113"></script>
 <script src="{% static 'js/autoguardado.js' %}?v=20261123"></script>

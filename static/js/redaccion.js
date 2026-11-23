@@ -62,15 +62,23 @@
     if (!tipo) return;
     campo.dataset.redaccionLista = '1';
 
-    const caja = el('div', 'redaccion-ayuda mt-1');
-    if (tipo.guia) caja.append(el('div', 'form-text mt-0 mb-1', '✍️ ' + tipo.guia));
-
-    const fila = el('div', 'd-flex flex-wrap gap-1 align-items-center');
+    // Barra pegada debajo del texto (23/11/2026): arriba la guía y los dos botones; abajo las frases rápidas en una
+    // sola fila que se desliza de lado en el celular. Así no quedan siete botones regados bajo el campo.
+    const caja = el('div', 'redaccion-ayuda');
+    campo.classList.add('con-redaccion');
+    const cabeza = el('div', 'redaccion-cabeza');
+    const guia = el('div', 'redaccion-guia');
+    if (tipo.guia) guia.innerHTML = '<i class="bi bi-pencil"></i> ';
+    if (tipo.guia) guia.append(tipo.guia);
+    const fila = el('div', 'redaccion-acciones');
+    cabeza.append(guia, fila);
+    const frases = el('div', 'redaccion-frases');
     tipo.frases.forEach(function (frase) {
-      const b = el('button', 'btn btn-sm btn-outline-secondary rounded-pill py-0 px-2', frase.trim());
+      const b = el('button', 'redaccion-frase', frase.trim());
       b.type = 'button';
+      b.title = 'Agregar «' + frase.trim() + '» al texto';
       b.addEventListener('click', function () { insertar(campo, frase); });
-      fila.append(b);
+      frases.append(b);
     });
 
     const aviso = el('div', 'small text-warning-emphasis mt-1');
@@ -85,9 +93,10 @@
     campo.setAttribute('autocapitalize', 'sentences');
 
     if (config.ortografia) {
-      const revisarBtn = el('button', 'btn btn-sm btn-outline-success rounded-pill py-0 px-2 ms-auto');
+      const revisarBtn = el('button', 'btn btn-sm btn-outline-success redaccion-accion');
       revisarBtn.type = 'button';
-      revisarBtn.innerHTML = '<i class="bi bi-spellcheck"></i> Revisar ortografía';
+      revisarBtn.title = 'Revisar ortografía (gratis)';
+      revisarBtn.innerHTML = '<i class="bi bi-spellcheck"></i> Ortografía';
       revisarBtn.addEventListener('click', function () {
         if (!campo.value.trim()) { aviso.textContent = 'Escriba primero el texto; luego lo revisamos.'; aviso.hidden = false; return; }
         const limpio = pulir(campo.value);
@@ -175,7 +184,8 @@
     }
 
     if (config.url) {
-      const mejorar = el('button', 'btn btn-sm btn-outline-primary rounded-pill py-0 px-2 ' + (config.ortografia ? 'ms-1' : 'ms-auto'));
+      const mejorar = el('button', 'btn btn-sm btn-primary redaccion-accion');
+      mejorar.title = 'Claude reescribe el texto con buena redacción y ortografía; usted decide si lo usa';
       mejorar.type = 'button';
       mejorar.innerHTML = '<i class="bi bi-stars"></i> Mejorar redacción';
       mejorar.addEventListener('click', function () {
@@ -235,7 +245,9 @@
       });
     }
 
-    caja.append(fila, aviso, propuesta);
+    caja.append(cabeza);
+    if (tipo.frases.length) caja.append(frases);
+    caja.append(aviso, propuesta);
     campo.after(caja);
   }
 
