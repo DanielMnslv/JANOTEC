@@ -31,10 +31,12 @@ class ActividadForm(BootstrapMixin, forms.ModelForm):
         model = Actividad
         fields = ["ticket", "fecha", "hora_inicio", "hora_fin", "cliente", "sede", "actividad", "tipo", "linea",
                   "encargados", "insumos", "notificar_a", "trabajo_alturas", "sst", "sst_persona",
-                  "sst_trabajo", "sst_duracion", "vehiculo", "vehiculo_placa", "vehiculo_conductor", "vehiculo_hasta"]
+                  "sst_trabajo", "sst_duracion", "vehiculo", "vehiculo_placa", "vehiculo_conductor",
+                  "vehiculo_hora_salida", "vehiculo_hasta"]
         widgets = {
             "fecha": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "vehiculo_hasta": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "vehiculo_hora_salida": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
             "hora_inicio": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
             "hora_fin": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
             "actividad": forms.Textarea(attrs={"rows": 3}),
@@ -92,6 +94,11 @@ class ActividadForm(BootstrapMixin, forms.ModelForm):
                 self.add_error("vehiculo_placa", "Elija qué vehículo se solicita.")
             if not datos.get("vehiculo_conductor"):
                 self.add_error("vehiculo_conductor", "Indique quién conduce el vehículo.")
+            salida = datos.get("vehiculo_hora_salida")
+            if salida is None and "vehiculo_hora_salida" not in self.errors:
+                self.add_error("vehiculo_hora_salida", "Indique la hora de salida del vehículo.")
+            elif inicio and salida and (salida.hour, salida.minute) == (inicio.hour, inicio.minute):
+                self.add_error("vehiculo_hora_salida", "Elija una hora distinta al inicio de la actividad.")
             fecha, hasta = datos.get("fecha"), datos.get("vehiculo_hasta")
             if fecha and not hasta:
                 datos["vehiculo_hasta"] = fecha
@@ -99,6 +106,7 @@ class ActividadForm(BootstrapMixin, forms.ModelForm):
                 self.add_error("vehiculo_hasta", "La finalización del recorrido no puede ser antes de la salida.")
         else:
             datos["vehiculo_placa"], datos["vehiculo_conductor"], datos["vehiculo_hasta"] = "", None, None
+            datos["vehiculo_hora_salida"] = None
         if not datos.get("sst_duracion"):
             datos["sst_duracion"] = "medio día"
         if (datos.get("via_sst") or datos.get("via_tecnicos")) and not any(

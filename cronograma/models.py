@@ -161,6 +161,7 @@ class Actividad(models.Model):
     vehiculo_conductor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                            related_name="+", verbose_name="conductor")
     vehiculo_hasta = models.DateField("fecha de finalización del recorrido", null=True, blank=True)
+    vehiculo_hora_salida = models.TimeField("hora de salida del vehículo", null=True, blank=True)
     vehiculo_enviada = models.DateTimeField("solicitud de vehículo enviada", null=True, blank=True)
     vehiculo_enviado = models.CharField(max_length=200, blank=True, editable=False,
                                         help_text="Lo que se pidió en la última solicitud (si cambia, se envía la actualización).")
