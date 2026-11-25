@@ -1,4 +1,5 @@
 Django>=5.2,<5.3
+Pillow>=10.4
 mysqlclient>=2.2      # conector MySQL (en el equipo local)
 PyMySQL>=1.1          # conector alterno sin compilar (servidor Plesk); ver config/__init__.py
 python-dotenv>=1.0

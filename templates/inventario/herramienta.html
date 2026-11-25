@@ -30,6 +30,40 @@
     {% endif %}
   </div>
   <div class="col-lg-7">
+    <section class="card mb-4" aria-labelledby="titulo-evidencia">
+      <div class="card-body">
+        <h2 class="h6" id="titulo-evidencia">Evidencia de la herramienta</h2>
+        {% if evidencia %}
+          {% url 'inventario:herramienta_foto' h.pk evidencia.pk as foto_url %}
+          <a href="{{ foto_url }}">
+            <img src="{{ foto_url }}" class="img-fluid rounded border mb-2" style="max-height: 320px"
+                 alt="Evidencia de {{ h.nombre }}">
+          </a>
+          <p class="mb-1"><strong>{{ evidencia.get_condicion_display }}</strong></p>
+          <p class="small text-muted-jn mb-2">Registrada el {{ evidencia.fecha|date:"d/m/Y h:i a" }}{% if evidencia.registrado_por %} por {{ evidencia.registrado_por }}{% endif %} · A cargo de {{ h.responsable }}</p>
+          {% if evidencia.observaciones %}<p class="small">{{ evidencia.observaciones|linebreaksbr }}</p>{% endif %}
+        {% elif form_evidencia %}
+          <p class="small text-muted-jn">Pendiente de verificar con una foto para el responsable actual.</p>
+        {% else %}
+          <p class="small text-muted-jn mb-0">La evidencia se registra cuando la herramienta tiene una asignación activa.</p>
+        {% endif %}
+        {% if form_evidencia %}
+          <details{% if not evidencia %} open{% endif %}>
+            <summary class="fw-semibold small mb-2">{% if evidencia %}Registrar nueva evidencia{% else %}Registrar evidencia{% endif %}</summary>
+            <form method="post" enctype="multipart/form-data" action="{% url 'inventario:herramienta_evidencia' h.pk %}">
+              {% csrf_token %}
+              {% for campo in form_evidencia %}
+                <div class="mb-2">
+                  <label class="form-label small mb-1" for="{{ campo.id_for_label }}">{{ campo.label }}</label>
+                  {{ campo }}
+                </div>
+              {% endfor %}
+              <button class="btn btn-sm btn-accent" type="submit">Guardar evidencia</button>
+            </form>
+          </details>
+        {% endif %}
+      </div>
+    </section>
     <h2 class="h6">Historial de entregas</h2>
     <ul class="list-group mb-4 small">
       {% for e in entregas %}<li class="list-group-item d-flex justify-content-between"><span>{% if e.tipo == 'devolucion' %}<i class="bi bi-box-arrow-in-left"></i> {{ e.tecnico_nombre }} la devolvió a bodega{% else %}<i class="bi bi-person-check"></i> Entregada a {{ e.tecnico|default:e.tecnico_nombre }}{% endif %}</span><span class="text-muted-jn">{{ e.fecha|date:"d/m/Y h:i a" }}{% if e.registrado_por %} · {{ e.registrado_por }}{% endif %}</span></li>
