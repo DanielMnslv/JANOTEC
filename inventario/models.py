@@ -1128,6 +1128,26 @@ class Herramienta(models.Model):
                 "baja": "dark"}[self.estado]
 
 
+class EvidenciaHerramienta(models.Model):
+    class Condicion(models.TextChoices):
+        BUENA = "buena", "Buen estado"
+        DESGASTE = "desgaste", "Con desgaste"
+        DANADA = "danada", "Dañada"
+        REPARACION = "reparacion", "En reparación"
+
+    herramienta = models.ForeignKey(Herramienta, on_delete=models.CASCADE, related_name="evidencias")
+    tecnico = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="+")
+    registrado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="+")
+    condicion = models.CharField(max_length=16, choices=Condicion.choices)
+    observaciones = models.CharField(max_length=500, blank=True)
+    foto = models.BinaryField()
+    fecha = models.DateTimeField(default=timezone_now)
+
+    class Meta:
+        ordering = ["-fecha", "-pk"]
+        indexes = [models.Index(fields=["herramienta", "tecnico", "-fecha"], name="evid_herr_tec_fecha_idx")]
+
+
 class EntregaHerramienta(models.Model):
     """Historial de quién ha tenido cada herramienta (la foto del nombre no cambia aunque se edite)."""
 

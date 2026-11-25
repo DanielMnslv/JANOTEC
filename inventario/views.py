@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import F, Q
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -958,11 +958,65 @@ def herramienta_form(request, pk=None):
 @login_required
 @inventario_requerido
 def herramienta_detalle(request, pk):
+    from .forms import EvidenciaHerramientaForm
+    from .models import Herramienta
+
     h = get_object_or_404(_herramientas_visibles(request.user), pk=pk)
+    entregas = h.entregas.select_related("tecnico")
+    ultimo_movimiento = entregas.first()
+    evidencia = None
+    if h.tecnico_id and h.estado != Herramienta.Estado.BAJA:
+        vigentes = h.evidencias.filter(tecnico_id=h.tecnico_id)
+        if ultimo_movimiento:
+            vigentes = vigentes.filter(fecha__gte=ultimo_movimiento.fecha)
+        evidencia = vigentes.defer("foto").select_related("registrado_por").first()
     return render(request, "inventario/herramienta.html", {
-        "h": h, "entregas": h.entregas.select_related("tecnico"), "tecnicos": tecnicos(),
+        "h": h, "entregas": entregas, "tecnicos": tecnicos(),
         "revisiones": h.auditorias.select_related("auditoria").order_by("-auditoria__fecha"),
+        "evidencia": evidencia,
+        "form_evidencia": EvidenciaHerramientaForm() if h.tecnico_id and h.estado != Herramienta.Estado.BAJA else None,
     })
+
+
+@login_required
+@inventario_requerido
+@require_POST
+def herramienta_evidencia(request, pk):
+    from .forms import EvidenciaHerramientaForm
+    from .models import EvidenciaHerramienta, Herramienta
+
+    h = get_object_or_404(_herramientas_visibles(request.user), pk=pk)
+    form = EvidenciaHerramientaForm(request.POST, request.FILES)
+    if not form.is_valid():
+        for errores in form.errors.values():
+            for error in errores:
+                messages.error(request, error)
+        return redirect(h)
+    with transaction.atomic():
+        actual = get_object_or_404(Herramienta.objects.select_for_update(), pk=pk)
+        if (not actual.tecnico_id or actual.tecnico_id != h.tecnico_id
+                or actual.estado == Herramienta.Estado.BAJA):
+            messages.error(request, "La asignación cambió o ya no está activa. Revisa la ficha antes de guardar la evidencia.")
+            return redirect(actual)
+        EvidenciaHerramienta.objects.create(
+            herramienta=actual, tecnico_id=actual.tecnico_id, registrado_por=request.user, **form.cleaned_data,
+        )
+    messages.success(request, "Evidencia guardada.")
+    return redirect(h)
+
+
+@login_required
+@inventario_requerido
+def herramienta_foto(request, pk, evidencia_pk):
+    h = get_object_or_404(_herramientas_visibles(request.user), pk=pk)
+    evidencias = h.evidencias.all()
+    if not request.user.gestiona_inventario:
+        evidencias = evidencias.filter(tecnico=request.user)
+    evidencia = get_object_or_404(evidencias, pk=evidencia_pk)
+    respuesta = HttpResponse(bytes(evidencia.foto), content_type="image/jpeg")
+    respuesta["Cache-Control"] = "private, no-store"
+    respuesta["X-Content-Type-Options"] = "nosniff"
+    return respuesta
 
 
 @login_required

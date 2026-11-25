@@ -1,4 +1,5 @@
 from decimal import Decimal
+from io import BytesIO
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -7,7 +8,7 @@ from accounts.models import Empresa, Usuario  # noqa: F401
 from tickets.forms import BootstrapMixin
 from tickets.models import Ticket
 
-from .models import Activo, Insumo, LineaOrdenCompra, Modalidad, OrdenCompra
+from .models import Activo, EvidenciaHerramienta, Insumo, LineaOrdenCompra, Modalidad, OrdenCompra
 
 
 class _Estilos:
@@ -292,6 +293,37 @@ class ValidarSolicitudForm(_Estilos, BootstrapMixin, forms.Form):
     def adicionales(self):
         """Cantidad adicional de cada consumible: {pk: Decimal} (vacío = 0)."""
         return {item.pk: self.cleaned_data.get(f"adicional_{item.pk}") or Decimal(0) for item in self.consumibles}
+
+
+class EvidenciaHerramientaForm(_Estilos, BootstrapMixin, forms.Form):
+    foto = forms.FileField(label="Foto actual", widget=forms.ClearableFileInput(
+        attrs={"accept": "image/jpeg,image/png,image/webp"}))
+    condicion = forms.ChoiceField(label="Condición observada", choices=[
+        ("", "Elija la condición"), *EvidenciaHerramienta.Condicion.choices,
+    ])
+    observaciones = forms.CharField(
+        label="Observaciones", required=False, max_length=500, widget=forms.Textarea(attrs={"rows": 2}),
+    )
+
+    def clean_foto(self):
+        from PIL import Image, ImageOps, UnidentifiedImageError
+
+        archivo = self.cleaned_data["foto"]
+        if archivo.size > 12 * 1024 * 1024:
+            raise ValidationError("La foto debe pesar máximo 12 MB.")
+        try:
+            with Image.open(archivo) as origen:
+                if origen.format not in {"JPEG", "PNG", "WEBP"}:
+                    raise ValidationError("Sube una foto JPG, PNG o WebP.")
+                if origen.width * origen.height > 32_000_000:
+                    raise ValidationError("La foto supera 32 megapíxeles.")
+                foto = ImageOps.exif_transpose(origen)
+                foto.thumbnail((1600, 1600))
+                salida = BytesIO()
+                foto.convert("RGB").save(salida, format="JPEG", quality=82, optimize=True)
+                return salida.getvalue()
+        except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
+            raise ValidationError("El archivo no se pudo leer como una foto.") from exc
 
 
 class HerramientaForm(_Estilos, BootstrapMixin, forms.ModelForm):
