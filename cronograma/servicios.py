@@ -9,6 +9,7 @@ from django.db import transaction
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import formats, timezone
+from django.utils.dateparse import parse_time
 
 from tickets import notificaciones as notif
 from tickets.models import Seguimiento, Ticket
@@ -392,8 +393,9 @@ def _pedido_vehiculo(actividad):
     if not actividad.vehiculo:
         return ""
     hasta = actividad.vehiculo_hasta or actividad.fecha
+    salida = actividad.vehiculo_hora_salida or actividad.hora_inicio
     return (f"{actividad.vehiculo_placa}|{actividad.vehiculo_conductor_id or ''}|{actividad.fecha:%Y-%m-%d}|"
-            f"{hasta:%Y-%m-%d}|{actividad.hora_inicio:%H:%M}|{actividad.cliente}|{actividad.sede}")
+            f"{hasta:%Y-%m-%d}|{salida:%H:%M}|{actividad.cliente}|{actividad.sede}")
 
 
 def texto_vehiculo(actividad, motivo="nueva"):
@@ -403,8 +405,12 @@ def texto_vehiculo(actividad, motivo="nueva"):
     conductor = actividad.vehiculo_conductor
     nombre_conductor = (conductor.get_full_name() or conductor.username) if conductor else "Por definir"
     hasta = actividad.vehiculo_hasta or actividad.fecha
+    salida = actividad.vehiculo_hora_salida or actividad.hora_inicio
     recorrido = " · ".join(x for x in (actividad.cliente, actividad.sede) if x)
     if motivo == "cancelada":
+        pedido_anterior = actividad.vehiculo_enviado.split("|", 5)
+        if len(pedido_anterior) >= 5:
+            salida = parse_time(pedido_anterior[4]) or salida
         intro = ["Me permito informarle que ya no se requiere el vehículo solicitado para el siguiente recorrido:"]
     elif motivo == "cambio":
         intro = ["Me permito informarle que cambió la solicitud de vehículo enviada anteriormente.",
@@ -416,7 +422,7 @@ def texto_vehiculo(actividad, motivo="nueva"):
     return "\n".join([
         "Buen día,", "", "Cordial saludo.", "", *intro, "",
         f"- Fecha de solicitud: {tz.localdate():%d/%m/%Y}",
-        f"- Fecha de salida: {actividad.fecha:%d/%m/%Y} a las {actividad.hora_inicio:%I:%M %p}".replace("AM", "a. m.").replace("PM", "p. m."),
+        f"- Fecha de salida: {actividad.fecha:%d/%m/%Y} a las {salida:%I:%M %p}".replace("AM", "a. m.").replace("PM", "p. m."),
         f"- Fecha de finalización del recorrido: {hasta:%d/%m/%Y}",
         f"- Tipo de vehículo: {actividad.get_vehiculo_placa_display() or 'El asignado'}",
         f"- Recorrido: {recorrido.upper()}",

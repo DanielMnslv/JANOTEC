@@ -93,6 +93,7 @@ def semana(request):
                              radicado=a.ticket.radicado if a.ticket else "",
                              encargados=[u.pk for u in a.encargados.all()], bodega=a.material_de_bodega is not None,
                              vehiculo_placa=a.vehiculo_placa, vehiculo_conductor=a.vehiculo_conductor_id or "",
+                             vehiculo_hora_salida=a.vehiculo_hora_salida.strftime("%H:%M") if a.vehiculo_hora_salida else "",
                              vehiculo_hasta=a.vehiculo_hasta.isoformat() if a.vehiculo_hasta else "",
                              **viaticos.campos_actividad(getattr(a, "solicitud_viaticos", None)))
                 actividades_json[a.pk] = datos

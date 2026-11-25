@@ -172,10 +172,11 @@
           </div>
           <div class="col-12" id="bloque-vehiculo" hidden>
             <div class="row g-2 p-2 rounded" style="background:#eef2fb">
-              <div class="col-md-4"><label class="form-label small mb-1" for="{{ form.vehiculo_placa.id_for_label }}">Vehículo <span class="text-danger">*</span></label>{{ form.vehiculo_placa }}</div>
-              <div class="col-md-4"><label class="form-label small mb-1" for="{{ form.vehiculo_conductor.id_for_label }}">Conductor <span class="text-danger">*</span></label>{{ form.vehiculo_conductor }}</div>
-              <div class="col-md-4"><label class="form-label small mb-1" for="{{ form.vehiculo_hasta.id_for_label }}">Finalización del recorrido</label>{{ form.vehiculo_hasta }}</div>
-              <div class="col-12 small text-muted-jn"><i class="bi bi-car-front"></i> Al guardar se le envía la solicitud a quien asigna los vehículos (Directorio → «Vehículos»), con copia a usted. Si cambia el vehículo, el conductor o las fechas, le llega la actualización.</div>
+              <div class="col-md-6"><label class="form-label small mb-1" for="{{ form.vehiculo_placa.id_for_label }}">Vehículo <span class="text-danger">*</span></label>{{ form.vehiculo_placa }}</div>
+              <div class="col-md-6"><label class="form-label small mb-1" for="{{ form.vehiculo_conductor.id_for_label }}">Conductor <span class="text-danger">*</span></label>{{ form.vehiculo_conductor }}</div>
+              <div class="col-md-6"><label class="form-label small mb-1" for="{{ form.vehiculo_hora_salida.id_for_label }}">Hora de salida del vehículo <span class="text-danger">*</span></label>{{ form.vehiculo_hora_salida }}</div>
+              <div class="col-md-6"><label class="form-label small mb-1" for="{{ form.vehiculo_hasta.id_for_label }}">Finalización del recorrido</label>{{ form.vehiculo_hasta }}</div>
+              <div class="col-12 small text-muted-jn"><i class="bi bi-car-front"></i> Al guardar se le envía la solicitud a quien asigna los vehículos (Directorio → «Vehículos»), con copia a usted. Si cambia el vehículo, el conductor, las fechas o la hora de salida, le llega la actualización.</div>
             </div>
           </div>
           <div class="col-12" id="bloque-sst">
@@ -235,7 +236,8 @@
   const csrf = form.querySelector('[name=csrfmiddlewaretoken]').value;
   const campo = function (n) { return form.querySelector('[name=' + n + ']'); };
   const textos = ['fecha', 'hora_inicio', 'hora_fin', 'cliente', 'sede', 'actividad', 'tipo', 'linea', 'insumos', 'notificar_a',
-                  'sst_persona', 'sst_trabajo', 'sst_duracion', 'via_detalle', 'vehiculo_placa', 'vehiculo_conductor', 'vehiculo_hasta'];
+                  'sst_persona', 'sst_trabajo', 'sst_duracion', 'via_detalle', 'vehiculo_placa', 'vehiculo_conductor',
+                  'vehiculo_hora_salida', 'vehiculo_hasta'];
   const casillas = ['trabajo_alturas', 'sst', 'vehiculo', 'via_sst', 'via_tecnicos', 'via_alimentacion', 'via_transporte',
                     'via_gasolina', 'via_otros'];
 
@@ -276,6 +278,7 @@
     document.getElementById('bloque-vehiculo').hidden = !si;
     campo('vehiculo_placa').required = si;
     campo('vehiculo_conductor').required = si;
+    campo('vehiculo_hora_salida').required = si;
     // Por defecto el recorrido termina el mismo día de la salida
     if (si && !campo('vehiculo_hasta').value) campo('vehiculo_hasta').value = campo('fecha').value;
     campo('vehiculo_hasta').min = campo('fecha').value;
