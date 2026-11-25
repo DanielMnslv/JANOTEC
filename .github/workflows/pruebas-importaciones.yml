@@ -1,0 +1,52 @@
+name: Pruebas de importación
+
+on:
+  push:
+    branches: [comercial/catalogo-hikvision, main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  importaciones:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependencias
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config default-libmysqlclient-dev
+          python -m pip install -r requirements.txt Pillow
+      - name: Probar herramientas, catálogo y cotizador
+        run: |
+          python - <<'PY'
+          import os
+
+          os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
+          from django.conf import settings
+
+          # La prueba comprueba los importadores sobre el esquema actual,
+          # independiente de las migraciones históricas específicas de MySQL.
+          settings.DATABASES["default"] = {
+              "ENGINE": "django.db.backends.sqlite3",
+              "NAME": ":memory:",
+              "TEST": {"MIGRATE": False},
+          }
+
+          import django
+          from django.core.management import call_command
+
+          django.setup()
+          call_command(
+              "test",
+              "comercial.tests_importaciones_catalogo_herramientas",
+              "inventario.tests.HerramientasYAuditoriaTests",
+              "comercial.tests.CotizadorTests",
+              interactive=False,
+          )
+          PY
