@@ -304,6 +304,24 @@ En el servidor de producción no hace falta correr nada a mano:
 
 Si un cambio no aparece, en Plesk → Git → «Extraer actualizaciones» se baja a mano. `actualizar.sh` queda como respaldo.
 
+## Cargar herramientas desde actas de entrega
+
+Desde la carpeta que contiene `manage.py`, ejecute la simulación con el CSV revisado:
+
+```bash
+python manage.py importar_actas_herramientas /ruta/carga_actas_herramientas.csv
+```
+
+Revise los totales por responsable y las cuentas técnicas sin coincidencia. Añada
+`--confirmar` para guardar las asignaciones y su historial con las fechas de las
+actas. La carga omite los renglones ya registrados y se detiene si un serial
+coincide con otro registro. Las entregas sin cuenta técnica identificada conservan
+el nombre del acta en la ficha.
+
+Use `--incluir-materiales` si los materiales del CSV deben figurar en Herramientas
+de trabajo. En esa sección entrarán en las auditorías de herramientas y no
+generarán movimientos ni saldos de bodega.
+
 ## Ideas para siguientes versiones
 - Tiempos de respuesta (SLA) por prioridad con alertas de vencimiento.
 - Notificaciones por WhatsApp (API de Meta / Twilio).
