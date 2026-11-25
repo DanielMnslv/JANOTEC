@@ -322,6 +322,24 @@ Use `--incluir-materiales` si los materiales del CSV deben figurar en Herramient
 de trabajo. En esa sección entrarán en las auditorías de herramientas y no
 generarán movimientos ni saldos de bodega.
 
+## Cargar el catálogo Hikvision de octubre de 2026
+
+Con el CSV revisado disponible en el servidor por un canal privado, ejecute:
+
+```bash
+python manage.py importar_catalogo_hikvision /ruta/simulacion_catalogo_hikvision_2026-10-09.csv
+```
+
+La simulación compara referencias con el catálogo de esa base. Revise los
+registros nuevos, las actualizaciones y cualquier referencia en revisión.
+Use `--proveedor 'Razón social exacta'` para asociar los productos nuevos
+a un proveedor existente y `--confirmar` para guardar. Se usa la tarifa
+Preferencial en COP convertida a valor antes de IVA del 19 %.
+
+El despliegue de código no ejecuta estas cargas. Para que aparezcan en la
+plataforma, ejecute cada comando con su CSV en el entorno que usa el sitio,
+primero en simulación y luego con `--confirmar`.
+
 ## Ideas para siguientes versiones
 - Tiempos de respuesta (SLA) por prioridad con alertas de vencimiento.
 - Notificaciones por WhatsApp (API de Meta / Twilio).
