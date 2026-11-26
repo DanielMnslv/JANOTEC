@@ -1,8 +1,10 @@
+from datetime import datetime
 from io import BytesIO
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from PIL import Image
 
 from accounts.models import Usuario
@@ -101,4 +103,10 @@ class EvidenciaHerramientasTests(TestCase):
         self.assertEqual(hoja["A5"].value, "Probador")
         self.assertEqual(hoja["D5"].value, 1)
         self.assertEqual(hoja["H5"].value, "Con desgaste")
+        self.assertEqual(hoja["J4"].value, "Fecha de entrega")
+        entrega = self.herramienta.entregas.get()
+        fecha_local = timezone.localtime(entrega.fecha).replace(tzinfo=None)
+        self.assertIsInstance(hoja["J5"].value, datetime)
+        self.assertEqual(hoja["J5"].value.replace(microsecond=0), fecha_local.replace(microsecond=0))
+        self.assertEqual(hoja["J5"].number_format, "dd/mm/yyyy hh:mm")
         libro.close()
