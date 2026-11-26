@@ -9,8 +9,9 @@
 """
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Exists, F, OuterRef
 
-from .models import AuditoriaHerramientas, DetalleAuditoria, EntregaHerramienta, Herramienta
+from .models import AuditoriaHerramientas, DetalleAuditoria, EntregaHerramienta, EvidenciaHerramienta, Herramienta
 
 H = Herramienta.Estado
 EE = DetalleAuditoria.EstadoEncontrado
@@ -66,6 +67,15 @@ def devolver(herramienta, usuario):
 def por_auditar(tecnico):
     """Lo registrado del técnico (todo menos lo dado de baja), en el orden de la auditoría."""
     return list(Herramienta.objects.filter(tecnico=tecnico).exclude(estado=H.BAJA).order_by("nombre", "pk"))
+
+
+def evidencias_vigentes():
+    movimientos_posteriores = EntregaHerramienta.objects.filter(
+        herramienta_id=OuterRef("herramienta_id"), fecha__gt=OuterRef("fecha"),
+    )
+    return EvidenciaHerramienta.objects.filter(
+        tecnico_id=F("herramienta__tecnico_id"), tecnico__isnull=False,
+    ).exclude(herramienta__estado=H.BAJA).filter(~Exists(movimientos_posteriores))
 
 
 @transaction.atomic

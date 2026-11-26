@@ -59,6 +59,7 @@ urlpatterns = [
     path("funcionarios/nuevo/", views.funcionario_form, name="funcionario_nuevo"),
     path("funcionarios/<int:pk>/", views.funcionario_form, name="funcionario_editar"),
     path("herramientas/", views.herramientas, name="herramientas"),
+    path("herramientas/informe.pdf", views.herramientas_pdf, name="herramientas_pdf"),
     path("herramientas/nueva/", views.herramienta_form, name="herramienta_nueva"),
     path("herramientas/<int:pk>/", views.herramienta_detalle, name="herramienta"),
     path("herramientas/<int:pk>/evidencia/", views.herramienta_evidencia, name="herramienta_evidencia"),

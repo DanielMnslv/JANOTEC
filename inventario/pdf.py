@@ -2,7 +2,9 @@
 proveedor) y orden de compra, con el formato de los PDF de la plataforma."""
 import re
 from io import BytesIO
+from itertools import groupby
 
+from django.db.models import OuterRef, Prefetch, Subquery
 from django.utils import timezone
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
@@ -15,6 +17,105 @@ from reportlab.platypus.flowables import HRFlowable
 from comercial.pdf import BORDE, E, E_DERECHA, E_ETIQUETA, E_SECCION, GRIS, LINEAS_EMPRESA, PIE, TINTE_VERDE, VERDE, _logo, _p
 
 SECCIONES = [("aprobado", "Aprobado por el cliente"), ("adicional", "Adicionales para instalar")]
+
+
+def informe_herramientas_pdf(herramientas, fecha):
+    """Inventario registrado por responsable y última evidencia de cada asignación."""
+    from .herramientas import evidencias_vigentes
+    from .models import DetalleAuditoria, EntregaHerramienta, EvidenciaHerramienta
+    from .templatetags.inventario_extras import pesos
+
+    evidencia_id = evidencias_vigentes().filter(herramienta_id=OuterRef("pk")).values("pk")[:1]
+    registros = list(herramientas.annotate(evidencia_id=Subquery(evidencia_id)).prefetch_related(
+        Prefetch("entregas", queryset=EntregaHerramienta.objects.all()[:1], to_attr="ultimo_movimiento_pdf"),
+        Prefetch("auditorias", queryset=DetalleAuditoria.objects.select_related("auditoria")
+                 .order_by("-auditoria__fecha", "-pk")[:1], to_attr="ultima_revision_pdf"),
+    ))
+    evidencias = EvidenciaHerramienta.objects.select_related("registrado_por").in_bulk(
+        [h.evidencia_id for h in registros if h.evidencia_id],
+    )
+    registros.sort(key=lambda h: (h.tecnico_id is None, h.responsable.casefold(),
+                                 h.tecnico_id or 0, h.nombre.casefold(), h.pk))
+
+    salida = BytesIO()
+    doc = SimpleDocTemplate(salida, pagesize=landscape(letter), leftMargin=14 * mm, rightMargin=14 * mm,
+                            topMargin=13 * mm, bottomMargin=15 * mm, title="Herramientas de trabajo")
+    titulo = ParagraphStyle("InformeHerramientasTitulo", parent=E, fontName="Helvetica-Bold",
+                            fontSize=20, leading=24)
+    seccion = ParagraphStyle("InformeHerramientasResponsable", parent=E, fontName="Helvetica-Bold",
+                             fontSize=11, leading=15)
+    encabezado = Table([[_logo() or "JANOTEC", _p("Herramientas de trabajo", titulo)]],
+                       colWidths=[doc.width * .23, doc.width * .77])
+    encabezado.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+    contenido = [
+        encabezado, Spacer(1, 8),
+        _p(f"Corte del {fecha:%d/%m/%Y a las %H:%M} · {len(registros)} registros · "
+           f"{sum(h.cantidad for h in registros)} unidades"),
+        _p("Incluye todos los estados del inventario de herramientas. La evidencia corresponde a la última "
+           "foto registrada durante la asignación actual."),
+        Spacer(1, 14),
+    ]
+    for (_, responsable), grupo in groupby(registros, key=lambda h: (h.tecnico_id, h.responsable)):
+        grupo = list(grupo)
+        nombre_grupo = _p(f"{responsable or 'Bodega (sin responsable)'} · {len(grupo)} registros · "
+                          f"{sum(h.cantidad for h in grupo)} unidades", seccion)
+        filas = [[nombre_grupo, "", "", "", ""], [_p(texto, E_ETIQUETA) for texto in (
+            "Herramienta", "Cant.", "Estado y valor", "Último movimiento y auditoría", "Evidencia actual",
+        )]]
+        for h in grupo:
+            datos = [_p(h.nombre, E_ETIQUETA), _p(f"Marca: {h.marca or '—'} · Serial: {h.serial or '—'}")]
+            if h.descripcion:
+                datos.append(_p(h.descripcion))
+            control = []
+            if h.ultimo_movimiento_pdf:
+                movimiento = h.ultimo_movimiento_pdf[0]
+                control.append(_p(f"{movimiento.get_tipo_display()} · "
+                                  f"{timezone.localtime(movimiento.fecha):%d/%m/%Y}"))
+            if h.ultima_revision_pdf:
+                revision = h.ultima_revision_pdf[0]
+                control.append(_p(f"Auditoría {timezone.localtime(revision.auditoria.fecha):%d/%m/%Y} · "
+                                  f"{revision.get_resultado_display()}"))
+                if revision.nota:
+                    control.append(_p(revision.nota))
+            else:
+                control.append(_p("Sin auditar"))
+            evidencia = evidencias.get(h.evidencia_id)
+            if evidencia:
+                foto = ImagenPDF(BytesIO(bytes(evidencia.foto)), width=34 * mm, height=24 * mm, kind="proportional")
+                foto.hAlign = "LEFT"
+                fecha_evidencia = timezone.localtime(evidencia.fecha)
+                autor = f" · {evidencia.registrado_por}" if evidencia.registrado_por else ""
+                prueba = [_p(evidencia.get_condicion_display(), E_ETIQUETA),
+                          _p(f"{fecha_evidencia:%d/%m/%Y %H:%M}{autor}"), foto]
+                if evidencia.observaciones:
+                    prueba.append(_p(evidencia.observaciones))
+            else:
+                pendiente = h.tecnico_id and h.estado != h.Estado.BAJA
+                prueba = [_p("Pendiente de evidencia" if pendiente else "Sin asignación activa")]
+            filas.append([datos, _p(h.cantidad), [_p(h.get_estado_display()), _p(pesos(h.valor))], control, prueba])
+        tabla = Table(filas, colWidths=[doc.width * proporcion for proporcion in (.32, .06, .13, .22, .27)],
+                      repeatRows=2)
+        tabla.setStyle(TableStyle([
+            ("SPAN", (0, 0), (-1, 0)),
+            ("BACKGROUND", (0, 1), (-1, 1), TINTE_VERDE),
+            ("ROWBACKGROUNDS", (0, 2), (-1, -1), [colors.white, colors.HexColor("#f5f6f7")]),
+            ("LINEBELOW", (0, 1), (-1, 1), .5, BORDE),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        contenido.extend([tabla, Spacer(1, 12)])
+    if not registros:
+        contenido.append(_p("No hay herramientas registradas."))
+
+    def pie(canvas, documento):
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColor(GRIS)
+        canvas.drawString(documento.leftMargin, 9 * mm, "JANOTEC · Herramientas de trabajo")
+        canvas.drawRightString(documento.pagesize[0] - documento.rightMargin, 9 * mm, f"Página {documento.page}")
+
+    doc.build(contenido, onFirstPage=pie, onLaterPages=pie)
+    return salida.getvalue()
 
 
 def _firma(archivo, ancho):

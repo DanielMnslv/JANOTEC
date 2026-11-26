@@ -958,24 +958,34 @@ def herramienta_form(request, pk=None):
 @login_required
 @inventario_requerido
 def herramienta_detalle(request, pk):
+    from . import herramientas as srv
     from .forms import EvidenciaHerramientaForm
     from .models import Herramienta
 
     h = get_object_or_404(_herramientas_visibles(request.user), pk=pk)
     entregas = h.entregas.select_related("tecnico")
-    ultimo_movimiento = entregas.first()
-    evidencia = None
-    if h.tecnico_id and h.estado != Herramienta.Estado.BAJA:
-        vigentes = h.evidencias.filter(tecnico_id=h.tecnico_id)
-        if ultimo_movimiento:
-            vigentes = vigentes.filter(fecha__gte=ultimo_movimiento.fecha)
-        evidencia = vigentes.defer("foto").select_related("registrado_por").first()
+    evidencia = srv.evidencias_vigentes().filter(herramienta=h).defer("foto").select_related("registrado_por").first()
     return render(request, "inventario/herramienta.html", {
         "h": h, "entregas": entregas, "tecnicos": tecnicos(),
         "revisiones": h.auditorias.select_related("auditoria").order_by("-auditoria__fecha"),
         "evidencia": evidencia,
         "form_evidencia": EvidenciaHerramientaForm() if h.tecnico_id and h.estado != Herramienta.Estado.BAJA else None,
     })
+
+
+@login_required
+@gestion_requerida
+def herramientas_pdf(request):
+    from django.utils import timezone
+
+    from .pdf import informe_herramientas_pdf
+
+    fecha = timezone.localtime()
+    contenido = informe_herramientas_pdf(_herramientas_visibles(request.user), fecha)
+    respuesta = HttpResponse(contenido, content_type="application/pdf")
+    respuesta["Content-Disposition"] = f'attachment; filename="herramientas-{fecha:%Y-%m-%d}.pdf"'
+    respuesta["Cache-Control"] = "private, no-store"
+    return respuesta
 
 
 @login_required
