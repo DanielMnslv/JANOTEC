@@ -68,7 +68,8 @@
 
   const formularios = [...document.querySelectorAll('form')].filter(aplica);
   formularios.forEach(function (form, i) {
-    const clave = 'auto:' + usuario + ':' + ruta + location.search + '#' + (form.id || i);
+    const version = form.dataset.versionBorrador;
+    const clave = 'auto:' + usuario + ':' + ruta + location.search + '#' + (form.id || i) + (version ? ':' + version : '');
     const conErrores = hayErrores(form);
     let listo = false, pendiente = null;
 
@@ -100,7 +101,10 @@
       clearTimeout(pendiente); pendiente = null;
       if (!listo) return;
       const datos = tomar();
-      if (JSON.stringify(datos.valores) === inicial && !Object.keys(datos.archivos).length) return;
+      if (JSON.stringify(datos.valores) === inicial && !Object.keys(datos.archivos).length) {
+        if (version) borrar(clave).catch(function () {});
+        return;
+      }
       if (vacio(datos)) { borrar(clave).catch(function () {}); return; }
       escribir(clave, datos).catch(function () { /* memoria del navegador llena o bloqueada */ });
     }
@@ -121,7 +125,12 @@
         const boton = form.querySelector('[data-agregar-fila="' + prefijo + '"], .agregar-fila[data-prefijo="' + prefijo + '"]')
           || document.querySelector('[data-agregar-fila="' + prefijo + '"]');
         let vueltas = 0;
-        while (total && boton && parseInt(total.value, 10) < datos.filas[prefijo] && vueltas++ < 60) boton.click();
+        const limite = version ? 1000 : 60;
+        while (total && boton && parseInt(total.value, 10) < datos.filas[prefijo] && vueltas++ < limite) {
+          const antes = total.value;
+          boton.click();
+          if (total.value === antes) break;
+        }
       });
       editables(form).forEach(function (c) {
         const v = datos.valores[c.name];
@@ -168,6 +177,8 @@
     window.addEventListener('pagehide', guardar);
     form.addEventListener('submit', function () {
       guardar();
+      // Los formularios versionados cambian de clave cuando el servidor guarda.
+      if (version) return;
       try { sessionStorage.setItem(ENVIADO, JSON.stringify({ clave: clave, ruta: ruta })); } catch (e) { /* nada */ }
     });
   });
