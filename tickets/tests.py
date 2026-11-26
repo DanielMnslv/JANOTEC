@@ -1136,7 +1136,7 @@ class EtapasEInformeTests(ActaBase):
         self.assertEqual(self.ticket.estado, E.INFORME)
         actual = [e for e in etapas.etapas_cliente(self.ticket) if e["estado"] == "actual"]
         self.assertEqual(actual[0]["clave"], "informe")
-        self.assertContains(self.client.get(self.ticket.get_absolute_url()), "Pasar a comercial para la propuesta")
+        self.assertContains(self.client.get(self.ticket.get_absolute_url()), "Pasar a Administrativo para la propuesta")
 
     def test_diagnostico_tambien_lleva_informe(self):
         from . import etapas
@@ -2141,6 +2141,26 @@ class InformeBorradorTests(BaseTickets):
         self.assertEqual(self.ticket.estado, E.VISITA_EJECUTADA)
         adj = Adjunto.objects.get(ticket=self.ticket, es_informe=True)
         self.assertEqual(adj.nombre_original, f"Informe_tecnico_{self.ticket.radicado}.pdf")
+
+    def test_coordinador_corrige_su_informe_aprobado_antes_de_entregar(self):
+        from . import informe
+        from .models import InformeBorrador
+
+        borrador = informe.generar(self.ticket, self.supervisor)
+        informe.aprobar(borrador, self.direccion)
+        self.client.force_login(self.agente)
+        self.assertEqual(self.client.post(self.url, {"accion": "reabrir"}).status_code, 403)
+        self.client.force_login(self.supervisor)
+        self.assertContains(self.client.get(self.ticket.get_absolute_url()), "Editar informe aprobado")
+        self.assertRedirects(self.client.post(self.url, {"accion": "reabrir"}), self.url)
+        borrador.refresh_from_db()
+        self.assertEqual(borrador.estado, InformeBorrador.Estado.BORRADOR)
+        datos = {"destinatario": "Empresa A", "asunto": "Informe corregido", "introduccion": "B",
+                 "actividades": "C", "conclusiones": "Conclusiones corregidas", "accion": "guardar"}
+        self.client.post(self.url, datos)
+        borrador.refresh_from_db()
+        self.assertEqual(borrador.conclusiones, "Conclusiones corregidas")
+        self.assertFalse(borrador.aprobado)
 
     def test_reabrir_y_sin_acta_no_hay_borrador(self):
         self.client.force_login(self.direccion)

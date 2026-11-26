@@ -148,7 +148,7 @@
           {% include "tickets/_campo.html" with campo=form.copia_correo %}
           {% if not ticket %}
           {% elif ticket.ficha.etapa == 'levantamiento' %}
-            <div class="alert alert-info small py-2"><i class="bi bi-info-circle"></i> Visita de levantamiento: después de guardar el acta, diligencie el <b>informe del requerimiento</b> (qué necesita el cliente y los materiales y equipos). Con ese informe el ticket vuelve al área comercial para la propuesta.</div>
+            <div class="alert alert-info small py-2"><i class="bi bi-info-circle"></i> Visita de levantamiento: después de guardar el acta, diligencie el <b>informe del requerimiento</b> (qué necesita el cliente y los materiales y equipos). Con ese informe el ticket pasa al área Administrativa para la propuesta.</div>
           {% else %}{% include "tickets/_campo.html" with campo=form.marcar_resuelto %}{% endif %}
           {{ form.latitud }}{{ form.longitud }}
           <div class="small text-muted-jn" id="estado-gps"><i class="bi bi-geo-alt"></i> Obteniendo la ubicación de la visita…</div>

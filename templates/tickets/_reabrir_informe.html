@@ -1,0 +1,5 @@
+<form method="post" class="d-inline" action="{% url 'informe_borrador' ticket.radicado %}"
+      onsubmit="return confirm('El informe volverá a borrador y deberá aprobarse de nuevo. ¿Continuar?')">
+  {% csrf_token %}
+  <button class="btn btn-outline-primary btn-sm" name="accion" value="reabrir"><i class="bi bi-pencil-square"></i> Editar informe aprobado</button>
+</form>
