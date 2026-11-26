@@ -68,9 +68,9 @@
           <button type="button" class="btn btn-sm btn-light border" id="agregar-linea" data-agregar-fila="lineas"><i class="bi bi-plus-lg"></i> Agregar ítem</button></div>
         {# Cada ítem es un bloque que cabe en el ancho: nada de barra horizontal para llegar al costo o al IVA #}
         <style>
-          #tabla-lineas, #tabla-lineas tbody { display: block; width: 100%; counter-reset: item; }
+          #tabla-lineas { display: block; width: 100%; counter-reset: item; }
           .items-ancho { container-type: inline-size; }
-          #tabla-lineas tr.linea { display: grid; gap: .35rem .5rem; padding: .65rem .75rem; border-bottom: 1px solid var(--bs-border-color);
+          #tabla-lineas .linea { display: grid; gap: .35rem .5rem; padding: .65rem .75rem; border-bottom: 1px solid var(--bs-border-color);
             grid-template-columns: 1.6rem 1.15fr .8fr 1.25fr .7fr .7fr 1.1fr;
             grid-template-areas: "num desc desc desc desc desc quitar"
                                  ".   prov prov marca marca ref ref"
@@ -78,13 +78,13 @@
           #tabla-lineas input[type=number] { -moz-appearance: textfield; appearance: textfield; text-align: right; }
           #tabla-lineas input[type=number]::-webkit-inner-spin-button, #tabla-lineas input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
           @container (max-width: 620px) {  /* columna angosta: los números en dos renglones de a tres */
-            #tabla-lineas tr.linea { grid-template-columns: 1.6rem 1fr 1fr 1fr;
+            #tabla-lineas .linea { grid-template-columns: 1.6rem 1fr 1fr 1fr;
               grid-template-areas: "num desc desc quitar" ". prov prov prov" ". marca ref ref" ". cat cant valor" ". descu iva total"; }
           }
-          #tabla-lineas tr.linea:nth-child(even) { background: var(--bs-tertiary-bg); }
-          #tabla-lineas td { display: block; border: 0; padding: 0; background: transparent; min-width: 0; }
+          #tabla-lineas .linea:nth-child(even) { background: var(--bs-tertiary-bg); }
+          #tabla-lineas .campo-item { display: block; border: 0; padding: 0; background: transparent; min-width: 0; }
           #tabla-lineas .et { display: block; font-size: .72rem; color: var(--bs-secondary-color); margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-          #tabla-lineas td .form-control, #tabla-lineas td .form-select, #tabla-lineas td select, #tabla-lineas td input:not([type=checkbox]) { width: 100%; min-width: 0; }
+          #tabla-lineas .campo-item .form-control, #tabla-lineas .campo-item .form-select, #tabla-lineas .campo-item select, #tabla-lineas .campo-item input:not([type=checkbox]) { width: 100%; min-width: 0; }
           #tabla-lineas .c-num { grid-area: num; align-self: end; padding-bottom: .35rem; font-weight: 600; color: var(--bs-secondary-color); }
           #tabla-lineas .c-num::after { counter-increment: item; content: counter(item) "."; }
           #tabla-lineas .c-desc { grid-area: desc; } #tabla-lineas .c-quitar { grid-area: quitar; align-self: end; padding-bottom: .35rem; }
@@ -93,15 +93,13 @@
           #tabla-lineas .c-descu { grid-area: descu; } #tabla-lineas .c-iva { grid-area: iva; }
           #tabla-lineas .c-total { grid-area: total; } #tabla-lineas .c-total .subtotal { padding-top: .3rem; }
           @media (max-width: 575.98px) {  /* celular: un campo por renglón, de a dos los números */
-            #tabla-lineas tr.linea { grid-template-columns: 1.5rem 1fr 1fr;
+            #tabla-lineas .linea { grid-template-columns: 1.5rem 1fr 1fr;
               grid-template-areas: "num desc desc" ". prov prov" ". marca ref" ". cat cant" ". valor descu" ". iva total" ". quitar quitar"; }
           }
         </style>
-        <div class="items-ancho"><table class="table table-sm align-middle mb-0 small" id="tabla-lineas">
-          <tbody>
+        <div class="items-ancho"><div class="small" id="tabla-lineas">
             {% for f in lineas %}{% include "comercial/_linea_cotizacion.html" %}{% endfor %}
-          </tbody>
-        </table></div>
+        </div></div>
         <template id="plantilla-linea">{% with f=lineas.empty_form %}{% include "comercial/_linea_cotizacion.html" %}{% endwith %}</template>
         {% if lineas.non_form_errors %}<div class="card-body text-danger small">{{ lineas.non_form_errors }}</div>{% endif %}
         {% if not lineas.forms %}<div class="card-body small text-muted-jn" id="sin-lineas">Agregue ítems del catálogo o tráigalos del informe.</div>{% endif %}
@@ -177,7 +175,7 @@
 (function () {
   const catalogo = {};
   JSON.parse(document.getElementById('datos-catalogo').textContent).forEach(function (c) { catalogo[c.descripcion.toLowerCase()] = c; });
-  const tabla = document.querySelector('#tabla-lineas tbody');
+  const tabla = document.getElementById('tabla-lineas');
   const total = document.getElementById('id_lineas-TOTAL_FORMS');
   const pesos = function (v) { return '$' + Math.round(v).toLocaleString('es-CO'); };
   const num = function (el) { return parseFloat((el && el.value) || '0') || 0; };
@@ -209,7 +207,7 @@
     let costo = 0;
     const enCanon = m !== 'hibrido';
     const a = {bienes: 0, iva: 0, mano: 0};
-    tabla.querySelectorAll('tr.linea').forEach(function (tr) {
+    tabla.querySelectorAll('.linea').forEach(function (tr) {
       revisarCatalogo(tr);
       const borrar = tr.querySelector('input[type=checkbox][name$=DELETE]');
       const costoLinea = num(tr.querySelector('.cantidad')) * num(tr.querySelector('.valor'));
@@ -279,7 +277,7 @@
       recalcular();
     });
   }
-  tabla.querySelectorAll('tr.linea').forEach(activar);
+  tabla.querySelectorAll('.linea').forEach(activar);
   document.getElementById('agregar-linea').addEventListener('click', function () {
     const n = parseInt(total.value, 10);
     const html = document.getElementById('plantilla-linea').innerHTML.replace(/__prefix__/g, n);
