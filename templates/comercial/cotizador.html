@@ -81,6 +81,7 @@
             #tabla-lineas .linea { grid-template-columns: 1.6rem 1fr 1fr 1fr;
               grid-template-areas: "num desc desc quitar" ". prov prov prov" ". marca ref ref" ". cat cant valor" ". descu iva total"; }
           }
+          #tabla-lineas .linea[hidden] { display: none; }
           #tabla-lineas .linea:nth-child(even) { background: var(--bs-tertiary-bg); }
           #tabla-lineas .campo-item { display: block; border: 0; padding: 0; background: transparent; min-width: 0; }
           #tabla-lineas .et { display: block; font-size: .72rem; color: var(--bs-secondary-color); margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -215,7 +216,10 @@
       const tasa = num(tr.querySelector('.iva')) / 100;
       const desc = bruto * num(tr.querySelector('.descuento')) / 100, base = bruto - desc, iva = base * tasa;
       tr.querySelector('.subtotal').textContent = pesos(base);
-      tr.classList.toggle('text-decoration-line-through', !!(borrar && borrar.checked));
+      tr.hidden = Boolean(borrar && borrar.checked);
+      tr.querySelectorAll('input:not([type=hidden]):not([name$=DELETE]), select').forEach(function (campo) {
+        campo.disabled = tr.hidden;
+      });
       if (borrar && borrar.checked) return;
       costo += costoLinea;
       t.bruto += bruto; t.descuento += desc; t.base += base; t.iva += iva; t.ahorro += desc * (1 + tasa);
@@ -257,6 +261,12 @@
   });
   function activar(tr) {
     const desc = tr.querySelector('.descripcion');
+    const quitar = tr.querySelector('.quitar-item');
+    if (quitar) quitar.addEventListener('click', function () {
+      tr.querySelector('input[name$=DELETE]').checked = true;
+      recalcular();
+      document.getElementById('agregar-linea').focus();
+    });
     desc.addEventListener('change', function () {
       const c = catalogo[desc.value.trim().toLowerCase()];
       if (!c) return;
