@@ -975,15 +975,29 @@ def herramienta_detalle(request, pk):
 
 @login_required
 @gestion_requerida
-def herramientas_pdf(request):
+def exportar_herramientas_tecnico(request, pk, formato):
     from django.utils import timezone
+    from django.utils.text import slugify
 
-    from .pdf import informe_herramientas_pdf
+    from .models import Herramienta
 
+    tecnico = get_object_or_404(Usuario, pk=pk)
+    responsable = tecnico.get_full_name() or tecnico.username
     fecha = timezone.localtime()
-    contenido = informe_herramientas_pdf(_herramientas_visibles(request.user), fecha)
-    respuesta = HttpResponse(contenido, content_type="application/pdf")
-    respuesta["Content-Disposition"] = f'attachment; filename="herramientas-{fecha:%Y-%m-%d}.pdf"'
+    registros = _herramientas_visibles(request.user).filter(tecnico=tecnico).exclude(estado=Herramienta.Estado.BAJA)
+    if formato == "pdf":
+        from .pdf import informe_herramientas_pdf
+
+        contenido = informe_herramientas_pdf(registros, fecha, responsable)
+        tipo = "application/pdf"
+    else:
+        from .excel_herramientas import herramientas_excel
+
+        contenido = herramientas_excel(registros, fecha, responsable)
+        tipo = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    respuesta = HttpResponse(contenido, content_type=tipo)
+    nombre = slugify(responsable) or f"tecnico-{pk}"
+    respuesta["Content-Disposition"] = f'attachment; filename="herramientas-{nombre}-{fecha:%Y-%m-%d}.{formato}"'
     respuesta["Cache-Control"] = "private, no-store"
     return respuesta
 

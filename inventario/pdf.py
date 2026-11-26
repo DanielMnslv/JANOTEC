@@ -19,7 +19,7 @@ from comercial.pdf import BORDE, E, E_DERECHA, E_ETIQUETA, E_SECCION, GRIS, LINE
 SECCIONES = [("aprobado", "Aprobado por el cliente"), ("adicional", "Adicionales para instalar")]
 
 
-def informe_herramientas_pdf(herramientas, fecha):
+def informe_herramientas_pdf(herramientas, fecha, responsable):
     """Inventario registrado por responsable y última evidencia de cada asignación."""
     from .herramientas import evidencias_vigentes
     from .models import DetalleAuditoria, EntregaHerramienta, EvidenciaHerramienta
@@ -49,10 +49,11 @@ def informe_herramientas_pdf(herramientas, fecha):
     encabezado.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
     contenido = [
         encabezado, Spacer(1, 8),
+        _p(f"Responsable: {responsable}", E_ETIQUETA),
         _p(f"Corte del {fecha:%d/%m/%Y a las %H:%M} · {len(registros)} registros · "
            f"{sum(h.cantidad for h in registros)} unidades"),
-        _p("Incluye todos los estados del inventario de herramientas. La evidencia corresponde a la última "
-           "foto registrada durante la asignación actual."),
+        _p("Herramientas asignadas al responsable. La evidencia corresponde a la última foto registrada "
+           "durante la asignación actual."),
         Spacer(1, 14),
     ]
     for (_, responsable), grupo in groupby(registros, key=lambda h: (h.tecnico_id, h.responsable)):

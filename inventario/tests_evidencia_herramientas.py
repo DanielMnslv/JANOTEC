@@ -63,19 +63,42 @@ class EvidenciaHerramientasTests(TestCase):
         self.assertEqual(self.subir_foto(self.tecnico, archivo).status_code, 302)
         self.assertFalse(EvidenciaHerramienta.objects.exists())
 
-    def test_pdf_completo_incluye_evidencia_y_protege_la_descarga(self):
+    def test_descargas_por_tecnico_incluyen_solo_sus_herramientas_activas(self):
+        from openpyxl import load_workbook
         from pypdf import PdfReader
 
         self.subir_foto(self.tecnico)
-        url = reverse("inventario:herramientas_pdf")
-        self.assertEqual(self.client.get(url).status_code, 403)
-        Herramienta.objects.create(nombre="Taladro fuera de servicio", estado=Herramienta.Estado.BAJA)
+        pdf_url = reverse("inventario:herramientas_tecnico_pdf", args=[self.tecnico.pk])
+        excel_url = reverse("inventario:herramientas_tecnico_excel", args=[self.tecnico.pk])
+        for url in (pdf_url, excel_url):
+            self.assertEqual(self.client.get(url).status_code, 403)
+        Herramienta.objects.create(nombre="Taladro fuera de servicio", estado=Herramienta.Estado.BAJA,
+                                   tecnico=self.tecnico)
+        Herramienta.objects.create(nombre="Martillo de otro técnico", tecnico=self.otro)
         self.client.force_login(self.bodega)
-        respuesta = self.client.get(url, {"tecnico": self.tecnico.pk, "q": "no coincide"})
+        listado = self.client.get(reverse("inventario:herramientas"))
+        self.assertContains(listado, pdf_url)
+        self.assertContains(listado, excel_url)
+        self.assertNotContains(listado, "Descargar PDF completo")
+        respuesta = self.client.get(pdf_url, {"tecnico": self.otro.pk, "q": "no coincide"})
         self.assertEqual(respuesta.status_code, 200)
         self.assertIn("attachment", respuesta.headers["Content-Disposition"])
         pdf = PdfReader(BytesIO(respuesta.content))
         texto = "\n".join(pagina.extract_text() for pagina in pdf.pages)
-        for esperado in ("Probador", "Con desgaste", "Marca en la carcasa.", "Taladro fuera de servicio", "2 registros"):
+        for esperado in ("Probador", "Responsable: asignado", "Con desgaste", "Marca en la carcasa.", "1 registros"):
             self.assertIn(esperado, texto)
+        self.assertNotIn("Taladro fuera de servicio", texto)
+        self.assertNotIn("Martillo de otro técnico", texto)
         self.assertTrue(any(imagen.image.size == (40, 25) for pagina in pdf.pages for imagen in pagina.images))
+
+        respuesta = self.client.get(excel_url)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn("herramientas-asignado-", respuesta.headers["Content-Disposition"])
+        libro = load_workbook(BytesIO(respuesta.content), read_only=True)
+        hoja = libro.active
+        self.assertEqual(hoja["A2"].value, "Responsable: asignado")
+        self.assertEqual(hoja.max_row, 5)
+        self.assertEqual(hoja["A5"].value, "Probador")
+        self.assertEqual(hoja["D5"].value, 1)
+        self.assertEqual(hoja["H5"].value, "Con desgaste")
+        libro.close()
