@@ -86,8 +86,8 @@ def calcular(ticket):
         if clave == "informe" and not (lleva_informe or levantamiento):
             continue
         if clave == "cierre" and levantamiento:
-            nombre, hacer, quien = ("Devolver a comercial", "Enviar el informe del requerimiento y devolver el ticket al "
-                                    "área comercial para la propuesta.", "Técnico")
+            nombre, hacer, quien = ("Pasar a Administrativo", "Enviar el informe del requerimiento y pasar el ticket al "
+                                    "área Administrativa para la propuesta.", "Técnico")
             hecho["cierre"] = False
         omitido = omitidos.get(clave)
         listo = hecho[clave] or omitido is not None
@@ -166,7 +166,7 @@ def siguiente(ticket, usuario):
     if le_toca:
         ruta, boton = _BOTON[p["clave"]]
         if p["clave"] == "cierre" and info["levantamiento"]:
-            boton = "Devolver a comercial"
+            boton = "Pasar a Administrativo"
         url = reverse(ruta) if ruta == "cronograma:semana" else reverse(ruta, args=[ticket.radicado])
     return {"nombre": p["nombre"], "quien": quien, "numero": p["numero"], "total": info["total"], "url": url, "boton": boton,
             "post": p["clave"] == "recepcion" and le_toca}

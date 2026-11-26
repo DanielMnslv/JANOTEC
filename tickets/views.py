@@ -409,10 +409,18 @@ def ticket_detalle(request, radicado):
         from . import informe as inf
 
         contexto["borrador"] = inf.vigente(ticket)
+        contexto["puede_reabrir_informe"] = _puede_reabrir_informe(request.user, contexto["borrador"])
         contexto["tipo_sugerido"] = inf.tipo_sugerido(ticket)
         contexto["es_instalacion"] = inf.es_instalacion(ticket)
-        # «Si pasa a comercial»: la misma tabla de equipos y materiales del informe, ya llena con sus filas
+        # «Si pasa a Administrativo»: la misma tabla de equipos y materiales del informe, ya llena con sus filas
         contexto["filas_requeridas"] = _filas_para_editar(contexto["borrador"]) if contexto["borrador"] else []
+    elif _puede_entregar_informe(request.user, ticket):
+        from . import informe as inf
+
+        informe_entregado = inf.vigente(ticket)
+        if informe_entregado and (informe_entregado.correccion_de_id or
+                                  _puede_corregir_informe_entregado(request.user, ticket, informe_entregado)):
+            contexto["informe_entregado"] = informe_entregado
     if contexto["es_levantamiento"]:
         from comercial.forms import InformeForm
         b = contexto.get("borrador")
@@ -634,7 +642,7 @@ def gestionar(request, radicado):
             # Pasa al área comercial de verdad: ficha comercial e informe del requerimiento con lo que escribió
             from comercial.servicios import pasar_a_propuesta
             pasar_a_propuesta(ticket, request.user, mensaje or ticket.descripcion)
-            messages.info(request, f"{ticket.radicado} pasó al área comercial para la propuesta.")
+            messages.info(request, f"{ticket.radicado} pasó al área Administrativa para la propuesta.")
         elif d["estado"] != ticket.estado:
             seg_estado = ticket.cambiar_estado(
                 d["estado"], request.user, mensaje if not interno else "", interno=False
@@ -1226,7 +1234,7 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
                          extra_tags="acta-guardada")  # borra el borrador del dispositivo (borrador_acta.js)
         if levantamiento:
             # El acta es la constancia de la visita; lo que cotiza comercial es el informe del requerimiento
-            messages.info(request, "Ahora diligencie el informe del requerimiento para devolverlo al área comercial.")
+            messages.info(request, "Ahora diligencie el informe del requerimiento para enviarlo al área Administrativa.")
             return redirect(reverse("ticket_detalle", args=[ticket.radicado]) + "#informe-requerimiento")
         return redirect(acta)
 
@@ -1618,7 +1626,7 @@ def entregar_informe(request, radicado):
                 # Lo que se cotiza ya está en la tabla del informe: pasa tal cual, sin escribirlo otra vez
                 servicios_txt, materiales_txt = borrador.servicios.strip(), borrador.materiales_para_comercial()
             else:
-                # Sin tabla en el informe: la de «Si pasa a comercial» (escrita o leída del archivo subido)
+                # Sin tabla en el informe: la de «Si pasa a Administrativo» (escrita o leída del archivo subido)
                 suministros, servicios_txt, imagenes = _tabla_requeridos(request)
                 servicios_txt = servicios_txt or request.POST.get("servicios", "").strip()
                 materiales_txt = (InformeBorrador(suministros=suministros).materiales_para_comercial()
@@ -1627,12 +1635,12 @@ def entregar_informe(request, radicado):
                     _guardar_tabla_en_informe(borrador, suministros, servicios_txt, imagenes)
             if not servicios_txt and not materiales_txt:
                 transaction.set_rollback(True)
-                messages.error(request, "Para pasar a comercial escriba los servicios a cotizar, los materiales y equipos a "
+                messages.error(request, "Para pasar a Administrativo escriba los servicios a cotizar, los materiales y equipos a "
                                         "suministrar, o ambos (con ellos se arma la propuesta y bodega alista lo aprobado).")
                 return redirect(ticket)
             com.pasar_a_propuesta(ticket, request.user, nota or "Ver el informe técnico adjunto.",
                                   servicios=servicios_txt, materiales=materiales_txt)
-            messages.success(request, f"Informe entregado: {ticket.radicado} pasó al área comercial para la propuesta.")
+            messages.success(request, f"Informe entregado: {ticket.radicado} pasó al área Administrativa para la propuesta.")
         else:
             seg_estado = ticket.cambiar_estado(
                 E.VISITA_EJECUTADA, request.user,
@@ -1646,7 +1654,7 @@ def entregar_informe(request, radicado):
 @personal_requerido
 @require_POST
 def leer_materiales_informe(request, radicado):
-    """Lee la tabla de equipos y materiales del informe subido (Word o PDF) para llenar «Si pasa a comercial».
+    """Lee la tabla de equipos y materiales del informe subido (Word o PDF) para llenar «Si pasa a Administrativo».
 
     Responde JSON {filas, mensaje}; no guarda nada: la persona revisa la tabla antes de pasarla a comercial."""
     from django.http import JsonResponse
@@ -1665,13 +1673,13 @@ def leer_materiales_informe(request, radicado):
             return JsonResponse({"filas": [], "mensaje": str(e)})
         if filas:
             return JsonResponse({"filas": filas, "mensaje": f"Se trajeron {len(filas)} fila(s) de «{archivo.name}». "
-                                                            "Revíselas antes de pasar a comercial."})
+                                                            "Revíselas antes de pasar a Administrativo."})
     return JsonResponse({"filas": [], "mensaje": "No se encontró la tabla de equipos y materiales en el archivo: "
                                                  "escríbala en la tabla."})
 
 
 def _guardar_tabla_en_informe(borrador, suministros, servicios, imagenes):
-    """Lo ajustado en «Si pasa a comercial» queda también en la tabla del informe, para que ambos digan lo mismo.
+    """Lo ajustado en «Si pasa a Administrativo» queda también en la tabla del informe, para que ambos digan lo mismo.
 
     Solo si el informe aún no está aprobado (el aprobado ya es un documento oficial y no se toca)."""
     from .models import ImagenEquipoInforme
@@ -1699,6 +1707,36 @@ def _borrador_o_404(ticket):
 def _informe_abierto(ticket):
     """El borrador se trabaja con el ticket en «Informe en elaboración» o en el levantamiento pedido por comercial."""
     return ticket.estado == E.INFORME or _es_levantamiento(ticket)
+
+
+def _puede_reabrir_informe(usuario, borrador):
+    return bool(borrador and borrador.aprobado and (
+        usuario.es_direccion or (usuario.es_coordinador and
+                                 usuario.pk in (borrador.creado_por_id, borrador.aprobado_por_id))
+    ))
+
+
+def _puede_corregir_informe_entregado(usuario, ticket, borrador):
+    if not borrador or _informe_abierto(ticket):
+        return False
+    urgentes = ticket.seguimientos.filter(interno=True, mensaje__startswith="Entrega urgente sin aprobación de dirección.")
+    responsable = usuario.es_direccion or (usuario.es_coordinador and (
+        usuario.pk in (borrador.creado_por_id, borrador.aprobado_por_id) or urgentes.filter(autor=usuario).exists()
+    ))
+    return responsable and (urgentes.exists() or ticket.adjuntos.filter(es_informe=True).exists())
+
+
+def _ticket_para_informe(usuario, radicado):
+    try:
+        return obtener_ticket(usuario, radicado)
+    except Http404:
+        if usuario.es_coordinador:
+            from . import informe as inf
+
+            ticket = Ticket.objects.filter(radicado=radicado).first()
+            if ticket and _puede_corregir_informe_entregado(usuario, ticket, inf.vigente(ticket)):
+                return ticket
+        raise
 
 
 def _guardar_zonas(request, borrador):
@@ -1774,13 +1812,25 @@ def informe_borrador(request, radicado):
     lo aprueba (pasa a limpio) o lo devuelve con observaciones. Aprobado, se entrega o pasa a comercial."""
     from . import informe as inf
 
-    ticket = obtener_ticket(request.user, radicado)
+    ticket = _ticket_para_informe(request.user, radicado)
     if not _puede_entregar_informe(request.user, ticket):
         raise PermissionDenied
     borrador = inf.vigente(ticket)
-    en_informe = _informe_abierto(ticket)
+    puede_corregir_entregado = _puede_corregir_informe_entregado(request.user, ticket, borrador)
+    es_correccion = bool(borrador and borrador.correccion_de_id)
+    en_informe = _informe_abierto(ticket) or (es_correccion and puede_corregir_entregado)
     if request.method == "POST":
         accion = request.POST.get("accion")
+        if accion == "corregir_entregado":
+            with transaction.atomic():
+                actual_ticket = Ticket.objects.select_for_update().get(pk=ticket.pk)
+                actual = inf.vigente(actual_ticket)
+                if not _puede_corregir_informe_entregado(request.user, actual_ticket, actual):
+                    raise PermissionDenied
+                if actual.aprobado or not actual.correccion_de_id:
+                    inf.copiar_para_corregir(actual, request.user)
+                    messages.success(request, "Versión de corrección creada. El informe entregado se conserva.")
+            return redirect("informe_borrador", radicado)
         if not en_informe:
             messages.error(request, "El borrador se trabaja mientras el ticket está «Informe en elaboración» o en el levantamiento.")
             return redirect(ticket)
@@ -1801,19 +1851,25 @@ def informe_borrador(request, radicado):
             return redirect("informe_borrador", radicado)
         if borrador is None:
             return redirect(ticket)
-        if accion == "reabrir" and borrador.aprobado and request.user.es_direccion:
-            borrador.estado = InformeBorrador.Estado.BORRADOR
-            borrador.save(update_fields=["estado", "actualizado"])
-            Seguimiento.objects.create(ticket=ticket, autor=request.user, tipo=Seguimiento.Tipo.NOTA_INTERNA, interno=True,
-                                       mensaje="Devolvió el informe técnico a borrador para corregirlo.")
+        if accion == "reabrir":
+            if not _informe_abierto(ticket) or not _puede_reabrir_informe(request.user, borrador):
+                raise PermissionDenied
+            with transaction.atomic():
+                borrador.estado = InformeBorrador.Estado.BORRADOR
+                borrador.save(update_fields=["estado", "actualizado"])
+                Seguimiento.objects.create(ticket=ticket, autor=request.user, tipo=Seguimiento.Tipo.NOTA_INTERNA,
+                                           interno=True, mensaje="Devolvió el informe técnico a borrador para corregirlo.")
             messages.info(request, "El informe volvió a borrador: ya se puede corregir.")
             return redirect("informe_borrador", radicado)
         if borrador.aprobado:
-            messages.error(request, "El informe ya está aprobado. Para corregirlo, dirección debe devolverlo a borrador.")
+            messages.error(request, "El informe ya está aprobado. Use «Editar informe aprobado» para volver a borrador.")
             return redirect("informe_borrador", radicado)
         if borrador.en_revision and not request.user.es_direccion:
             messages.error(request, "El informe está en revisión de dirección: solo dirección lo corrige, lo aprueba o lo devuelve.")
             return redirect("informe_borrador", radicado)
+        if (accion == "aprobar" and not request.user.es_direccion
+                or accion == "enviar" and not request.user.es_supervisor):
+            raise PermissionDenied
         if accion == "devolver":
             if not (request.user.es_direccion and borrador.en_revision):
                 raise PermissionDenied
@@ -1848,9 +1904,6 @@ def informe_borrador(request, radicado):
             for e in errores:
                 messages.warning(request, e)
             if accion in ("enviar", "aprobar") and not errores:
-                # Coordinación lo envía a dirección; solo dirección lo aprueba
-                if not (request.user.es_direccion if accion == "aprobar" else request.user.es_supervisor):
-                    raise PermissionDenied
                 if borrador.es_estudio and not (borrador.suministros.strip() or borrador.servicios.strip()):
                     messages.error(request, "Antes de enviarlo o aprobarlo escriba los equipos y materiales requeridos, los "
                                             "servicios, o ambos: con ellos administrativa arma la propuesta.")
@@ -1858,16 +1911,18 @@ def informe_borrador(request, radicado):
                 if accion == "enviar":
                     inf.enviar_a_direccion(borrador, request.user)
                     messages.success(request, "Informe enviado a dirección para su revisión y aprobación.")
-                    return redirect(ticket)
+                    return redirect("informe_borrador", radicado) if es_correccion else redirect(ticket)
                 inf.aprobar(borrador, request.user)
                 Seguimiento.objects.create(ticket=ticket, autor=request.user, tipo=Seguimiento.Tipo.NOTA_INTERNA, interno=True,
-                                           mensaje="Aprobó el informe técnico y lo pasó a limpio: ya se puede entregar.")
+                                           mensaje=("Aprobó la versión corregida del informe técnico." if es_correccion else
+                                                    "Aprobó el informe técnico y lo pasó a limpio: ya se puede entregar."))
                 from . import notificaciones as notif
                 notif.informe_revisado(borrador, request.user, aprobado=True)
-                messages.success(request, "Informe aprobado y pasado a limpio. Ahora elija a quién se entrega."
+                messages.success(request, "Versión corregida aprobada. Puede descargar el PDF desde el informe."
+                                 if es_correccion else "Informe aprobado y pasado a limpio. Ahora elija a quién se entrega."
                                  if not _es_levantamiento(ticket) else
-                                 "Informe aprobado y pasado a limpio. Ya puede devolver el levantamiento al área comercial.")
-                return redirect(ticket)
+                                 "Informe aprobado y pasado a limpio. Ya puede enviar el levantamiento al área Administrativa.")
+                return redirect("informe_borrador", radicado) if es_correccion else redirect(ticket)
             if not errores:
                 messages.success(request, "Cambios del borrador guardados.")
             return redirect("informe_borrador", radicado)
@@ -1880,6 +1935,9 @@ def informe_borrador(request, radicado):
         "zonas": borrador.zonas.prefetch_related("fotos") if borrador.es_estudio else [],
         "filas_requeridas": _filas_para_editar(borrador), "es_instalacion": inf.es_instalacion(ticket),
         "puede_aprobar": request.user.es_direccion,
+        "puede_corregir_entregado": puede_corregir_entregado and (not es_correccion or borrador.aprobado),
+        "es_correccion": es_correccion,
+        "puede_reabrir_informe": _informe_abierto(ticket) and _puede_reabrir_informe(request.user, borrador),
         "puede_enviar": request.user.es_supervisor and not request.user.es_direccion,
         "bloqueado": borrador.en_revision and not request.user.es_direccion})
 
@@ -1904,7 +1962,7 @@ def foto_zona(request, pk):
     from .models import FotoZona
 
     foto = get_object_or_404(FotoZona.objects.select_related("zona__borrador__ticket"), pk=pk)
-    ticket = obtener_ticket(request.user, foto.zona.borrador.ticket.radicado)
+    ticket = _ticket_para_informe(request.user, foto.zona.borrador.ticket.radicado)
     if not _puede_entregar_informe(request.user, ticket):
         raise PermissionDenied
     try:
@@ -1920,7 +1978,7 @@ def informe_borrador_pdf(request, radicado):
     (dirección revisa el documento como quedaría, y lo corrige o lo aprueba); el archivo definitivo si ya se aprobó."""
     from . import informe as inf
 
-    ticket = obtener_ticket(request.user, radicado)
+    ticket = _ticket_para_informe(request.user, radicado)
     if not _puede_entregar_informe(request.user, ticket):
         raise PermissionDenied
     borrador = _borrador_o_404(ticket)

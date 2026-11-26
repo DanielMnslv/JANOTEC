@@ -3,7 +3,11 @@
 {% block contenido %}
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
   <div>
-    <a href="{{ ticket.get_absolute_url }}" class="small"><i class="bi bi-arrow-left"></i> Volver al ticket {{ ticket.radicado }}</a>
+    {% if user.es_direccion or ticket.area == 'tecnica' %}
+      <a href="{{ ticket.get_absolute_url }}" class="small"><i class="bi bi-arrow-left"></i> Volver al ticket {{ ticket.radicado }}</a>
+    {% else %}
+      <span class="small text-muted-jn">{{ ticket.radicado }}</span>
+    {% endif %}
     <h1 class="h4 mb-0 mt-1">Informe técnico · {{ ticket.empresa }}</h1>
     <div class="small text-muted-jn">{{ ticket.asunto }}</div>
   </div>
@@ -13,11 +17,23 @@
   </div>
 </div>
 
+{% if es_correccion %}
+  <p class="alert alert-info small">Versión corregida. El informe entregado y el estado del ticket se conservan.</p>
+{% endif %}
+{% if puede_corregir_entregado %}
+  <form method="post" class="mb-3">{% csrf_token %}
+    <button class="btn btn-outline-primary btn-sm" name="accion" value="corregir_entregado">
+      <i class="bi bi-pencil-square"></i> Crear corrección del informe entregado
+    </button>
+  </form>
+{% endif %}
+
 {% if borrador.aprobado %}
   <div class="alert alert-success small">
-    Aprobado por {{ borrador.aprobado_por.get_full_name|default:borrador.aprobado_por.username }} el {{ borrador.aprobado_en|date:"d/m/Y H:i" }}. Es el informe oficial del ticket: al entregarlo se adjunta este PDF.
-    {% if puede_aprobar and en_informe %}
-      <form method="post" class="d-inline">{% csrf_token %}<button class="btn btn-link btn-sm p-0 ms-2 align-baseline" name="accion" value="reabrir" onclick="return confirm('El informe vuelve a borrador para corregirlo y habrá que aprobarlo de nuevo. ¿Continuar?')">Devolver a borrador para corregir</button></form>
+    Aprobado por {{ borrador.aprobado_por.get_full_name|default:borrador.aprobado_por.username }} el {{ borrador.aprobado_en|date:"d/m/Y H:i" }}.
+    {% if es_correccion %}El PDF corregido está disponible para descargar.{% else %}Al entregar el informe se adjunta este PDF.{% endif %}
+    {% if puede_reabrir_informe %}
+      {% include "tickets/_reabrir_informe.html" %}
     {% endif %}
   </div>
 {% else %}
@@ -43,7 +59,7 @@
     </div>
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
       <div class="fw-semibold">
-        {% if borrador.aprobado %}<i class="bi bi-check2-circle text-success"></i> Aprobado: vuelva al ticket y entréguelo (al cliente o a comercial).
+        {% if borrador.aprobado %}<i class="bi bi-check2-circle text-success"></i> {% if es_correccion %}Corrección aprobada. Puede descargar el PDF.{% else %}Aprobado: vuelva al ticket y entréguelo (al cliente o a Administrativo).{% endif %}
         {% elif not en_informe %}<i class="bi bi-lock"></i> El informe se trabaja con el ticket en «Informe en elaboración».
         {% elif borrador.en_revision and puede_aprobar %}<i class="bi bi-arrow-right-circle text-primary"></i> Le toca a usted: revíselo y apruébelo, o devuélvalo con observaciones.
         {% elif borrador.en_revision %}<i class="bi bi-hourglass-split"></i> Está con dirección. Le avisaremos por correo cuando lo apruebe o lo devuelva.
@@ -52,7 +68,7 @@
         {% else %}Coordinación lo revisa y lo envía a dirección.{% endif %}
       </div>
       <div class="d-flex flex-wrap gap-2">
-        {% if borrador.aprobado %}<a class="btn btn-accent btn-sm" href="{{ ticket.get_absolute_url }}#informe"><i class="bi bi-box-arrow-up-right"></i> Ir a entregar</a>
+        {% if borrador.aprobado and not es_correccion and en_informe %}<a class="btn btn-accent btn-sm" href="{{ ticket.get_absolute_url }}#informe"><i class="bi bi-box-arrow-up-right"></i> Ir a entregar</a>
         {% elif en_informe and not bloqueado %}
           {% if puede_enviar %}<button form="form-informe" class="btn btn-accent btn-sm" name="accion" value="enviar" onclick="return confirm('Se envía a dirección para su revisión y aprobación; mientras tanto no se puede corregir. ¿Enviar?')"><i class="bi bi-send"></i> Enviar a dirección</button>{% endif %}
           {% if puede_aprobar %}<button form="form-informe" class="btn btn-accent btn-sm" name="accion" value="aprobar" onclick="return confirm('Se genera el PDF definitivo y queda como informe oficial del ticket. ¿Aprobar?')"><i class="bi bi-check2-circle"></i> Aprobar y pasar a limpio</button>{% endif %}

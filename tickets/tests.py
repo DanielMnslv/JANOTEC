@@ -1136,7 +1136,7 @@ class EtapasEInformeTests(ActaBase):
         self.assertEqual(self.ticket.estado, E.INFORME)
         actual = [e for e in etapas.etapas_cliente(self.ticket) if e["estado"] == "actual"]
         self.assertEqual(actual[0]["clave"], "informe")
-        self.assertContains(self.client.get(self.ticket.get_absolute_url()), "Pasar a comercial para la propuesta")
+        self.assertContains(self.client.get(self.ticket.get_absolute_url()), "Pasar a Administrativo para la propuesta")
 
     def test_diagnostico_tambien_lleva_informe(self):
         from . import etapas
@@ -2141,6 +2141,63 @@ class InformeBorradorTests(BaseTickets):
         self.assertEqual(self.ticket.estado, E.VISITA_EJECUTADA)
         adj = Adjunto.objects.get(ticket=self.ticket, es_informe=True)
         self.assertEqual(adj.nombre_original, f"Informe_tecnico_{self.ticket.radicado}.pdf")
+
+    def test_coordinador_corrige_su_informe_aprobado_antes_de_entregar(self):
+        from . import informe
+        from .models import InformeBorrador
+
+        borrador = informe.generar(self.ticket, self.supervisor)
+        informe.aprobar(borrador, self.direccion)
+        self.client.force_login(self.agente)
+        self.assertEqual(self.client.post(self.url, {"accion": "reabrir"}).status_code, 403)
+        self.client.force_login(self.supervisor)
+        self.assertContains(self.client.get(self.ticket.get_absolute_url()), "Editar informe aprobado")
+        self.assertRedirects(self.client.post(self.url, {"accion": "reabrir"}), self.url)
+        borrador.refresh_from_db()
+        self.assertEqual(borrador.estado, InformeBorrador.Estado.BORRADOR)
+        datos = {"destinatario": "Empresa A", "asunto": "Informe corregido", "introduccion": "B",
+                 "actividades": "C", "conclusiones": "Conclusiones corregidas", "accion": "guardar"}
+        self.client.post(self.url, datos)
+        borrador.refresh_from_db()
+        self.assertEqual(borrador.conclusiones, "Conclusiones corregidas")
+        self.assertFalse(borrador.aprobado)
+
+    def test_coordinador_crea_correccion_despues_de_entrega_urgente_a_administrativo(self):
+        from . import informe
+        from .models import InformeBorrador
+
+        original = informe.generar(self.ticket, self.supervisor)
+        original.suministros = "1 Cámara IP"
+        original.save(update_fields=["suministros"])
+        self.client.force_login(self.supervisor)
+        self.client.post(reverse("entregar_informe", args=[self.ticket.radicado]), {
+            "destino": "comercial", "nota": "Informe entregado con urgencia", "urgente": "1",
+            "motivo_urgencia": "El cliente necesita cotizar hoy",
+        })
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.area, Ticket.Area.COMERCIAL)
+        self.assertEqual(self.ticket.estado, E.EN_PROCESO)
+        self.assertContains(self.client.get(self.url), "Crear corrección del informe entregado")
+        for _ in range(2):
+            self.assertRedirects(self.client.post(self.url, {"accion": "corregir_entregado"}), self.url)
+        correccion = original.correcciones.get()
+        self.assertEqual(correccion.suministros, original.suministros)
+        datos = {"destinatario": "Empresa A", "asunto": "Corrección", "introduccion": "B", "actividades": "C",
+                 "conclusiones": "Conclusiones corregidas", "accion": "enviar"}
+        self.assertRedirects(self.client.post(self.url, datos), self.url)
+        correccion.refresh_from_db()
+        self.assertEqual(correccion.estado, InformeBorrador.Estado.REVISION)
+        self.assertEqual(correccion.conclusiones, "Conclusiones corregidas")
+        anterior = original.conclusiones
+        original.refresh_from_db()
+        self.assertEqual(original.conclusiones, anterior)
+        self.client.force_login(self.direccion)
+        self.assertRedirects(self.client.post(self.url, {**datos, "accion": "aprobar"}), self.url)
+        correccion.refresh_from_db()
+        self.assertTrue(correccion.aprobado)
+        self.ticket.refresh_from_db()
+        self.assertEqual((self.ticket.area, self.ticket.estado), (Ticket.Area.COMERCIAL, E.EN_PROCESO))
+        self.assertFalse(self.ticket.adjuntos.filter(es_informe=True).exists())
 
     def test_reabrir_y_sin_acta_no_hay_borrador(self):
         self.client.force_login(self.direccion)

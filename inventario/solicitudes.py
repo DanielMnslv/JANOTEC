@@ -377,7 +377,7 @@ def _a_propuesta(solicitud, autor):
     lineas = ["Material a cargo del cliente: hay que enviarle una propuesta y esperar su aprobación antes de entregar.",
               *_resumen(solicitud)]
     com.pasar_a_propuesta(solicitud.ticket, autor, "\n".join(lineas + ([solicitud.nota] if solicitud.nota else [])))
-    _nota(solicitud, autor, "a cargo del cliente: pasó al área comercial para la propuesta.")
+    _nota(solicitud, autor, "a cargo del cliente: pasó al área Administrativa para la propuesta.")
 
 
 def revisar_compras(autor=None):

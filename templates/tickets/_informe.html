@@ -8,11 +8,11 @@
       <input type="file" name="informe" id="inf-archivo" class="form-control mb-2" accept=".pdf,.doc,.docx,image/*" multiple>
       <textarea name="nota" class="form-control mb-3" rows="3" placeholder="Conclusiones del informe (las ve el cliente)"></textarea>
       <details class="mb-3" {% if ticket.ficha or borrador.es_estudio %}open{% endif %}>
-        <summary class="small fw-semibold">Si pasa a comercial: lo que se va a cotizar</summary>
+        <summary class="small fw-semibold">Si pasa a Administrativo: lo que se va a cotizar</summary>
         <div class="mt-2">
           {% if filas_requeridas %}
             {# Ya están en el informe: no se escriben otra vez, pasan tal cual a comercial #}
-            <div class="small mb-2"><i class="bi bi-check2-circle text-success"></i> Pasa a comercial <b>la tabla del informe técnico</b>, tal cual; no hay que escribirla otra vez.
+            <div class="small mb-2"><i class="bi bi-check2-circle text-success"></i> Pasa a Administrativo <b>la tabla del informe técnico</b>, tal cual; no hay que escribirla otra vez.
               {% if not borrador.aprobado %}Si hay que cambiar algo, <a href="{% url 'informe_borrador' ticket.radicado %}">corríjalo en el informe</a>.{% endif %}</div>
             <div class="table-responsive"><table class="table table-sm table-bordered align-middle small mb-0">
               <thead class="table-light"><tr><th>NUM</th><th>CANT</th><th>DESCRIPCIÓN</th><th>REFERENCIA</th><th>MARCA</th></tr></thead>
@@ -75,7 +75,7 @@
       {% endif %}
       <div class="d-flex flex-wrap gap-2">
         <button class="btn btn-accent" name="destino" value="cliente"><i class="bi bi-send"></i> Entregar al cliente</button>
-        <button class="btn btn-outline-primary" name="destino" value="comercial" onclick="return confirm('El ticket pasará al área comercial para elaborar la propuesta. ¿Continuar?')"><i class="bi bi-briefcase"></i> Pasar a comercial para la propuesta</button>
+        <button class="btn btn-outline-primary" name="destino" value="comercial" onclick="return confirm('El ticket pasará al área Administrativa para elaborar la propuesta. ¿Continuar?')"><i class="bi bi-briefcase"></i> Pasar a Administrativo para la propuesta</button>
       </div>
     </form>
   </div>
