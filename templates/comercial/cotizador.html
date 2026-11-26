@@ -42,7 +42,9 @@
         <div class="small border rounded p-2 mb-2 bg-light" style="white-space:pre-line">{{ ficha.informe.servicios }}</div>{% endif %}
         <div class="small text-muted-jn mb-1"><i class="bi bi-clipboard2-data"></i> Materiales y equipos del informe:</div>
         <div class="small border rounded p-2 mb-2 bg-light" style="white-space:pre-line">{{ ficha.informe.materiales|default:"Ninguno: solo servicios." }}</div>
-        <button class="btn btn-sm btn-outline-primary" name="accion" value="informe"><i class="bi bi-box-arrow-in-down"></i> Traer los servicios y materiales del informe a la cotización</button>
+        <button class="btn btn-sm btn-outline-primary" name="accion" value="informe" formnovalidate
+                onclick="return confirm('Se reemplazarán todos los ítems por los del informe. Los cambios sin guardar se perderán. ¿Continuar?')">
+          <i class="bi bi-box-arrow-in-down"></i> Reemplazar ítems con el informe</button>
         {% else %}<div class="alert alert-warning small mb-0">Primero registre el informe del requerimiento en la ficha comercial: es la base de la propuesta.</div>{% endif %}
       </div></div>
 

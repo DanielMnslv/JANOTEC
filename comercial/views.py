@@ -583,6 +583,16 @@ def cotizador(request, radicado):
         if cotizacion.en_revision and not es_direccion:
             messages.error(request, "La propuesta está en revisión de dirección: no se modifica hasta que la apruebe o la devuelva.")
             return redirect("comercial:cotizador", radicado)
+        if accion == "informe":
+            try:
+                total, pendientes = coti.traer_del_informe(cotizacion, es_direccion=es_direccion)
+            except ValidationError as e:
+                messages.error(request, " ".join(e.messages))
+            else:
+                messages.success(request, f"Se cargaron {total} ítems del informe. Revise las cantidades y los precios.")
+                if pendientes:
+                    messages.warning(request, f"Complete el costo unitario de {pendientes} ítems antes de enviar.")
+            return redirect("comercial:cotizador", radicado)
         if accion == "devolver":
             observaciones = " ".join(request.POST.get("observaciones", "").split())[:1000]
             if not (es_direccion and cotizacion.en_revision) or len(observaciones) < 5:
@@ -604,10 +614,7 @@ def cotizador(request, radicado):
                     item = ItemCatalogo.objects.filter(descripcion__iexact=f.cleaned_data["descripcion"]).first()
                     f.instance.item = item
             lineas.save()
-            if accion == "informe":
-                n = coti.traer_del_informe(cotizacion)
-                messages.success(request, f"Se agregaron {n} ítem(s) del informe del requerimiento. Revise cantidades y precios.")
-            elif accion == "ver_pdf":
+            if accion == "ver_pdf":
                 return redirect("comercial:cotizacion_pdf", radicado)
             elif accion == "a_direccion":
                 try:

@@ -573,14 +573,19 @@ class CotizadorTests(BaseComercial):
         ItemCatalogo.objects.create(descripcion="Cable HDMI 15 m High Speed 4K", valor_unitario=Decimal("73335.57"))
         t = self.crear()
         self.client.post(reverse("comercial:informe", args=[t.radicado]),
-                         {"necesidad": "Monitor en la oficina", "materiales": "1 Cable HDMI 15 m\n6 Canaleta"})
+                         {"necesidad": "Monitor en la oficina", "servicios": "1 dia dos tecnicos con SST",
+                          "materiales": "1 Cable HDMI 15 m\n6 Canaleta"})
         url = reverse("comercial:cotizador", args=[t.radicado])
         self.assertContains(self.client.get(url), "Cable HDMI 15 m High Speed 4K")  # el catálogo se sugiere
-        # Traer los materiales del informe: el cable toma el precio del catálogo; la canaleta queda en 0 para completar
-        self.client.post(url, {**self.lineas([]), "accion": "informe"})
+        # La coincidencia parcial del catálogo no sustituye el cable del informe.
+        self.client.post(url, self.lineas([("Producto ajeno", "1", "100", "0")]))
+        for _ in range(2):
+            self.client.post(url, {"accion": "informe"})
         cot = t.ficha.cotizaciones.get()
         self.assertEqual([(l.descripcion, l.valor_unitario) for l in cot.lineas.all()],
-                         [("Cable HDMI 15 m High Speed 4K", Decimal("73335.57")), ("Canaleta", Decimal("0"))])
+                         [("dia dos tecnicos con SST", Decimal("0")),
+                          ("Cable HDMI 15 m", Decimal("0")), ("Canaleta", Decimal("0"))])
+        self.assertEqual(cot.lineas.first().categoria, "mano_obra")
         r = self.client.post(url, {**self.lineas([("Canaleta 20x12", "6", "0", "0")]), **URGENTE, "accion": "enviar"}, follow=True)
         self.assertContains(r, "Cada ítem necesita cantidad y costo unitario")
         cot.lineas.all().delete()

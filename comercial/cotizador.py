@@ -48,26 +48,6 @@ def borrador(ficha):
         return Cotizacion.objects.create(ficha=ficha, alcance=alcance)
 
 
-def _palabras(texto):
-    """Las palabras que cuentan para comparar con el catálogo."""
-    # Las medidas cuentan («15 m» no es «10 m»); las palabras cortas («de», «en») no
-    return {p for p in re.findall(r"[a-záéíóúñ0-9]+", texto.lower()) if len(p) > 2 or p.isdigit()}
-
-
-def _buscar_en_catalogo(texto):
-    """El ítem del catálogo que mejor coincide con lo escrito en el informe (por las palabras que comparten)."""
-    buscadas = _palabras(texto)
-    mejor, puntaje = None, (0, 0)
-    for item in ItemCatalogo.objects.filter(activo=True):
-        propias = _palabras(item.descripcion)
-        comunes = len(buscadas & propias)
-        # A igual coincidencia gana el ítem con menos palabras de sobra
-        candidato = (comunes, -len(propias - buscadas))
-        if comunes and candidato > puntaje:
-            mejor, puntaje = item, candidato
-    return mejor if puntaje[0] >= 2 else None
-
-
 def leer_linea(texto):
     """(cantidad, descripción) de una línea del informe: «4 Cámara IP», «120 m Cable UTP»; sin número, cantidad 1."""
     texto = texto.strip(" -•*\t")
@@ -83,25 +63,55 @@ def materiales_del_informe(ficha):
     return [leer_linea(l) for l in informe.materiales.splitlines() if l.strip(" -•*\t")]
 
 
-def traer_del_informe(cotizacion):
-    """Agrega como ítems los servicios y los materiales y equipos del informe (con precio si están en el catálogo)."""
+def _normalizar(texto):
+    return " ".join(texto.casefold().split())
+
+
+@transaction.atomic
+def traer_del_informe(cotizacion, *, es_direccion=False):
+    """Reemplaza los ítems del borrador con las líneas del informe entregado."""
+    cotizacion = Cotizacion.objects.select_for_update().get(pk=cotizacion.pk)
+    if cotizacion.enviada or (cotizacion.en_revision and not es_direccion):
+        raise ValidationError("Esta cotización no se puede modificar.")
     ficha = cotizacion.ficha
-    if not ficha.informe_listo:
-        return 0
-    agregadas = 0
-    orden = cotizacion.lineas.count()
-    informe = ficha.informe
-    for linea in (informe.servicios + "\n" + informe.materiales).splitlines():
-        if not linea.strip(" -•*\t"):
-            continue
-        cantidad, descripcion = leer_linea(linea)
-        item = _buscar_en_catalogo(descripcion)
-        orden += 1
-        LineaCotizacion.objects.create(
-            cotizacion=cotizacion, item=item, descripcion=(item.descripcion if item else descripcion)[:250], cantidad=cantidad,
-            valor_unitario=item.valor_unitario if item else Decimal(0), iva=item.iva if item else Decimal(19), orden=orden)
-        agregadas += 1
-    return agregadas
+    informe = getattr(ficha, "informe", None) if ficha.informe_listo else None
+    if informe is None:
+        raise ValidationError("Primero registre el informe del requerimiento.")
+
+    catalogo = {}
+    for item in ItemCatalogo.objects.filter(activo=True):
+        catalogo.setdefault((item.tipo, _normalizar(item.descripcion)), []).append(item)
+
+    filas = []
+    for bloque, tipo in ((informe.servicios, ItemCatalogo.Tipo.SERVICIO),
+                         (informe.materiales, ItemCatalogo.Tipo.MATERIAL)):
+        for linea in bloque.splitlines():
+            linea = linea.strip(" -•*\t")
+            if not linea:
+                continue
+            partes = re.fullmatch(r"(\d+(?:[.,]\d+)?)\s+(.+)", linea)
+            cantidad = Decimal(partes[1].replace(",", ".")) if partes else Decimal(1)
+            descripcion = partes[2] if partes else linea
+            coincidencias = catalogo.get((tipo, _normalizar(descripcion)), [])
+            # Un precio por rollo no equivale a uno por metro. Si el informe
+            # especifica la unidad, se cotiza manualmente.
+            unidad_explicita = partes and re.match(
+                r"(?:m|mts?|metros?|und|unidades?|rollos?)\b", descripcion, re.I
+            )
+            item = coincidencias[0] if len(coincidencias) == 1 and not unidad_explicita else None
+            fila = LineaCotizacion(
+                cotizacion=cotizacion, item=item, descripcion=descripcion, cantidad=cantidad,
+                categoria=LineaCotizacion.Categoria.MANO_OBRA if tipo == ItemCatalogo.Tipo.SERVICIO else "",
+                valor_unitario=item.valor_unitario if item else Decimal(0),
+                iva=item.iva if item else Decimal(19), orden=len(filas) + 1,
+            )
+            fila.clean_fields()
+            filas.append(fila)
+    if not filas:
+        raise ValidationError("El informe no tiene servicios, materiales ni equipos para cargar.")
+    cotizacion.lineas.all().delete()
+    LineaCotizacion.objects.bulk_create(filas)
+    return len(filas), sum(fila.valor_unitario <= 0 for fila in filas)
 
 
 RE_CONSECUTIVO = r"^PE-{anio}-[0-9]{{2}}-([0-9]{{3}})(-V[0-9]+)?$"
