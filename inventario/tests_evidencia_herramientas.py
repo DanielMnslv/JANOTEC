@@ -65,6 +65,23 @@ class EvidenciaHerramientasTests(TestCase):
         self.assertEqual(self.subir_foto(self.tecnico, archivo).status_code, 302)
         self.assertFalse(EvidenciaHerramienta.objects.exists())
 
+    def test_retirar_conserva_historial_y_oculta_de_las_activas(self):
+        self.subir_foto(self.tecnico)
+        retirar = reverse("inventario:herramienta_retirar", args=[self.herramienta.pk])
+        self.assertEqual(self.client.post(retirar).status_code, 403)
+        self.client.force_login(self.bodega)
+        self.assertEqual(self.client.get(retirar).status_code, 405)
+        self.assertRedirects(self.client.post(retirar), self.herramienta.get_absolute_url())
+        self.herramienta.refresh_from_db()
+        self.assertEqual(self.herramienta.estado, Herramienta.Estado.BAJA)
+        self.assertEqual(self.herramienta.tecnico, self.tecnico)
+        self.assertEqual(self.herramienta.entregas.count(), 1)
+        self.assertEqual(self.herramienta.evidencias.count(), 1)
+        self.assertEqual(herramientas.por_auditar(self.tecnico), [])
+        lista = reverse("inventario:herramientas")
+        self.assertNotContains(self.client.get(lista, {"q": "Probador"}), ">Probador</a>", html=False)
+        self.assertContains(self.client.get(lista, {"estado": "baja"}), ">Probador</a>", html=False)
+
     def test_descargas_por_tecnico_incluyen_solo_sus_herramientas_activas(self):
         from openpyxl import load_workbook
         from pypdf import PdfReader
