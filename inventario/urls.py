@@ -68,6 +68,7 @@ urlpatterns = [
     path("herramientas/<int:pk>/evidencia/", views.herramienta_evidencia, name="herramienta_evidencia"),
     path("herramientas/<int:pk>/evidencia/<int:evidencia_pk>/foto/", views.herramienta_foto, name="herramienta_foto"),
     path("herramientas/<int:pk>/editar/", views.herramienta_form, name="herramienta_editar"),
+    path("herramientas/<int:pk>/retirar/", views.herramienta_retirar, name="herramienta_retirar"),
     path("herramientas/<int:pk>/mover/", views.herramienta_mover, name="herramienta_mover"),
     path("herramientas/auditar/<int:pk>/", views.auditar, name="auditar"),
     path("herramientas/auditorias/", views.auditorias, name="auditorias"),

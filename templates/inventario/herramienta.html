@@ -8,7 +8,18 @@
     <span class="badge text-bg-{{ h.color_estado }} fs-6">{{ h.get_estado_display }}</span>
     <span class="ms-1">{% if h.responsable %}<i class="bi bi-person-badge"></i> {{ h.responsable }}{% else %}<i class="bi bi-box-seam"></i> En bodega{% endif %}</span>
   </div>
-  {% if user.gestiona_inventario %}<a class="btn btn-outline-primary" href="{% url 'inventario:herramienta_editar' h.pk %}"><i class="bi bi-pencil"></i> Editar</a>{% endif %}
+  {% if user.gestiona_inventario %}
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-primary" href="{% url 'inventario:herramienta_editar' h.pk %}"><i class="bi bi-pencil"></i> Editar</a>
+      {% if h.estado != 'baja' %}
+        <form method="post" action="{% url 'inventario:herramienta_retirar' h.pk %}"
+              onsubmit="return confirm('¿Retirar «{{ h.nombre|escapejs }}» del inventario activo? Se conservará su historial.')">
+          {% csrf_token %}
+          <button class="btn btn-outline-danger" type="submit"><i class="bi bi-archive"></i> Retirar</button>
+        </form>
+      {% endif %}
+    </div>
+  {% endif %}
 </div>
 <div class="row g-4">
   <div class="col-lg-5">

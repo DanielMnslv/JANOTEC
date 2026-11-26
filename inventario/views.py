@@ -904,7 +904,7 @@ def herramientas(request):
         qs = qs.filter(Q(nombre__icontains=q) | Q(serial__icontains=q) | Q(marca__icontains=q) | Q(tecnico_nombre__icontains=q))
     if estado:
         qs = qs.filter(estado=estado)
-    elif not q:
+    else:
         qs = qs.exclude(estado=Herramienta.Estado.BAJA)
     if tecnico == "bodega":
         qs = qs.filter(tecnico__isnull=True, tecnico_nombre="")
@@ -1041,6 +1041,22 @@ def herramienta_foto(request, pk, evidencia_pk):
     respuesta["Cache-Control"] = "private, no-store"
     respuesta["X-Content-Type-Options"] = "nosniff"
     return respuesta
+
+
+@login_required
+@gestion_requerida
+@require_POST
+def herramienta_retirar(request, pk):
+    from django.utils import timezone
+
+    from .models import Herramienta
+
+    herramienta = get_object_or_404(Herramienta, pk=pk)
+    if Herramienta.objects.filter(pk=pk).exclude(estado=Herramienta.Estado.BAJA).update(
+        estado=Herramienta.Estado.BAJA, actualizado=timezone.now(),
+    ):
+        messages.success(request, f"«{herramienta.nombre}» se retiró del inventario activo.")
+    return redirect(herramienta)
 
 
 @login_required
