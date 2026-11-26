@@ -6,7 +6,7 @@ IVA y el total. Cada campo lleva su etiqueta, porque la tabla no muestra encabez
 <div class="linea">
   <div class="campo-item c-num"></div>
   <div class="campo-item c-desc"><label class="et" for="{{ f.descripcion.id_for_label }}">Descripción</label>{{ f.id }}{{ f.descripcion }}{% for e in f.descripcion.errors %}<div class="text-danger">{{ e }}</div>{% endfor %}</div>
-  <div class="campo-item c-quitar text-end">{% if f.DELETE %}<label class="small text-muted-jn text-nowrap" title="Quitar este ítem">{{ f.DELETE }} <i class="bi bi-trash"></i></label>{% endif %}</div>
+  <div class="campo-item c-quitar text-end">{% if f.DELETE %}<span hidden>{{ f.DELETE }}</span><button type="button" class="btn btn-sm btn-outline-danger quitar-item" aria-label="Quitar este ítem" title="Quitar este ítem"><i class="bi bi-trash" aria-hidden="true"></i></button>{% endif %}</div>
   <div class="campo-item c-prov"><label class="et" for="{{ f.proveedor.id_for_label }}">Proveedor (para la orden de compra)</label>{{ f.proveedor }}</div>
   <div class="campo-item c-marca"><label class="et" for="{{ f.marca.id_for_label }}">Marca</label>{{ f.marca }}</div>
   <div class="campo-item c-ref"><label class="et" for="{{ f.referencia.id_for_label }}">Referencia</label>{{ f.referencia }}</div>
