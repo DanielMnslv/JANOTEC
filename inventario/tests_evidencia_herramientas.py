@@ -62,3 +62,20 @@ class EvidenciaHerramientasTests(TestCase):
         archivo = SimpleUploadedFile("falso.png", b"<html>falso</html>", content_type="image/png")
         self.assertEqual(self.subir_foto(self.tecnico, archivo).status_code, 302)
         self.assertFalse(EvidenciaHerramienta.objects.exists())
+
+    def test_pdf_completo_incluye_evidencia_y_protege_la_descarga(self):
+        from pypdf import PdfReader
+
+        self.subir_foto(self.tecnico)
+        url = reverse("inventario:herramientas_pdf")
+        self.assertEqual(self.client.get(url).status_code, 403)
+        Herramienta.objects.create(nombre="Taladro fuera de servicio", estado=Herramienta.Estado.BAJA)
+        self.client.force_login(self.bodega)
+        respuesta = self.client.get(url, {"tecnico": self.tecnico.pk, "q": "no coincide"})
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn("attachment", respuesta.headers["Content-Disposition"])
+        pdf = PdfReader(BytesIO(respuesta.content))
+        texto = "\n".join(pagina.extract_text() for pagina in pdf.pages)
+        for esperado in ("Probador", "Con desgaste", "Marca en la carcasa.", "Taladro fuera de servicio", "2 registros"):
+            self.assertIn(esperado, texto)
+        self.assertTrue(any(imagen.image.size == (40, 25) for pagina in pdf.pages for imagen in pagina.images))
