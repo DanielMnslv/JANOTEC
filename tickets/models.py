@@ -1064,6 +1064,7 @@ class InformeBorrador(models.Model):
         ENTREGA = "entrega", "Informe de entrega del proyecto (instalación)"
 
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="informes_borrador")
+    correccion_de = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="correcciones")
     tipo = models.CharField(max_length=10, choices=Tipo.choices, default=Tipo.VISITA)
     estado = models.CharField(max_length=10, choices=Estado.choices, default=Estado.BORRADOR)
     destinatario = models.CharField("señores", max_length=250)

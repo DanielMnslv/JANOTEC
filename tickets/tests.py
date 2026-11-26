@@ -2162,6 +2162,43 @@ class InformeBorradorTests(BaseTickets):
         self.assertEqual(borrador.conclusiones, "Conclusiones corregidas")
         self.assertFalse(borrador.aprobado)
 
+    def test_coordinador_crea_correccion_despues_de_entrega_urgente_a_administrativo(self):
+        from . import informe
+        from .models import InformeBorrador
+
+        original = informe.generar(self.ticket, self.supervisor)
+        original.suministros = "1 Cámara IP"
+        original.save(update_fields=["suministros"])
+        self.client.force_login(self.supervisor)
+        self.client.post(reverse("entregar_informe", args=[self.ticket.radicado]), {
+            "destino": "comercial", "nota": "Informe entregado con urgencia", "urgente": "1",
+            "motivo_urgencia": "El cliente necesita cotizar hoy",
+        })
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.area, Ticket.Area.COMERCIAL)
+        self.assertEqual(self.ticket.estado, E.EN_PROCESO)
+        self.assertContains(self.client.get(self.url), "Crear corrección del informe entregado")
+        for _ in range(2):
+            self.assertRedirects(self.client.post(self.url, {"accion": "corregir_entregado"}), self.url)
+        correccion = original.correcciones.get()
+        self.assertEqual(correccion.suministros, original.suministros)
+        datos = {"destinatario": "Empresa A", "asunto": "Corrección", "introduccion": "B", "actividades": "C",
+                 "conclusiones": "Conclusiones corregidas", "accion": "enviar"}
+        self.assertRedirects(self.client.post(self.url, datos), self.url)
+        correccion.refresh_from_db()
+        self.assertEqual(correccion.estado, InformeBorrador.Estado.REVISION)
+        self.assertEqual(correccion.conclusiones, "Conclusiones corregidas")
+        anterior = original.conclusiones
+        original.refresh_from_db()
+        self.assertEqual(original.conclusiones, anterior)
+        self.client.force_login(self.direccion)
+        self.assertRedirects(self.client.post(self.url, {**datos, "accion": "aprobar"}), self.url)
+        correccion.refresh_from_db()
+        self.assertTrue(correccion.aprobado)
+        self.ticket.refresh_from_db()
+        self.assertEqual((self.ticket.area, self.ticket.estado), (Ticket.Area.COMERCIAL, E.EN_PROCESO))
+        self.assertFalse(self.ticket.adjuntos.filter(es_informe=True).exists())
+
     def test_reabrir_y_sin_acta_no_hay_borrador(self):
         self.client.force_login(self.direccion)
         self.client.post(self.url, {"accion": "generar"})

@@ -285,12 +285,14 @@ def informe_revisado(borrador, autor, aprobado, motivo=""):
     quien = autor.get_full_name() or autor.username
     if aprobado:
         asunto = f"[{ticket.radicado}] Informe técnico aprobado: {ticket.asunto}"
-        texto = [f"{quien} aprobó el informe técnico. Ya se puede entregar al cliente o pasar a Administrativo para la propuesta."]
+        texto = ([f"{quien} aprobó la versión corregida. Puede descargarla desde el informe."] if borrador.correccion_de_id else
+                 [f"{quien} aprobó el informe técnico. Ya se puede entregar al cliente o pasar a Administrativo para la propuesta."])
     else:
         asunto = f"[{ticket.radicado}] Informe técnico devuelto para corregir: {ticket.asunto}"
         texto = [f"{quien} devolvió el informe técnico para corregir:", "", motivo, "",
                  "Corríjalo y envíelo de nuevo a dirección."]
-    _enviar(asunto, "\n".join([*texto, "", f"Ver el ticket: {_enlace(ticket)}"]), destinos)
+    enlace = (_enlace(ticket).rstrip("/") + "/informe/borrador/" if borrador.correccion_de_id else _enlace(ticket))
+    _enviar(asunto, "\n".join([*texto, "", f"{'Ver el informe' if borrador.correccion_de_id else 'Ver el ticket'}: {enlace}"]), destinos)
 
 
 def asignacion(ticket, autor=None, mensaje=""):

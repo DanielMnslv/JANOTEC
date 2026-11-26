@@ -388,6 +388,29 @@ def vigente(ticket):
     return ticket.informes_borrador.select_related("aprobado_por", "creado_por").first()
 
 
+def copiar_para_corregir(original, autor):
+    from .models import FotoZona, ImagenEquipoInforme, Seguimiento, ZonaInforme
+
+    campos = ("tipo", "destinatario", "asunto", "introduccion", "actividades", "justificacion",
+              "conclusiones", "recomendaciones", "suministros", "servicios", "garantia")
+    copia = InformeBorrador.objects.create(
+        ticket=original.ticket, creado_por=autor, correccion_de=original,
+        **{campo: getattr(original, campo) for campo in campos},
+    )
+    for zona in original.zonas.prefetch_related("fotos"):
+        nueva = ZonaInforme.objects.create(borrador=copia, orden=zona.orden, nombre=zona.nombre,
+                                          descripcion=zona.descripcion)
+        FotoZona.objects.bulk_create([FotoZona(zona=nueva, archivo=f.archivo.name, nombre_original=f.nombre_original)
+                                      for f in zona.fotos.all()])
+    ImagenEquipoInforme.objects.bulk_create([
+        ImagenEquipoInforme(borrador=copia, descripcion=i.descripcion, archivo=i.archivo.name)
+        for i in original.imagenes_equipos.all()
+    ])
+    Seguimiento.objects.create(ticket=original.ticket, autor=autor, tipo=Seguimiento.Tipo.NOTA_INTERNA,
+                               interno=True, mensaje="Creó una versión corregida del informe técnico entregado.")
+    return copia
+
+
 # ----------------------------------------------------------------------------
 # PDF
 # ----------------------------------------------------------------------------

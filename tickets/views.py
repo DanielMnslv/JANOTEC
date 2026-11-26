@@ -414,6 +414,13 @@ def ticket_detalle(request, radicado):
         contexto["es_instalacion"] = inf.es_instalacion(ticket)
         # «Si pasa a Administrativo»: la misma tabla de equipos y materiales del informe, ya llena con sus filas
         contexto["filas_requeridas"] = _filas_para_editar(contexto["borrador"]) if contexto["borrador"] else []
+    elif _puede_entregar_informe(request.user, ticket):
+        from . import informe as inf
+
+        informe_entregado = inf.vigente(ticket)
+        if informe_entregado and (informe_entregado.correccion_de_id or
+                                  _puede_corregir_informe_entregado(request.user, ticket, informe_entregado)):
+            contexto["informe_entregado"] = informe_entregado
     if contexto["es_levantamiento"]:
         from comercial.forms import InformeForm
         b = contexto.get("borrador")
@@ -1709,6 +1716,29 @@ def _puede_reabrir_informe(usuario, borrador):
     ))
 
 
+def _puede_corregir_informe_entregado(usuario, ticket, borrador):
+    if not borrador or _informe_abierto(ticket):
+        return False
+    urgentes = ticket.seguimientos.filter(interno=True, mensaje__startswith="Entrega urgente sin aprobación de dirección.")
+    responsable = usuario.es_direccion or (usuario.es_coordinador and (
+        usuario.pk in (borrador.creado_por_id, borrador.aprobado_por_id) or urgentes.filter(autor=usuario).exists()
+    ))
+    return responsable and (urgentes.exists() or ticket.adjuntos.filter(es_informe=True).exists())
+
+
+def _ticket_para_informe(usuario, radicado):
+    try:
+        return obtener_ticket(usuario, radicado)
+    except Http404:
+        if usuario.es_coordinador:
+            from . import informe as inf
+
+            ticket = Ticket.objects.filter(radicado=radicado).first()
+            if ticket and _puede_corregir_informe_entregado(usuario, ticket, inf.vigente(ticket)):
+                return ticket
+        raise
+
+
 def _guardar_zonas(request, borrador):
     """Zonas del estudio: nombre, qué se hará y fotos de la visual. Devuelve los errores (fotos que no son imagen)."""
     from .models import FotoZona, ZonaInforme
@@ -1782,13 +1812,25 @@ def informe_borrador(request, radicado):
     lo aprueba (pasa a limpio) o lo devuelve con observaciones. Aprobado, se entrega o pasa a comercial."""
     from . import informe as inf
 
-    ticket = obtener_ticket(request.user, radicado)
+    ticket = _ticket_para_informe(request.user, radicado)
     if not _puede_entregar_informe(request.user, ticket):
         raise PermissionDenied
     borrador = inf.vigente(ticket)
-    en_informe = _informe_abierto(ticket)
+    puede_corregir_entregado = _puede_corregir_informe_entregado(request.user, ticket, borrador)
+    es_correccion = bool(borrador and borrador.correccion_de_id)
+    en_informe = _informe_abierto(ticket) or (es_correccion and puede_corregir_entregado)
     if request.method == "POST":
         accion = request.POST.get("accion")
+        if accion == "corregir_entregado":
+            with transaction.atomic():
+                actual_ticket = Ticket.objects.select_for_update().get(pk=ticket.pk)
+                actual = inf.vigente(actual_ticket)
+                if not _puede_corregir_informe_entregado(request.user, actual_ticket, actual):
+                    raise PermissionDenied
+                if actual.aprobado or not actual.correccion_de_id:
+                    inf.copiar_para_corregir(actual, request.user)
+                    messages.success(request, "Versión de corrección creada. El informe entregado se conserva.")
+            return redirect("informe_borrador", radicado)
         if not en_informe:
             messages.error(request, "El borrador se trabaja mientras el ticket está «Informe en elaboración» o en el levantamiento.")
             return redirect(ticket)
@@ -1810,7 +1852,7 @@ def informe_borrador(request, radicado):
         if borrador is None:
             return redirect(ticket)
         if accion == "reabrir":
-            if not _puede_reabrir_informe(request.user, borrador):
+            if not _informe_abierto(ticket) or not _puede_reabrir_informe(request.user, borrador):
                 raise PermissionDenied
             with transaction.atomic():
                 borrador.estado = InformeBorrador.Estado.BORRADOR
@@ -1825,6 +1867,9 @@ def informe_borrador(request, radicado):
         if borrador.en_revision and not request.user.es_direccion:
             messages.error(request, "El informe está en revisión de dirección: solo dirección lo corrige, lo aprueba o lo devuelve.")
             return redirect("informe_borrador", radicado)
+        if (accion == "aprobar" and not request.user.es_direccion
+                or accion == "enviar" and not request.user.es_supervisor):
+            raise PermissionDenied
         if accion == "devolver":
             if not (request.user.es_direccion and borrador.en_revision):
                 raise PermissionDenied
@@ -1859,9 +1904,6 @@ def informe_borrador(request, radicado):
             for e in errores:
                 messages.warning(request, e)
             if accion in ("enviar", "aprobar") and not errores:
-                # Coordinación lo envía a dirección; solo dirección lo aprueba
-                if not (request.user.es_direccion if accion == "aprobar" else request.user.es_supervisor):
-                    raise PermissionDenied
                 if borrador.es_estudio and not (borrador.suministros.strip() or borrador.servicios.strip()):
                     messages.error(request, "Antes de enviarlo o aprobarlo escriba los equipos y materiales requeridos, los "
                                             "servicios, o ambos: con ellos administrativa arma la propuesta.")
@@ -1869,16 +1911,18 @@ def informe_borrador(request, radicado):
                 if accion == "enviar":
                     inf.enviar_a_direccion(borrador, request.user)
                     messages.success(request, "Informe enviado a dirección para su revisión y aprobación.")
-                    return redirect(ticket)
+                    return redirect("informe_borrador", radicado) if es_correccion else redirect(ticket)
                 inf.aprobar(borrador, request.user)
                 Seguimiento.objects.create(ticket=ticket, autor=request.user, tipo=Seguimiento.Tipo.NOTA_INTERNA, interno=True,
-                                           mensaje="Aprobó el informe técnico y lo pasó a limpio: ya se puede entregar.")
+                                           mensaje=("Aprobó la versión corregida del informe técnico." if es_correccion else
+                                                    "Aprobó el informe técnico y lo pasó a limpio: ya se puede entregar."))
                 from . import notificaciones as notif
                 notif.informe_revisado(borrador, request.user, aprobado=True)
-                messages.success(request, "Informe aprobado y pasado a limpio. Ahora elija a quién se entrega."
+                messages.success(request, "Versión corregida aprobada. Puede descargar el PDF desde el informe."
+                                 if es_correccion else "Informe aprobado y pasado a limpio. Ahora elija a quién se entrega."
                                  if not _es_levantamiento(ticket) else
                                  "Informe aprobado y pasado a limpio. Ya puede enviar el levantamiento al área Administrativa.")
-                return redirect(ticket)
+                return redirect("informe_borrador", radicado) if es_correccion else redirect(ticket)
             if not errores:
                 messages.success(request, "Cambios del borrador guardados.")
             return redirect("informe_borrador", radicado)
@@ -1891,7 +1935,9 @@ def informe_borrador(request, radicado):
         "zonas": borrador.zonas.prefetch_related("fotos") if borrador.es_estudio else [],
         "filas_requeridas": _filas_para_editar(borrador), "es_instalacion": inf.es_instalacion(ticket),
         "puede_aprobar": request.user.es_direccion,
-        "puede_reabrir_informe": en_informe and _puede_reabrir_informe(request.user, borrador),
+        "puede_corregir_entregado": puede_corregir_entregado and (not es_correccion or borrador.aprobado),
+        "es_correccion": es_correccion,
+        "puede_reabrir_informe": _informe_abierto(ticket) and _puede_reabrir_informe(request.user, borrador),
         "puede_enviar": request.user.es_supervisor and not request.user.es_direccion,
         "bloqueado": borrador.en_revision and not request.user.es_direccion})
 
@@ -1916,7 +1962,7 @@ def foto_zona(request, pk):
     from .models import FotoZona
 
     foto = get_object_or_404(FotoZona.objects.select_related("zona__borrador__ticket"), pk=pk)
-    ticket = obtener_ticket(request.user, foto.zona.borrador.ticket.radicado)
+    ticket = _ticket_para_informe(request.user, foto.zona.borrador.ticket.radicado)
     if not _puede_entregar_informe(request.user, ticket):
         raise PermissionDenied
     try:
@@ -1932,7 +1978,7 @@ def informe_borrador_pdf(request, radicado):
     (dirección revisa el documento como quedaría, y lo corrige o lo aprueba); el archivo definitivo si ya se aprobó."""
     from . import informe as inf
 
-    ticket = obtener_ticket(request.user, radicado)
+    ticket = _ticket_para_informe(request.user, radicado)
     if not _puede_entregar_informe(request.user, ticket):
         raise PermissionDenied
     borrador = _borrador_o_404(ticket)

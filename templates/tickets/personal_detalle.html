@@ -84,6 +84,11 @@
     {% endif %}
 
     {% if puede_informe %}{% include "tickets/_informe.html" %}{% endif %}
+    {% if informe_entregado %}
+      <div class="card card-body mb-4">
+        <a href="{% url 'informe_borrador' ticket.radicado %}">Ver informe y sus correcciones</a>
+      </div>
+    {% endif %}
     {% include "tickets/_aplazamientos.html" %}
     {% include "inventario/_solicitudes_ticket.html" %}
 

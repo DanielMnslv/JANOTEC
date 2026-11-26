@@ -81,7 +81,7 @@ def por_aprobar(usuario):
 
     f = _Filtro(usuario)
     items = []
-    for i in f.tickets(InformeBorrador.objects.filter(estado=InformeBorrador.Estado.REVISION), "ticket__").select_related(
+    for i in f.tickets(InformeBorrador.objects.filter(estado=InformeBorrador.Estado.REVISION, correcciones__isnull=True), "ticket__").select_related(
             "ticket__empresa").order_by("actualizado"):
         items.append(_item(f"Informe {i.ticket.radicado} · {_cliente(i.ticket)}",
                            f"{i.get_tipo_display().split(' (')[0]}. Enviado {_hace(i.actualizado)}.",
@@ -218,6 +218,14 @@ def _informes_coordinacion(usuario):
             items.append(_item(titulo, ("Dirección lo devolvió con observaciones: corríjalo y envíelo de nuevo."
                                         if devuelto else "Borrador listo: revíselo y envíelo a dirección para aprobar."),
                                url, "Revisar y enviar a dirección", devuelto or _dias(borrador.actualizado) >= 2, ticket=t))
+    urgentes = Ticket.objects.exclude(estado=E.INFORME).filter(
+        seguimientos__autor=usuario, seguimientos__interno=True,
+        seguimientos__mensaje__startswith="Entrega urgente sin aprobación de dirección.",
+        informes_borrador__isnull=False,
+    ).select_related("empresa").order_by("-actualizado").distinct()
+    for t in _Filtro(usuario).tickets(urgentes):
+        items.append(_item(f"{t.radicado} · {_cliente(t)}", "Informe entregado como urgente.",
+                           reverse("informe_borrador", args=[t.radicado]), "Ver o corregir informe", ticket=t))
     return items
 
 
