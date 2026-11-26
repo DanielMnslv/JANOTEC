@@ -30,7 +30,7 @@
   <div class="alert alert-warning"><b>Dirección la devolvió para corregir:</b> {{ cotizacion.observaciones_direccion }}</div>
 {% endif %}
 
-<form method="post" id="form-cotizacion" data-autoguardado="{% if bloqueada %}no{% else %}si{% endif %}" data-version-borrador="{{ cotizacion.pk }}:{{ cotizacion.actualizado|date:'U.u' }}">{% csrf_token %}
+<form method="post" id="form-cotizacion" autocomplete="off" data-autoguardado="{% if bloqueada %}no{% else %}si{% endif %}" data-version-borrador="{{ cotizacion.pk }}:{{ cotizacion.actualizado|date:'U.u' }}">{% csrf_token %}
   <fieldset {% if bloqueada %}disabled{% endif %}>
   {{ lineas.management_form }}
   <div class="row g-4">
@@ -216,11 +216,12 @@
       const tasa = num(tr.querySelector('.iva')) / 100;
       const desc = bruto * num(tr.querySelector('.descuento')) / 100, base = bruto - desc, iva = base * tasa;
       tr.querySelector('.subtotal').textContent = pesos(base);
-      tr.hidden = Boolean(borrar && borrar.checked);
+      tr.hidden = tr.dataset.quitar === "1";
+      if (borrar) borrar.checked = tr.hidden;
       tr.querySelectorAll('input:not([type=hidden]):not([name$=DELETE]), select').forEach(function (campo) {
         campo.disabled = tr.hidden;
       });
-      if (borrar && borrar.checked) return;
+      if (tr.hidden) return;
       costo += costoLinea;
       t.bruto += bruto; t.descuento += desc; t.base += base; t.iva += iva; t.ahorro += desc * (1 + tasa);
       if (esManoDeObra(tr) && !enCanon) { a.mano += base + iva; } else { a.bienes += base; a.iva += iva; }
@@ -262,8 +263,15 @@
   function activar(tr) {
     const desc = tr.querySelector('.descripcion');
     const quitar = tr.querySelector('.quitar-item');
+    const borrar = tr.querySelector('input[name$=DELETE]');
+    if (borrar) {
+      borrar.setAttribute('autocomplete', 'off');
+      tr.dataset.quitar = borrar.defaultChecked ? '1' : '0';
+      borrar.addEventListener('change', function () {
+        tr.dataset.quitar = borrar.checked ? '1' : '0';
+      });
+    }
     if (quitar) quitar.addEventListener('click', function () {
-      const borrar = tr.querySelector('input[name$=DELETE]');
       borrar.checked = true;
       borrar.dispatchEvent(new Event('change', { bubbles: true }));
       recalcular();
@@ -308,6 +316,14 @@
   if (botonEnviar) botonEnviar.addEventListener('click', function (ev) {
     if (!confirm('¿Enviar la propuesta {{ codigo|escapejs }} al cliente? Se genera el PDF y le llega por correo para que responda.')) ev.preventDefault();
   });
+  document.getElementById('form-cotizacion').addEventListener('borrador-restaurado', function () {
+    tabla.querySelectorAll('.linea').forEach(function (tr) {
+      const borrar = tr.querySelector('input[name$=DELETE]');
+      if (borrar) tr.dataset.quitar = borrar.checked ? '1' : '0';
+    });
+    recalcular();
+  });
+  window.addEventListener('pageshow', recalcular);
   recalcular();
 })();
 </script>

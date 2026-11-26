@@ -72,6 +72,7 @@
     const clave = 'auto:' + usuario + ':' + ruta + location.search + '#' + (form.id || i) + (version ? ':' + version : '');
     const conErrores = hayErrores(form);
     let listo = false, pendiente = null;
+    let editado = false;
 
     function tomar() {
       const datos = { guardado: Date.now(), valores: {}, archivos: {}, filas: {} };
@@ -99,16 +100,30 @@
     let inicial = null;  // lo que trae la página al abrirla: si no cambia nada, no se guarda borrador
     function guardar() {
       clearTimeout(pendiente); pendiente = null;
-      if (!listo) return;
+      if (!listo || (version && !editado)) return;
       const datos = tomar();
       if (JSON.stringify(datos.valores) === inicial && !Object.keys(datos.archivos).length) {
-        if (version) borrar(clave).catch(function () {});
+        if (version) {
+          try { localStorage.removeItem(clave); } catch (e) { /* almacenamiento bloqueado */ }
+          borrar(clave).catch(function () {});
+        }
         return;
       }
       if (vacio(datos)) { borrar(clave).catch(function () {}); return; }
+      if (version) {
+        // Escribe antes de que F5 descargue la pagina, incluso entre pulsaciones.
+        try { localStorage.setItem(clave, JSON.stringify(datos)); return; } catch (e) { /* queda IndexedDB */ }
+      }
       escribir(clave, datos).catch(function () { /* memoria del navegador llena o bloqueada */ });
     }
-    function programar() { if (!pendiente) pendiente = setTimeout(guardar, 1000); }
+    function programar() {
+      if (version && listo) {
+        editado = true;
+        guardar();
+      } else if (!pendiente) {
+        pendiente = setTimeout(guardar, 1000);
+      }
+    }
 
     function ponerArchivos(c, lista) {
       if (!lista || !lista.length || !window.DataTransfer) return;
@@ -140,6 +155,7 @@
         else if (c.multiple && c.options) [...c.options].forEach(function (o) { o.selected = v.indexOf(o.value) !== -1; });
         else c.value = v[0];
       });
+      form.dispatchEvent(new Event('borrador-restaurado'));
       // Que la página recalcule lo que depende de los campos (totales, secciones que se muestran, contadores)
       editables(form).forEach(function (c) {
         c.dispatchEvent(new Event(c.type === 'checkbox' || c.type === 'radio' || c.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
@@ -156,15 +172,21 @@
       caja.querySelector('button').addEventListener('click', function () {
         if (!confirm('¿Descartar lo recuperado y volver a como estaba?')) return;
         listo = false;
+        if (version) try { localStorage.removeItem(clave); } catch (e) { /* almacenamiento bloqueado */ }
         borrar(clave).finally(function () { location.replace(location.pathname + location.search); });
       });
       form.prepend(caja);
     }
 
     inicial = JSON.stringify(tomar().valores);
-    leer(clave).then(function (datos) {
+    let local = null;
+    if (version) try { local = JSON.parse(localStorage.getItem(clave)); } catch (e) { /* almacenamiento bloqueado */ }
+    (local ? Promise.resolve(local) : leer(clave)).then(function (datos) {
       if (!datos || clave === yaGuardado) return;
-      if (Date.now() - datos.guardado > VIGENCIA) return borrar(clave);
+      if (Date.now() - datos.guardado > VIGENCIA) {
+        if (version) try { localStorage.removeItem(clave); } catch (e) { /* almacenamiento bloqueado */ }
+        return borrar(clave);
+      }
       if (conErrores) return;  // el servidor muestra lo enviado con sus errores: se respeta
       restaurar(datos);
       aviso(datos);
