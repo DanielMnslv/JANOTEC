@@ -111,6 +111,7 @@ def traer_del_informe(cotizacion, *, es_direccion=False):
         raise ValidationError("El informe no tiene servicios, materiales ni equipos para cargar.")
     cotizacion.lineas.all().delete()
     LineaCotizacion.objects.bulk_create(filas)
+    cotizacion.save(update_fields=['actualizado'])
     return len(filas), sum(fila.valor_unitario <= 0 for fila in filas)
 
 
