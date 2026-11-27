@@ -11,7 +11,7 @@
       {% csrf_token %}
       <div class="card-header"><i class="bi bi-pencil-square"></i> Corregir el registro</div>
       <div class="card-body">
-        {% include "cronograma/_rol_horas.html" with campo=form.rol %}
+        {% include "tickets/_campo.html" with campo=form.rol %}
         <div class="row">
           {% include "tickets/_campo.html" with campo=form.fecha clase="col-md-4" %}
           {% include "tickets/_campo.html" with campo=form.hora_salida clase="col-md-4" %}
