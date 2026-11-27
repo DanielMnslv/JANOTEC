@@ -587,7 +587,7 @@ class CotizadorTests(BaseComercial):
                           ("Cable HDMI 15 m", Decimal("0")), ("Canaleta", Decimal("0"))])
         self.assertEqual(cot.lineas.first().categoria, "mano_obra")
         recargada = self.client.get(url)
-        self.assertContains(recargada, '<div class="linea">', count=4)  # Tres guardadas y la plantilla.
+        self.assertContains(recargada, '<tr class="linea">', count=4)  # Tres guardadas y la plantilla.
         self.assertContains(recargada, 'value="Cable HDMI 15 m"')
         r = self.client.post(url, {**self.lineas([("Canaleta 20x12", "6", "0", "0")]), **URGENTE, "accion": "enviar"}, follow=True)
         self.assertContains(r, "Cada ítem necesita cantidad y costo unitario")

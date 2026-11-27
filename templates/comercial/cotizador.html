@@ -44,7 +44,7 @@
         <div class="small border rounded p-2 mb-2 bg-light" style="white-space:pre-line">{{ ficha.informe.materiales|default:"Ninguno: solo servicios." }}</div>
         <button class="btn btn-sm btn-outline-primary" name="accion" value="informe" formnovalidate
                 onclick="return confirm('Se reemplazarán todos los ítems por los del informe. Los cambios sin guardar se perderán. ¿Continuar?')">
-          <i class="bi bi-box-arrow-in-down"></i> Reemplazar ítems con el informe</button>
+          <i class="bi bi-box-arrow-in-down"></i> Utilizar ítems del informe para la propuesta</button>
         {% else %}<div class="alert alert-warning small mb-0">Primero registre el informe del requerimiento en la ficha comercial: es la base de la propuesta.</div>{% endif %}
       </div></div>
 
@@ -68,9 +68,9 @@
           <button type="button" class="btn btn-sm btn-light border" id="agregar-linea" data-agregar-fila="lineas"><i class="bi bi-plus-lg"></i> Agregar ítem</button></div>
         {# Cada ítem es un bloque que cabe en el ancho: nada de barra horizontal para llegar al costo o al IVA #}
         <style>
-          #tabla-lineas { display: block; width: 100%; counter-reset: item; }
+          #tabla-lineas, #tabla-lineas tbody { display: block; width: 100%; counter-reset: item; }
           .items-ancho { container-type: inline-size; }
-          #tabla-lineas .linea { display: grid; gap: .35rem .5rem; padding: .65rem .75rem; border-bottom: 1px solid var(--bs-border-color);
+          #tabla-lineas tr.linea { display: grid; gap: .35rem .5rem; padding: .65rem .75rem; border-bottom: 1px solid var(--bs-border-color);
             grid-template-columns: 1.6rem 1.15fr .8fr 1.25fr .7fr .7fr 1.1fr;
             grid-template-areas: "num desc desc desc desc desc quitar"
                                  ".   prov prov marca marca ref ref"
@@ -78,14 +78,14 @@
           #tabla-lineas input[type=number] { -moz-appearance: textfield; appearance: textfield; text-align: right; }
           #tabla-lineas input[type=number]::-webkit-inner-spin-button, #tabla-lineas input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
           @container (max-width: 620px) {  /* columna angosta: los números en dos renglones de a tres */
-            #tabla-lineas .linea { grid-template-columns: 1.6rem 1fr 1fr 1fr;
+            #tabla-lineas tr.linea { grid-template-columns: 1.6rem 1fr 1fr 1fr;
               grid-template-areas: "num desc desc quitar" ". prov prov prov" ". marca ref ref" ". cat cant valor" ". descu iva total"; }
           }
-          #tabla-lineas .linea[hidden] { display: none; }
-          #tabla-lineas .linea:nth-child(even) { background: var(--bs-tertiary-bg); }
-          #tabla-lineas .campo-item { display: block; border: 0; padding: 0; background: transparent; min-width: 0; }
+          #tabla-lineas tr.linea[hidden] { display: none; }
+          #tabla-lineas tr.linea:nth-child(even) { background: var(--bs-tertiary-bg); }
+          #tabla-lineas td { display: block; border: 0; padding: 0; background: transparent; min-width: 0; }
           #tabla-lineas .et { display: block; font-size: .72rem; color: var(--bs-secondary-color); margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-          #tabla-lineas .campo-item .form-control, #tabla-lineas .campo-item .form-select, #tabla-lineas .campo-item select, #tabla-lineas .campo-item input:not([type=checkbox]) { width: 100%; min-width: 0; }
+          #tabla-lineas td .form-control, #tabla-lineas td .form-select, #tabla-lineas td select, #tabla-lineas td input:not([type=checkbox]) { width: 100%; min-width: 0; }
           #tabla-lineas .c-num { grid-area: num; align-self: end; padding-bottom: .35rem; font-weight: 600; color: var(--bs-secondary-color); }
           #tabla-lineas .c-num::after { counter-increment: item; content: counter(item) "."; }
           #tabla-lineas .c-desc { grid-area: desc; } #tabla-lineas .c-quitar { grid-area: quitar; align-self: end; padding-bottom: .35rem; }
@@ -94,16 +94,20 @@
           #tabla-lineas .c-descu { grid-area: descu; } #tabla-lineas .c-iva { grid-area: iva; }
           #tabla-lineas .c-total { grid-area: total; } #tabla-lineas .c-total .subtotal { padding-top: .3rem; }
           @media (max-width: 575.98px) {  /* celular: un campo por renglón, de a dos los números */
-            #tabla-lineas .linea { grid-template-columns: 1.5rem 1fr 1fr;
+            #tabla-lineas tr.linea { grid-template-columns: 1.5rem 1fr 1fr;
               grid-template-areas: "num desc desc" ". prov prov" ". marca ref" ". cat cant" ". valor descu" ". iva total" ". quitar quitar"; }
           }
         </style>
-        <div class="items-ancho"><div class="small" id="tabla-lineas">
+        <div class="items-ancho"><table class="table table-sm align-middle mb-0 small" id="tabla-lineas"><tbody>
             {% for f in lineas %}{% include "comercial/_linea_cotizacion.html" %}{% endfor %}
-        </div></div>
+        </tbody></table></div>
         <template id="plantilla-linea">{% with f=lineas.empty_form %}{% include "comercial/_linea_cotizacion.html" %}{% endwith %}</template>
         {% if lineas.non_form_errors %}<div class="card-body text-danger small">{{ lineas.non_form_errors }}</div>{% endif %}
-        {% if not lineas.forms %}<div class="card-body small text-muted-jn" id="sin-lineas">Agregue ítems del catálogo o tráigalos del informe.</div>{% endif %}
+        <div class="card-body small text-muted-jn" id="sin-lineas"{% if lineas.forms %} hidden{% endif %}>Agregue ítems del catálogo o use los del informe.</div>
+        <div class="card-body small" id="items-quitados" hidden>
+          <span role="status"></span>
+          <button type="button" class="btn btn-sm btn-outline-secondary">Restaurar ítems quitados</button>
+        </div>
       </div>
       <datalist id="catalogo-precios">{% for c in catalogo %}<option value="{{ c.descripcion }}">{% endfor %}</datalist>
       {{ catalogo|json_script:"datos-catalogo" }}
@@ -176,7 +180,7 @@
 (function () {
   const catalogo = {};
   JSON.parse(document.getElementById('datos-catalogo').textContent).forEach(function (c) { catalogo[c.descripcion.toLowerCase()] = c; });
-  const tabla = document.getElementById('tabla-lineas');
+  const tabla = document.querySelector('#tabla-lineas tbody');
   const total = document.getElementById('id_lineas-TOTAL_FORMS');
   const pesos = function (v) { return '$' + Math.round(v).toLocaleString('es-CO'); };
   const num = function (el) { return parseFloat((el && el.value) || '0') || 0; };
@@ -205,10 +209,10 @@
     document.querySelectorAll('.solo-alquiler').forEach(function (el) { el.hidden = !alquila; });
     const t = {bruto: 0, descuento: 0, base: 0, iva: 0, ahorro: 0};
     const margen = 1 - Math.min(num(document.getElementById('id_margen')), 99) / 100;  // Sobre la venta, como LineaCotizacion.precio_unitario
-    let costo = 0;
+    let costo = 0, visibles = 0, quitados = 0;
     const enCanon = m !== 'hibrido';
     const a = {bienes: 0, iva: 0, mano: 0};
-    tabla.querySelectorAll('.linea').forEach(function (tr) {
+    tabla.querySelectorAll('tr.linea').forEach(function (tr) {
       revisarCatalogo(tr);
       const borrar = tr.querySelector('input[type=checkbox][name$=DELETE]');
       const costoLinea = num(tr.querySelector('.cantidad')) * num(tr.querySelector('.valor'));
@@ -221,11 +225,19 @@
       tr.querySelectorAll('input:not([type=hidden]):not([name$=DELETE]), select').forEach(function (campo) {
         campo.disabled = tr.hidden;
       });
-      if (tr.hidden) return;
+      if (tr.hidden) {
+        quitados++;
+        return;
+      }
+      visibles++;
       costo += costoLinea;
       t.bruto += bruto; t.descuento += desc; t.base += base; t.iva += iva; t.ahorro += desc * (1 + tasa);
       if (esManoDeObra(tr) && !enCanon) { a.mano += base + iva; } else { a.bienes += base; a.iva += iva; }
     });
+    const retirados = document.getElementById('items-quitados');
+    retirados.hidden = quitados === 0;
+    retirados.querySelector('[role=status]').textContent = quitados + ' ítem(s) quitados en este borrador.';
+    document.getElementById('sin-lineas').hidden = visibles + quitados !== 0;
     ['bruto', 'descuento', 'base', 'iva', 'ahorro'].forEach(function (k) { document.getElementById('t-' + k).textContent = pesos(t[k]); });
     document.getElementById('t-costo').textContent = pesos(costo);
     document.getElementById('t-utilidad').textContent = pesos(t.base - costo);
@@ -297,7 +309,7 @@
       recalcular();
     });
   }
-  tabla.querySelectorAll('.linea').forEach(activar);
+  tabla.querySelectorAll('tr.linea').forEach(activar);
   document.getElementById('agregar-linea').addEventListener('click', function () {
     const n = parseInt(total.value, 10);
     const html = document.getElementById('plantilla-linea').innerHTML.replace(/__prefix__/g, n);
@@ -308,9 +320,16 @@
     fila.querySelector('.iva').value = 19;
     fila.querySelector('.descuento').value = 0;
     activar(fila);
-    const vacio = document.getElementById('sin-lineas');
-    if (vacio) vacio.hidden = true;
+    recalcular();
     fila.querySelector('.descripcion').focus();
+  });
+  document.querySelector('#items-quitados button').addEventListener('click', function () {
+    tabla.querySelectorAll('.linea[hidden]').forEach(function (tr) {
+      tr.dataset.quitar = '0';
+    });
+    recalcular();
+    document.getElementById('form-cotizacion').dispatchEvent(new Event('input', { bubbles: true }));
+    tabla.querySelector('.descripcion')?.focus();
   });
   const botonEnviar = document.getElementById('enviar-propuesta');
   if (botonEnviar) botonEnviar.addEventListener('click', function (ev) {
