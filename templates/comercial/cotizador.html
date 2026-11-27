@@ -278,7 +278,7 @@
     const borrar = tr.querySelector('input[name$=DELETE]');
     if (borrar) {
       borrar.setAttribute('autocomplete', 'off');
-      tr.dataset.quitar = borrar.defaultChecked ? '1' : '0';
+      tr.dataset.quitar = borrar.checked ? '1' : '0';
       borrar.addEventListener('change', function () {
         tr.dataset.quitar = borrar.checked ? '1' : '0';
       });
