@@ -1,5 +1,6 @@
 """Ejemplos de redacción (23/11/2026): se enseñan en su página y «Mejorar redacción» se los muestra a Claude."""
 
+import json
 import os
 from types import SimpleNamespace
 from unittest import mock
@@ -65,6 +66,39 @@ class EjemplosRedaccionTests(BaseTickets):
     def test_sin_ejemplos_quedan_solo_las_instrucciones(self):
         self.assertEqual(redaccion.instrucciones_con_ejemplos([]), redaccion.INSTRUCCIONES)
         self.assertNotIn("**", redaccion.INSTRUCCIONES.replace("sin ** ni", ""))
+
+    def test_redaccion_del_resultado_recibe_solo_contexto_tecnico_del_acta(self):
+        self.client.force_login(self.agente)
+        contexto = {
+            "sistema": "CCTV", "actividades": ["Soporte", "Instalación"], "resultado": "parcial",
+            "diagnostico": "La cámara perdió video. Avisar a contacto@ejemplo.test.",
+            "observaciones": "La nota del campo no se duplica como contexto.",
+            "firma": "firma privada", "equipos": [
+                {"grupo": "requeridos", "equipo": "Cámara IP", "cantidad": "1", "serial": "serial privado"},
+                {"grupo": "utilizados", "equipo": "Conector BNC"},
+            ],
+        }
+        with mock.patch.dict(os.environ, {"REDACCION_API_KEY": "clave-de-prueba"}), \
+                mock.patch("anthropic.Anthropic") as cliente:
+            crear = cliente.return_value.messages.create
+            crear.return_value = SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text="Listo.")])
+            r = self.client.post(reverse("mejorar_redaccion"), {
+                "texto": "se cambia conector", "tipo": "resultado", "contexto_acta": json.dumps(contexto),
+            })
+        self.assertEqual(r.json()["texto"], "Listo.")
+        llamada = crear.call_args.kwargs
+        mensaje = json.loads(llamada["messages"][0]["content"])
+        datos = mensaje["contexto_del_acta"]
+        self.assertEqual(datos["actividades"], ["Soporte", "Instalación"])
+        self.assertEqual(datos["resultado"], "Solucionado parcialmente")
+        self.assertEqual(datos["equipos"], [
+            {"grupo": "Requerido", "equipo": "Cámara IP", "cantidad": "1"},
+            {"grupo": "Utilizado", "equipo": "Conector BNC"},
+        ])
+        self.assertEqual(datos["diagnostico"], "La cámara perdió video. Avisar a [CORREO].")
+        self.assertNotIn("firma", datos)
+        self.assertNotIn("observaciones", datos)
+        self.assertIn("Una lista de equipos no acredita instalación", llamada["system"])
 
 
 class AprendizajeTests(BaseTickets):
