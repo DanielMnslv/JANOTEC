@@ -78,7 +78,7 @@ def areas_propias(usuario):
         if getattr(usuario, marca, False):
             areas.add(area)
     if getattr(usuario, "lleva_horas_extras", False):
-        areas.add("horas")
+        areas.add("administrativa")
     return areas
 
 
@@ -139,6 +139,8 @@ def _grupos(request, datos):
     financiera = Enlace("Pagos y facturas", reverse("inventario:financiera"), "bi-cash-stack", u == "financiera", por_pagar,
                         "danger", "Órdenes de compra por pagar")
     viaticos = Enlace("Viáticos", reverse("cronograma:viaticos"), "bi-wallet2", u == "viaticos")
+    horas = Enlace("Horas extras", reverse("cronograma:horas_extras"), "bi-clock-history",
+                   ns == "cronograma" and u in ("horas_extras", "horas_extras_corregir"))
     from .reportes import disponibles
     descargables = bool(disponibles(usuario)) and Enlace("Reportes en Excel", reverse("reportes_descargables"),
                                                         "bi-file-earmark-spreadsheet", u == "reportes_descargables")
@@ -196,8 +198,6 @@ def _grupos(request, datos):
         cronograma = Enlace("Cronograma", reverse("cronograma:semana"), "bi-calendar-week",
                             ns == "cronograma" and u not in ("horas_extras", "horas_extras_corregir", "viaticos") and "mantenimiento" not in u)
         actas = Enlace("Actas", reverse("actas_lista"), "bi-clipboard-check", u in ("actas_lista", "acta_detalle"))
-        horas = Enlace("Horas extras", reverse("cronograma:horas_extras"), "bi-clock-history",
-                       u in ("horas_extras", "horas_extras_corregir"))
         # Clientes y sedes: sedes, mantenimiento por sistema, equipos instalados y su hoja de vida (tickets/clientes.py)
         clientes = Enlace("Clientes y sedes", reverse("clientes"), "bi-building", not ns and u in URLS_CLIENTES)
         if usuario.es_supervisor:
@@ -220,7 +220,7 @@ def _grupos(request, datos):
                 Enlace("Confirmar y cerrar", panel + "?estado=informe", "bi-check2-square", en_panel("informe"),
                        n(E.INFORME), "secondary", "Esperando la confirmación del cliente")),
                 Enlace("Todos los pendientes", panel + "?estado=abiertos", "bi-kanban", en_panel("abiertos")),
-                clientes, horas, viaticos, material]
+                clientes, viaticos, material]
         else:
             # El técnico: sus visitas → cronograma → acta → informe; luego sus horas y su material
             tecnica = [*pasos(
@@ -228,7 +228,7 @@ def _grupos(request, datos):
                 cronograma, actas,
                 Enlace("Informes pendientes", panel + "?estado=visita_ejecutada", "bi-file-earmark-text",
                        en_panel("visita_ejecutada"))),
-                clientes, horas, usuario.ve_financiera and viaticos, material,
+                clientes, not usuario.gestiona_horas_extras and horas, usuario.ve_financiera and viaticos, material,
                 Enlace("Todos mis tickets", panel + "?estado=", "bi-kanban", en_panel(""))]
         grupo("tecnica", "Área técnica", "tecnica", *tecnica)
         if usuario.ve_comercial:
@@ -282,11 +282,12 @@ def _grupos(request, datos):
                      Enlace("Mis solicitudes", reverse("mis_tickets"), "bi-list-check", u == "mis_tickets"),
                      Enlace("Historial de servicio", reverse("actas_lista"), "bi-clock-history",
                             u in ("actas_lista", "acta_detalle"))))
-    if usuario.lleva_horas_extras and not usuario.es_personal:
-        # Quien lleva las horas extras sin ser del área técnica (p. ej. Tatiana): valida, corrige o borra
-        grupo("horas", "Horas extras", "horas",
-              Enlace("Horas extras", reverse("cronograma:horas_extras"), "bi-clock-history",
-                     u in ("horas_extras", "horas_extras_corregir")))
+    if usuario.gestiona_horas_extras:
+        administrativa = next((g for g in grupos if g.clave == "administrativa"), None)
+        if administrativa:
+            administrativa.enlaces.append(horas)
+        else:
+            grupo("administrativa", "Área administrativa", "administrativa", horas)
     return grupos
 
 

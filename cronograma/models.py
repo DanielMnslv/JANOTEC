@@ -426,25 +426,21 @@ def ruta_evidencia_horas(instancia, nombre):
 class ReporteHorasExtra(models.Model):
     """Auto reporte de salida a campo (antes un Google Forms), en dos momentos y con una foto en cada uno:
 
-    * **Inicio**: el conductor cuenta desde que le entregan las llaves para el alistamiento (pre operación) del vehículo;
-      el acompañante, desde que llega a la sede del cliente e inicia la operación;
-      quien va en bus o transporte público solo cuenta de 6:00 a. m. a 7:00 p. m. (antes y después no hay horas extras).
+    * **Inicio**: la hora registrada al comenzar, sin franjas según el medio de transporte.
     * **Fin**: la hora en que termina, con su foto y la ubicación, esté donde esté. Hasta que no se cierre, no suma horas.
     """
 
     class Rol(models.TextChoices):
-        CONDUCTOR = "conductor", "Conductor (desde la entrega de llaves y el alistamiento del vehículo)"
-        ACOMPANANTE = "acompanante", "Acompañante (desde la llegada a la sede del cliente)"
-        BUS = "bus", "En bus o transporte público (solo cuenta de 6:00 a. m. a 7:00 p. m.)"
-
-    # En bus las horas extras solo corren dentro de esta franja (en minutos del día): 6:00 a. m. a 7:00 p. m.
-    FRANJA_BUS = (6 * 60, 19 * 60)
+        CONDUCTOR = "conductor", "Conductor"
+        ACOMPANANTE = "acompanante", "Acompañante"
+        BUS = "bus", "En bus o transporte público"
+        PROPIO = "propio", "En vehículo propio"
 
     class Validacion(models.TextChoices):
-        """Si las horas se pueden pagar: en el momento y con ubicación se verifican solas; lo demás lo valida la coordinación."""
+        """Estado de revisión del registro de horas extras."""
         VERIFICADO = "verificado", "Verificado (en el momento, con foto y ubicación)"
-        POR_VALIDAR = "por_validar", "Por validar (coordinación)"
-        APROBADO = "aprobado", "Aprobado por la coordinación"
+        POR_VALIDAR = "por_validar", "Por validar"
+        APROBADO = "aprobado", "Aprobado"
         RECHAZADO = "rechazado", "Rechazado (no suma)"
         ANTERIOR = "anterior", "Registrado antes de la validación"
 
@@ -495,7 +491,7 @@ class ReporteHorasExtra(models.Model):
 
     @property
     def rol_corto(self):
-        return {"conductor": "Conductor", "acompanante": "Acompañante", "bus": "En bus"}.get(self.rol, "—")
+        return "En bus" if self.rol == self.Rol.BUS else self.get_rol_display() if self.rol else "—"
 
     @property
     def minutos(self):
@@ -506,20 +502,7 @@ class ReporteHorasExtra(models.Model):
         llegada = self.hora_llegada.hour * 60 + self.hora_llegada.minute
         if llegada < salida:  # si termina después de medianoche, sigue contando
             llegada += 24 * 60
-        if self.rol != self.Rol.BUS:
-            return llegada - salida
-        # En bus: solo lo que cae entre las 6:00 a. m. y las 7:00 p. m. (de ese día o del siguiente)
-        desde, hasta = self.FRANJA_BUS
-        return sum(max(0, min(llegada, hasta + dia) - max(salida, desde + dia)) for dia in (0, 24 * 60))
-
-    @property
-    def recortado_por_bus(self):
-        """En bus y con parte del tiempo fuera de 6:00 a. m. – 7:00 p. m. (para avisar que esa parte no cuenta)."""
-        if self.rol != self.Rol.BUS or self.hora_llegada is None or self.validacion == self.Validacion.RECHAZADO:
-            return False
-        salida = self.hora_salida.hour * 60 + self.hora_salida.minute
-        llegada = self.hora_llegada.hour * 60 + self.hora_llegada.minute
-        return self.minutos != (llegada - salida) % (24 * 60)
+        return llegada - salida
 
     @property
     def duracion(self):

@@ -601,9 +601,9 @@ def horas_extras_requerido(vista):
 def horas_extras(request):
     """Auto reporte de salida a campo, con la validación de cada momento (ver ``cronograma/horas_validacion.py``).
 
-    Acciones (POST «accion»): iniciar / iniciar_tardio, cerrar / cerrar_tardio (con «reporte»), validar (coordinación:
+    Acciones (POST «accion»): iniciar / iniciar_tardio, cerrar / cerrar_tardio (con «reporte»), validar (encargada:
     aprobar o rechazar con nota). Cada momento lleva foto y la ubicación del celular, esté donde esté.
-    El técnico ve lo suyo; la coordinación ve todo, valida y descarga el Excel."""
+    El técnico ve lo suyo; quien gestiona las horas ve todo, valida y descarga el Excel."""
     from . import horas_validacion as hv
     from .forms import CierreHorasExtraForm, ReporteHorasExtraForm
     from .models import ReporteHorasExtra
@@ -664,7 +664,7 @@ def horas_extras(request):
                 hv.registrar_ubicacion(reporte, "llegada", hv.leer_ubicacion(request.POST))
             hv.actualizar_estado(reporte)
             reporte.save()
-            estado = "Quedó verificado." if reporte.validacion == V.VERIFICADO else "Queda por validar de la coordinación."
+            estado = "Quedó verificado." if reporte.validacion == V.VERIFICADO else "Queda por validar."
             messages.success(request, f"Fin registrado a las {reporte.hora_llegada:%H:%M}: {reporte.duracion} h en "
                                       f"{reporte.cliente}. {estado}")
         else:
@@ -672,7 +672,7 @@ def horas_extras(request):
             messages.error(request, f"No se registró el fin: {errores}")
         return redirect("cronograma:horas_extras")
 
-    # --- Coordinación: validar ---
+    # --- Validar ---
     if accion == "validar":
         if not request.user.gestiona_horas_extras:
             raise PermissionDenied
@@ -707,23 +707,29 @@ def horas_extras(request):
     for r in reportes:
         r.alertas = hv.alertas(r)
         r.mapa_salida, r.mapa_llegada = hv.mapa(r.lat_salida, r.lon_salida), hv.mapa(r.lat_llegada, r.lon_llegada)
-    por_validar = [r for r in reportes if r.validacion == V.POR_VALIDAR and not r.abierto]
-
-    totales = {}
+    minutos_por_colaborador = {}
     for r in reportes:
-        totales[r.colaborador] = totales.get(r.colaborador, 0) + r.minutos
-    totales = [(c, f"{m // 60}:{m % 60:02d}") for c, m in sorted(totales.items(), key=lambda x: x[0].get_full_name())]
+        minutos_por_colaborador[r.colaborador] = minutos_por_colaborador.get(r.colaborador, 0) + r.minutos
+    resumen = sorted(minutos_por_colaborador.items(), key=lambda x: (x[0].get_full_name() or x[0].username).casefold())
+    total_mes = sum(minutos_por_colaborador.values())
+    totales = [(c, f"{m // 60}:{m % 60:02d}") for c, m in resumen]
 
     if request.user.gestiona_horas_extras and request.GET.get("formato") == "excel":
-        return _excel_horas_extras(reportes, anio, mes)
+        return _excel_horas_extras(reportes, anio, mes, resumen)
+
+    colaborador = request.GET.get("colaborador", "") if request.user.gestiona_horas_extras else ""
+    if colaborador:
+        reportes = [r for r in reportes if str(r.colaborador_id) == colaborador]
+    por_validar = [r for r in reportes if r.validacion == V.POR_VALIDAR and not r.abierto]
 
     return render(request, "cronograma/horas_extras.html", {
         "form": form, "form_tardio": form_tardio, "abrir_tardio": tardio, "reportes": reportes, "totales": totales,
+        "colaborador": colaborador, "total_mes": f"{total_mes // 60}:{total_mes % 60:02d}",
         "mes": f"{anio}-{mes:02d}", "abiertos": abiertos, "por_validar": por_validar,
     })
 
 
-def _excel_horas_extras(reportes, anio, mes):
+def _excel_horas_extras(reportes, anio, mes, resumen):
     """El Excel del mes con cómo se registró cada momento, el enlace a la ubicación en el mapa y la validación."""
     from openpyxl import Workbook
 
@@ -757,6 +763,16 @@ def _excel_horas_extras(reportes, anio, mes):
     for n, ancho in enumerate((30, 12, 13, 10, 30, 30, 10, 30, 30, 8, 34, 26, 50, 26, 30, 26)):
         hoja.column_dimensions[chr(65 + n)].width = ancho
     hoja.freeze_panes = "A2"
+    consolidado = libro.create_sheet("Consolidado mensual")
+    consolidado.append(["Colaborador", "Horas registradas (sin las rechazadas)"])
+    for colaborador, minutos in resumen:
+        consolidado.append([nombre(colaborador), timedelta(minutes=minutos)])
+    consolidado.append(["Total del mes", timedelta(minutes=sum(minutos for _, minutos in resumen))])
+    for celdas in consolidado.iter_rows(min_row=2, min_col=2, max_col=2):
+        celdas[0].number_format = "[h]:mm"
+    consolidado.column_dimensions["A"].width = 35
+    consolidado.column_dimensions["B"].width = 42
+    consolidado.freeze_panes = "A2"
     respuesta = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     respuesta["Content-Disposition"] = f'attachment; filename="horas_extras_{anio}-{mes:02d}.xlsx"'
     libro.save(respuesta)
@@ -768,7 +784,7 @@ def _excel_horas_extras(reportes, anio, mes):
 def horas_extras_corregir(request, pk):
     """Quien lleva las horas extras corrige o borra un registro que quedó mal (18/11/2026).
 
-    Siempre con el motivo: al corregir, el registro queda «Aprobado por la coordinación» con la nota «Corregido: …»
+    Siempre con el motivo: al corregir, el registro queda «Aprobado» con la nota «Corregido: …»
     (quién y cuándo quedan en validado_por / validado_en); al borrar, desaparece y deja de sumar."""
     from .forms import CorregirHorasExtraForm
     from .models import ReporteHorasExtra

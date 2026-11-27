@@ -180,28 +180,24 @@ class BorrarHorasExtrasTests(BaseCronograma):
         self.assertEqual(datos[0]["fields"]["cliente"], "Cliente de prueba")
 
 
-class HorasExtrasEnBusTests(BaseCronograma):
-    """En bus o transporte público (18/11/2026) solo cuenta de 6:00 a. m. a 7:00 p. m."""
+class HorasExtrasSinFranjaTests(BaseCronograma):
+    """El medio de transporte no modifica la duración registrada."""
 
     def reporte(self, rol, salida, llegada):
         return ReporteHorasExtra(colaborador=self.tec, rol=rol, hora_salida=time(*salida), hora_llegada=time(*llegada),
                                  cliente="X")
 
-    def test_en_bus_no_cuenta_antes_de_las_6_ni_despues_de_las_7(self):
+    def test_en_bus_cuenta_antes_de_las_6_y_despues_de_las_7(self):
         r = self.reporte("bus", (4, 30), (21, 0))
-        self.assertEqual(r.minutos, 13 * 60)
-        self.assertTrue(r.recortado_por_bus)
+        self.assertEqual(r.minutos, 16 * 60 + 30)
 
     def test_en_bus_dentro_de_la_franja_cuenta_todo(self):
         r = self.reporte("bus", (7, 0), (18, 30))
         self.assertEqual(r.minutos, 11 * 60 + 30)
-        self.assertFalse(r.recortado_por_bus)
-
-    def test_en_bus_toda_de_noche_no_cuenta(self):
-        self.assertEqual(self.reporte("bus", (20, 0), (5, 0)).minutos, 0)
-
-    def test_en_bus_pasando_la_medianoche_cuenta_la_manana_siguiente(self):
-        self.assertEqual(self.reporte("bus", (17, 0), (8, 0)).minutos, 2 * 60 + 2 * 60)
+    def test_fin_a_las_dos_cuenta_igual_con_cualquier_transporte(self):
+        for rol in ReporteHorasExtra.Rol.values:
+            with self.subTest(rol=rol):
+                self.assertEqual(self.reporte(rol, (20, 0), (2, 0)).minutos, 360)
 
     def test_conductor_cuenta_todo_aunque_sea_de_noche(self):
         self.assertEqual(self.reporte("conductor", (4, 30), (21, 0)).minutos, 16 * 60 + 30)
@@ -209,7 +205,7 @@ class HorasExtrasEnBusTests(BaseCronograma):
 
 
 class CorregirHorasExtrasTests(BaseCronograma):
-    """Quien lleva las horas extras (18/11/2026), p. ej. Tatiana de bodega, corrige o borra un registro que quedó mal."""
+    """La encargada puede consultar, corregir y validar las horas extras desde Administrativa."""
 
     def setUp(self):
         super().setUp()
@@ -227,6 +223,27 @@ class CorregirHorasExtrasTests(BaseCronograma):
         self.assertEqual(lista.status_code, 200)
         self.assertContains(lista, "Cliente X")
         self.assertContains(lista, self.url)
+
+    def test_tatiana_filtra_el_detalle_y_conserva_el_consolidado_del_mes(self):
+        from openpyxl import load_workbook
+
+        ReporteHorasExtra.objects.create(
+            colaborador=self.tec2, rol="bus", fecha=self.r.fecha, hora_salida="20:00",
+            hora_llegada="02:00", cliente="Cliente nocturno",
+        )
+        self.client.force_login(self.tatiana)
+        url = reverse("cronograma:horas_extras")
+        detalle = self.client.get(url, {"colaborador": self.tec2.pk})
+        self.assertContains(detalle, "Cliente nocturno")
+        self.assertNotContains(detalle, "Cliente X")
+        self.assertEqual(detalle.context["total_mes"], "11:00")
+        self.assertEqual(len(detalle.context["totales"]), 2)
+        self.assertContains(detalle, f'value="{self.tec2.pk}" selected')
+        self.assertContains(detalle, "Área administrativa")
+        respuesta = self.client.get(url, {"formato": "excel", "colaborador": self.tec2.pk})
+        libro = load_workbook(BytesIO(respuesta.content))
+        self.assertEqual(libro["Horas extras"].max_row, 3)
+        self.assertEqual(libro["Consolidado mensual"]["B4"].value, timedelta(hours=11))
 
     def test_corregir_deja_aprobado_con_el_motivo(self):
         self.client.force_login(self.tatiana)
