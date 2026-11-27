@@ -1,6 +1,6 @@
 """Viáticos para el personal que va a las sedes de los clientes (alimentación, transporte, gasolina u otros).
 
-Los gestiona por completo el área financiera. Se piden de dos formas:
+Administrativa registra y consulta solicitudes; Financiera entrega los viáticos.
 
 * **Al programar en el cronograma**: casillas «Viáticos SST/SGI» y «Viáticos técnicos» con los conceptos. Al guardar la
   actividad se crea (o se actualiza) la solicitud y financiera recibe el correo. Si se desmarcan, la solicitud
@@ -24,7 +24,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from tickets.models import Ticket
-from tickets.permisos import personal_requerido
+from tickets.permisos import tickets_visibles
 
 from .models import SolicitudViaticos
 
@@ -138,12 +138,12 @@ class SolicitudViaticosForm(forms.ModelForm):
 
 # --- Vistas -------------------------------------------------------------------------------
 def _puede_ver(usuario):
-    return usuario.ve_financiera or usuario.es_supervisor
+    return usuario.es_administrativo or usuario.ve_financiera or usuario.es_supervisor
 
 
 @login_required
 def lista(request):
-    """Las solicitudes de viáticos: financiera las gestiona; coordinación las consulta."""
+    """Bandeja de viáticos para Administrativa, Financiera y coordinación."""
     if not _puede_ver(request.user):
         raise PermissionDenied
     base = SolicitudViaticos.objects.select_related("ticket", "solicitada_por", "gestionada_por", "actividad")
@@ -155,13 +155,15 @@ def lista(request):
 
 
 @login_required
-@personal_requerido
 def nueva(request):
     """Pedir viáticos desde un ticket (?ticket=<radicado>) o para un desplazamiento suelto."""
+    if not (request.user.es_personal or _puede_ver(request.user)):
+        raise PermissionDenied
     ticket = None
-    if request.GET.get("ticket") or request.POST.get("ticket"):
-        ticket = get_object_or_404(Ticket.objects.select_related("empresa", "sede"),
-                                   radicado=request.GET.get("ticket") or request.POST.get("ticket"))
+    radicado = request.GET.get("ticket") or request.POST.get("ticket")
+    if radicado:
+        tickets = Ticket.objects.all() if request.user.es_personal else tickets_visibles(request.user)
+        ticket = get_object_or_404(tickets.select_related("empresa", "sede"), radicado=radicado)
     inicial = {"fecha": timezone.localdate(), "para_tecnicos": True}
     if ticket:
         inicial["destino"] = " · ".join(str(x) for x in (ticket.empresa, ticket.sede) if x)

@@ -4,7 +4,7 @@
 {# Solicitudes de viáticos (alimentación, transporte, gasolina, otros) para el personal SST/SGI y técnico. Las gestiona financiera. #}
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
   <div><h1 class="h3 page-title mb-1">Viáticos</h1>
-    <p class="text-muted-jn mb-0">Lo que necesita el personal para ir a las sedes de los clientes. Se piden al programar en el cronograma o desde el ticket; financiera los entrega y los marca como gestionados.</p></div>
+    <p class="text-muted-jn mb-0">Administrativa registra y consulta las solicitudes. También se pueden pedir desde el ticket o al programar la visita. Financiera entrega los viáticos y registra el valor y el soporte.</p></div>
   <a class="btn btn-outline-primary btn-sm" href="{% url 'cronograma:viaticos_nueva' %}"><i class="bi bi-plus-lg"></i> Solicitud sin ticket</a>
 </div>
 <div class="card mb-4 border-warning"><div class="card-header"><i class="bi bi-wallet2"></i> Pendientes de financiera <span class="badge text-bg-warning">{{ pendientes|length }}</span></div>

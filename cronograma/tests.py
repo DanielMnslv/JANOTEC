@@ -1066,6 +1066,28 @@ class ViaticosTests(BaseCronograma):
         super().setUp()
         self.fin = Usuario.objects.create_user("fin", "fin@janotec.test", "Clave-segura-1", rol="financiera")
 
+    def test_administrativa_solicita_y_financiera_registra_la_entrega(self):
+        from .models import SolicitudViaticos
+
+        admin = Usuario.objects.create_user("administrativa", rol="administrativo")
+        lista = reverse("cronograma:viaticos")
+        nueva = reverse("cronograma:viaticos_nueva")
+        self.client.force_login(admin)
+        self.assertContains(self.client.get(lista), nueva)
+        self.assertRedirects(self.client.post(nueva, {
+            "fecha": timezone.localdate().isoformat(), "destino": "Sede de prueba",
+            "para_tecnicos": "on", "transporte": "on",
+        }), lista)
+        solicitud = SolicitudViaticos.objects.get(solicitada_por=admin)
+        gestionar = reverse("cronograma:viaticos_gestionar", args=[solicitud.pk])
+        self.assertNotContains(self.client.get(lista), gestionar)
+        self.assertEqual(self.client.post(gestionar, {"valor_entregado": "50000"}).status_code, 403)
+        self.client.force_login(self.fin)
+        self.assertContains(self.client.get(lista), gestionar)
+        self.assertRedirects(self.client.post(gestionar, {"valor_entregado": "50000"}), lista)
+        solicitud.refresh_from_db()
+        self.assertEqual(solicitud.gestionada_por, self.fin)
+
     def test_al_programar_con_viaticos_le_llega_a_financiera_y_al_quitarlos_se_cancela(self):
         from .models import SolicitudViaticos
 
