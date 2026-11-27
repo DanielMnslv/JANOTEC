@@ -431,10 +431,9 @@ class ReporteHorasExtra(models.Model):
     """
 
     class Rol(models.TextChoices):
+        BUS = "bus", "Bus"
         CONDUCTOR = "conductor", "Conductor"
         ACOMPANANTE = "acompanante", "Acompañante"
-        BUS = "bus", "En bus o transporte público"
-        PROPIO = "propio", "En vehículo propio"
 
     class Validacion(models.TextChoices):
         """Estado de revisión del registro de horas extras."""
@@ -491,7 +490,9 @@ class ReporteHorasExtra(models.Model):
 
     @property
     def rol_corto(self):
-        return "En bus" if self.rol == self.Rol.BUS else self.get_rol_display() if self.rol else "—"
+        if self.rol == "propio":  # Registros guardados con la opción anterior.
+            return "En vehículo propio"
+        return self.get_rol_display() if self.rol else "—"
 
     @property
     def minutos(self):

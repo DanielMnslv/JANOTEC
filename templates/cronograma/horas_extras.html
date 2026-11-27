@@ -39,7 +39,7 @@
           {% for e in form.non_field_errors %}<div class="text-danger small mb-2">{{ e }}</div>{% endfor %}
           {% if form.colaborador %}{% include "tickets/_campo.html" with campo=form.colaborador %}
           {% else %}<p class="small mb-3"><span class="text-muted-jn">Colaborador:</span> <b>{{ user.get_full_name|default:user.username }}</b></p>{% endif %}
-          {% include "cronograma/_rol_horas.html" with campo=form.rol %}
+          {% include "tickets/_campo.html" with campo=form.rol %}
           {% include "tickets/_campo.html" with campo=form.cliente %}
           {% include "tickets/_campo.html" with campo=form.evidencia_salida %}
           <button class="btn btn-primary w-100"><i class="bi bi-geo-alt"></i> Estoy iniciando ahora</button>
@@ -49,7 +49,7 @@
           <form method="post" enctype="multipart/form-data" class="mt-2">{% csrf_token %}<input type="hidden" name="accion" value="iniciar_tardio">
             {% for e in form_tardio.non_field_errors %}<div class="text-danger small mb-2">{{ e }}</div>{% endfor %}
             {% if form_tardio.colaborador %}{% include "tickets/_campo.html" with campo=form_tardio.colaborador %}{% endif %}
-            {% include "cronograma/_rol_horas.html" with campo=form_tardio.rol %}
+            {% include "tickets/_campo.html" with campo=form_tardio.rol %}
             {% include "tickets/_campo.html" with campo=form_tardio.fecha %}
             {% include "tickets/_campo.html" with campo=form_tardio.hora_salida %}
             {% include "tickets/_campo.html" with campo=form_tardio.cliente %}

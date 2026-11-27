@@ -204,7 +204,6 @@ class ReporteHorasExtraForm(BootstrapMixin, forms.ModelForm):
         model = ReporteHorasExtra
         fields = ["colaborador", "rol", "fecha", "hora_salida", "cliente", "evidencia_salida"]
         widgets = {
-            "rol": forms.RadioSelect,
             "fecha": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "hora_salida": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
             "evidencia_salida": forms.ClearableFileInput(attrs={"accept": "image/*", "capture": "environment"}),
@@ -221,7 +220,6 @@ class ReporteHorasExtraForm(BootstrapMixin, forms.ModelForm):
         else:
             del self.fields["colaborador"]
         self.fields["rol"].required = True
-        self.fields["rol"].choices = ReporteHorasExtra.Rol.choices
         self.fields["cliente"].widget = ConSugerencias(Empresa.objects.filter(activa=True).order_by("razon_social").values_list("razon_social", flat=True),
                                                        attrs={"placeholder": "Escriba o elija el cliente"})
         if tardio:
@@ -289,7 +287,6 @@ class CorregirHorasExtraForm(BootstrapMixin, forms.ModelForm):
         model = ReporteHorasExtra
         fields = ["rol", "fecha", "hora_salida", "hora_llegada", "cliente"]
         widgets = {
-            "rol": forms.RadioSelect,
             "fecha": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "hora_salida": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
             "hora_llegada": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
@@ -298,7 +295,6 @@ class CorregirHorasExtraForm(BootstrapMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["rol"].required = True
-        self.fields["rol"].choices = ReporteHorasExtra.Rol.choices
         self.fields["hora_llegada"].required = True
         self._aplicar_estilos()
 

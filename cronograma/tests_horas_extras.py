@@ -64,6 +64,16 @@ class HorasExtrasValidacionTests(BaseCronograma):
         self.client.post(self.url, {"accion": "iniciar", "i-rol": "conductor", "i-cliente": "LLANOGAS", **CERCA})
         self.assertFalse(ReporteHorasExtra.objects.exists())
 
+    def test_el_desplegable_tiene_tres_opciones_de_salida(self):
+        self.client.force_login(self.tec)
+        pagina = self.client.get(self.url)
+        self.assertContains(pagina, '<select name="i-rol"')
+        self.assertContains(pagina, '<select name="t-rol"')
+        esperadas = [("bus", "Bus"), ("conductor", "Conductor"), ("acompanante", "Acompañante")]
+        for formulario in ("form", "form_tardio"):
+            opciones = pagina.context[formulario].fields["rol"].choices
+            self.assertEqual([(valor, etiqueta) for valor, etiqueta in opciones if valor], esperadas)
+
     def test_donde_este_vale_y_sin_ubicacion_queda_por_validar(self):
         self.iniciar(self.tec, **LEJOS)  # en otra ciudad: no hay punto fijo con qué compararlo
         reporte = ReporteHorasExtra.objects.get()
