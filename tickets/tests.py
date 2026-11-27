@@ -741,6 +741,52 @@ class ActaBase(BaseTickets):
 
 
 class ActaEnPlataformaTests(ActaBase):
+    def test_envio_de_campo_reintenta_sin_duplicar_acta_fotos_y_firmas(self):
+        from uuid import uuid4
+
+        from .models import ActaSoporte
+
+        self.client.force_login(self.agente)
+        url = reverse("acta_nueva", args=[self.ticket.radicado])
+        version = self.client.get(url).context["version_visita"]
+        headers = {
+            "X-Janotec-Envio": str(uuid4()),
+            "X-Janotec-Usuario": str(self.agente.pk),
+            "X-Janotec-Visita": version,
+        }
+        incorrecta = self.client.post(url, self.datos_acta(firma_cliente=""), headers=headers)
+        self.assertEqual(incorrecta.status_code, 422)
+        self.assertFalse(ActaSoporte.objects.filter(ticket=self.ticket).exists())
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            registrada = self.client.post(url, self.datos_acta(), headers=headers)
+            repetida = self.client.post(url, self.datos_acta(), headers=headers)
+        self.assertEqual(registrada.status_code, 200)
+        self.assertEqual(repetida.json(), registrada.json())
+        self.assertEqual(len(callbacks), 2)
+        acta = ActaSoporte.objects.get(ticket=self.ticket)
+        self.assertEqual(acta.equipos.get().fotos.count(), 1)
+        self.assertEqual(acta.firmas.count(), 2)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.estado, E.VISITA_EJECUTADA)
+
+    def test_envio_de_campo_pide_revision_si_cambia_el_ticket(self):
+        from uuid import uuid4
+
+        from .models import ActaSoporte
+
+        self.client.force_login(self.agente)
+        url = reverse("acta_nueva", args=[self.ticket.radicado])
+        version = self.client.get(url).context["version_visita"]
+        Ticket.objects.filter(pk=self.ticket.pk).update(estado=E.VISITA_EJECUTADA)
+        response = self.client.post(url, self.datos_acta(), headers={
+            "X-Janotec-Envio": str(uuid4()),
+            "X-Janotec-Usuario": str(self.agente.pk),
+            "X-Janotec-Visita": version,
+        })
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(ActaSoporte.objects.filter(ticket=self.ticket).exists())
+
     def test_el_acta_muestra_el_historial_del_cliente_y_la_sede(self):
         from django.utils import timezone
 

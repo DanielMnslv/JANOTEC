@@ -43,7 +43,12 @@
     try { sessionStorage.removeItem(ENVIADA); } catch (e) { /* nada */ }
     if (document.querySelector('[data-acta-guardada]')) borrar(enviada).catch(function () {});
   }
-  if (!form) return;
+  if (!form) {
+    window.addEventListener('campo:acta-registrada', function (event) {
+      borrar(event.detail).catch(function () {});
+    });
+    return;
+  }
 
   const clave = form.dataset.borrador, reenviado = form.dataset.reenviado === '1';
   try { sessionStorage.removeItem(ENVIADA); } catch (e) { /* nada */ }
@@ -73,6 +78,13 @@
   }
 
   let pendiente = null, listo = false;
+  window.addEventListener('campo:acta-registrada', function (event) {
+    if (event.detail !== clave) return;
+    clearTimeout(pendiente);
+    listo = false;
+    borrar(clave).catch(function () {});
+    if (estado) estado.textContent = 'Acta registrada.';
+  });
   function guardar() {
     clearTimeout(pendiente); pendiente = null;
     if (!listo) return;
@@ -162,6 +174,7 @@
   });
 
   form.addEventListener('input', programar);
+  form.addEventListener('campo:guardar-borrador', guardar);
   form.addEventListener('change', programar);
   // La firma no dispara «input»: se guarda al levantar el dedo
   form.addEventListener('pointerup', function (e) { if (e.target.closest('.firma-pad')) setTimeout(programar, 50); });

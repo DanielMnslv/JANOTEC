@@ -80,6 +80,20 @@ cliente podría necesitar y una nota. Es interna (el cliente no la ve) y llega a
 > La cámara del celular y el GPS solo funcionan en **HTTPS** (o en `localhost`): en producción el sitio
 > debe ir con certificado (ver «Paso a producción»).
 
+### JANOTEC en el celular
+
+El equipo de campo tiene accesos a **Mi día**, **Visitas**, **Actas e informes** y **Más**. Desde
+una visita con el acta habilitada, toque **Preparar para campo** mientras tenga conexión y
+espere el aviso de confirmación. La ficha y el formulario estarán en **Visitas guardadas**
+durante tres días en ese navegador.
+
+Si pierde la señal, abra el acta desde **Visitas guardadas**, diligénciela y confirme el envío.
+El dispositivo conserva los datos, las fotos y las firmas. Con la app abierta, el envío se
+reintenta al recuperar la conexión. El acta queda registrada cuando aparece su número.
+Si cambió la visita o el material disponible, abra el acta en línea y revise los datos antes
+de volver a confirmar. La primera puesta en producción de esta función requiere ejecutar
+`python manage.py migrate` para habilitar el identificador de envío.
+
 ### Dos áreas, un mismo ticket
 La plataforma separa el **área técnica** (Juan Daniel Guana, coordinador) del **área comercial**. Cada una
 ve en su panel solo lo suyo; **Dirección** (Miguel Ángel Tibamoso) y el superusuario ven las dos.

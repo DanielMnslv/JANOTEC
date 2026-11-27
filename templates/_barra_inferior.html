@@ -3,7 +3,11 @@
 {% if user.is_authenticated and tiene_mi_dia %}{% if user.es_personal or user.es_bodega %}
 <nav class="barra-inferior d-lg-none" aria-label="Accesos rápidos">
   <a href="{% url 'mi_dia' %}" class="{% if u == 'mi_dia' %}activa{% endif %}"><i class="bi bi-sun"></i><span>Mi día</span>{% if por_aprobar_total %}<b class="punto">{{ por_aprobar_total }}</b>{% endif %}</a>
-  {% if user.es_personal %}
+  {% if user.es_personal and not user.es_supervisor %}
+  <a href="{% url 'panel' %}" class="{% if u == 'panel' and request.GET.estado != 'visita_ejecutada' or u == 'ticket_detalle' or u == 'semana' and ns == 'cronograma' %}activa{% endif %}"><i class="bi bi-calendar-week" aria-hidden="true"></i><span>Visitas</span></a>
+  <a href="{% url 'actas_lista' %}" class="{% if u == 'actas_lista' or u == 'acta_detalle' or u == 'acta_nueva' or u == 'acta_sin_programar' or u == 'entregar_informe' or u == 'informe_borrador' or u == 'panel' and request.GET.estado == 'visita_ejecutada' %}activa{% endif %}"><i class="bi bi-clipboard-check" aria-hidden="true"></i><span>Actas e informes</span></a>
+  <button type="button" data-bs-toggle="offcanvas" data-bs-target="#menuLateral" aria-controls="menuLateral"><i class="bi bi-grid" aria-hidden="true"></i><span>Más</span></button>
+  {% elif user.es_personal %}
   <a href="{% url 'panel' %}" class="{% if u == 'panel' or u == 'ticket_detalle' %}activa{% endif %}"><i class="bi bi-kanban"></i><span>{% if user.es_supervisor %}Tickets{% else %}Mis tickets{% endif %}</span></a>
   <a href="{% url 'cronograma:semana' %}" class="{% if ns == 'cronograma' %}activa{% endif %}"><i class="bi bi-calendar-week"></i><span>Cronograma</span></a>
   <a href="{% url 'actas_lista' %}" class="{% if u == 'actas_lista' or u == 'acta_detalle' or u == 'acta_nueva' %}activa{% endif %}"><i class="bi bi-clipboard-check"></i><span>Actas</span></a>

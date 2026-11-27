@@ -174,8 +174,12 @@ class CelularTests(Base):
     def test_barra_inferior_por_area(self):
         self.client.force_login(self.tecnico)
         html = self.client.get(reverse("mi_dia")).content.decode()
-        self.assertIn('class="barra-inferior', html)
-        self.assertIn(reverse("inventario:mi_material"), html.split('class="barra-inferior')[1])
+        menu, barra = html.split('class="barra-inferior', 1)
+        barra = barra.split("</nav>", 1)[0]
+        self.assertIn(reverse("panel"), barra)
+        self.assertIn(reverse("actas_lista"), barra)
+        self.assertIn('data-bs-target="#menuLateral"', barra)
+        self.assertIn(reverse("inventario:mi_material"), menu)
         self.client.force_login(self.bodega)
         barra = self.client.get(reverse("mi_dia")).content.decode().split('class="barra-inferior')[1]
         self.assertIn(reverse("inventario:ordenes"), barra)

@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% load tickets_extras %}
+{% extends "base.html" %}{% load static tickets_extras %}
 {% block titulo %}{% if user.es_supervisor %}Recepción de tickets{% else %}Mis tickets asignados{% endif %}{% endblock %}
 {% block contenido %}
 <div class="mb-4">
@@ -14,8 +14,17 @@
       </div>
     </div>
   {% else %}
-    <h1 class="h3 page-title mb-1">Mis tickets asignados</h1>
-    <p class="text-muted-jn mb-0">Solicitudes de las visitas que le programaron en el cronograma. Diligencie el acta al terminar cada visita.</p>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <h1 class="h3 page-title mb-1">Mis tickets asignados</h1>
+        <p class="text-muted-jn mb-0">Solicitudes de las visitas que le programaron en el cronograma. Diligencie el acta al terminar cada visita.</p>
+      </div>
+      <div class="accesos-campo d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-primary" href="{% url 'cronograma:semana' %}"><i class="bi bi-calendar-week" aria-hidden="true"></i> Cronograma</a>
+        <a class="btn btn-outline-primary" href="{% url 'acta_sin_programar' %}"><i class="bi bi-plus-lg" aria-hidden="true"></i> Visita no programada</a>
+        <a class="btn btn-outline-secondary" href="{% static 'campo/index.html' %}" data-campo-lista hidden>Visitas guardadas</a>
+      </div>
+    </div>
   {% endif %}
 </div>
 

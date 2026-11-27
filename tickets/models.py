@@ -707,6 +707,7 @@ class Adjunto(models.Model):
 
 # --- Acta de soporte: visita, equipos, fotos, evidencias y firmas ---------------------------------
 class ActaSoporte(models.Model):
+    envio_campo = models.UUIDField(null=True, blank=True, unique=True, editable=False)
     """Acta de servicio técnico realizada en campo (historial de cada sede).
 
     Dos orígenes:

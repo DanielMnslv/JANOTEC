@@ -12,10 +12,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Carlito:wght@400;700&display=swap" rel="stylesheet">
   <link href="{% static 'vendor/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
   <link href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}" rel="stylesheet">
-  <link href="{% static 'css/janotec.css' %}?v=20261123" rel="stylesheet">
+  <link href="{% static 'css/janotec.css' %}?v=20261127" rel="stylesheet">
+  {% if user.is_authenticated and user.es_personal %}<link rel="manifest" href="{% static 'campo.webmanifest' %}">{% endif %}
   {% block head %}{% endblock %}
 </head>
-<body{% if user.is_authenticated %} data-usuario="{{ user.pk }}"{% endif %}>
+<body{% if user.is_authenticated %} data-usuario="{{ user.pk }}"{% endif %}{% if request.session.actuar_como_original %} data-campo-prueba{% endif %}>
 {% block cuerpo %}
 <div class="app-jn">
 {# Menú lateral: fijo a la izquierda en pantallas grandes; en el celular se abre con el botón ☰ #}
@@ -58,7 +59,7 @@
       {% if user.empresa %}<li><span class="dropdown-item-text small text-muted">{{ user.empresa }}</span></li><li><hr class="dropdown-divider"></li>{% endif %}
       {% if user.is_superuser or request.session.actuar_como_original %}<li><a class="dropdown-item" href="{% url 'probar_como' %}"><i class="bi bi-person-badge"></i> Actuar como otra área (prueba)</a></li>{% endif %}
       <li><a class="dropdown-item" href="{% url 'password_change' %}"><i class="bi bi-key"></i> Cambiar contraseña</a></li>
-      <li><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="dropdown-item"><i class="bi bi-box-arrow-right"></i> Salir</button></form></li>
+      <li><form method="post" action="{% url 'logout' %}" data-campo-salir>{% csrf_token %}<button class="dropdown-item"><i class="bi bi-box-arrow-right"></i> Salir</button></form></li>
     </ul>
   </div>
 </header>
@@ -72,6 +73,7 @@
 </div>
 {% endif %}
 <main class="container-xl py-4">
+  {% if user.is_authenticated and user.es_personal %}<div data-campo-envios role="status" hidden></div>{% endif %}
   {% for m in messages %}
     <div class="alert alert-{% if m.level_tag == 'error' %}danger{% else %}{{ m.level_tag }}{% endif %} alert-dismissible fade show" role="alert"{% if 'acta-guardada' in m.extra_tags %} data-acta-guardada{% endif %}>
       {{ m }}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
@@ -93,9 +95,11 @@
 {% if user.is_authenticated and user.es_supervisor %}{% include "tickets/_confirmar_recepcion.html" %}{% endif %}
 <script src="{% static 'js/firmas.js' %}?v=20261113"></script>
 {% if redaccion %}{{ redaccion|json_script:"redaccion-config" }}
-<script src="{% static 'js/redaccion.js' %}?v=20261123c"></script>{% endif %}
+<script src="{% static 'js/redaccion.js' %}?v=20261127a"></script>{% endif %}
 {% block scripts %}{% endblock %}
-<script src="{% static 'js/borrador_acta.js' %}?v=20261113"></script>
+<script src="{% static 'js/borrador_acta.js' %}?v=20261128"></script>
 <script src="{% static 'js/autoguardado.js' %}?v=20261126b"></script>
+<script src="{% static 'campo/visitas.js' %}" defer></script>
+<script src="{% static 'campo/envios.js' %}" defer></script>
 </body>
 </html>

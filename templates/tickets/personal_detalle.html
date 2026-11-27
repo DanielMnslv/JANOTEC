@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% load tickets_extras %}
+{% extends "base.html" %}{% load static tickets_extras %}
 {% block titulo %}{{ ticket.radicado }}{% endblock %}
 {% block contenido %}
 <div class="d-flex justify-content-between align-items-center">
@@ -29,6 +29,21 @@
     {% if ticket.fecha_cierre %}Cerrado {{ ticket.fecha_cierre|date:"d/m/Y h:i a" }}{% endif %}
   </div>
 </div>
+
+{% if puede_acta and not request.session.actuar_como_original %}
+<section class="accesos-campo d-flex flex-wrap align-items-center gap-2 mb-4" aria-label="Preparar para campo">
+  <button type="button" class="btn btn-outline-primary" data-campo-preparar
+          data-radicado="{{ ticket.radicado }}" data-asunto="{{ ticket.asunto }}"
+          data-cliente="{{ ticket.empresa }}" data-sede="{{ ticket.sede|default_if_none:'' }}"
+          data-direccion="{{ ticket.ubicacion }}" data-contacto="{{ ticket.contacto_nombre }}"
+          data-telefono="{{ ticket.contacto_telefono }}" data-ticket="{% url 'ticket_detalle' ticket.radicado %}"
+          data-acta="{% url 'acta_nueva' ticket.radicado %}">
+    <i class="bi bi-download" aria-hidden="true"></i> Preparar para campo
+  </button>
+  <a class="btn btn-outline-secondary" href="{% static 'campo/index.html' %}" data-campo-lista hidden>Visitas guardadas</a>
+  <span data-campo-estado role="status" class="small"></span>
+</section>
+{% endif %}
 
 <div class="row g-4">
   <div class="col-lg-8">

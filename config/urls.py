@@ -1,7 +1,9 @@
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
+from django.contrib.staticfiles import finders
 from django.contrib.staticfiles.views import serve as servir_estatico
+from django.http import FileResponse, Http404
 from django.urls import include, path, re_path
 
 from accounts import actuar
@@ -10,7 +12,18 @@ admin.site.site_header = "JANOTEC · Administración de la plataforma de tickets
 admin.site.site_title = "JANOTEC Tickets"
 admin.site.index_title = "Configuración"
 
+
+def campo_worker(request):
+    archivo = finders.find("campo/sw.js")
+    if not archivo:
+        raise Http404
+    respuesta = FileResponse(open(archivo, "rb"), content_type="text/javascript")
+    respuesta["Cache-Control"] = "no-cache"
+    return respuesta
+
+
 urlpatterns = [
+    path("campo-sw.js", campo_worker, name="campo_worker"),
     path("admin/", admin.site.urls),
     path("cuenta/ingresar/", auth_views.LoginView.as_view(redirect_authenticated_user=True), name="login"),
     path("cuenta/probar-como/", actuar.probar_como, name="probar_como"),

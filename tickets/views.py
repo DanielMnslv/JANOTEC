@@ -17,18 +17,21 @@ Quién puede ver o hacer qué se decide en tickets/permisos.py; las vistas solo 
 
 import os
 import re
+from hashlib import sha256
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
+from uuid import UUID, uuid4
 
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
 from django.core.files.base import ContentFile
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -989,7 +992,8 @@ def mejorar_redaccion(request):
                                       "mientras tanto use «Revisar ortografía» (gratis)."}, status=400)
     try:
         texto = redaccion.mejorar(request.POST.get("texto", ""), request.POST.get("tipo", ""),
-                                  request.POST.get("campo", ""), request.POST.get("pagina", ""))
+                                  request.POST.get("campo", ""), request.POST.get("pagina", ""),
+                                  contexto_acta=request.POST.get("contexto_acta", ""))
     except redaccion.RedaccionNoDisponible as e:
         return JsonResponse({"error": str(e)}, status=400)
     return JsonResponse({"texto": texto})
@@ -1019,6 +1023,8 @@ def acta_nueva(request, radicado):
     """Diligenciar el acta de la visita del ticket. Paso a paso: solo cuando el ticket tiene técnico y la visita
     está en el cronograma, salvo que coordinación haya omitido esos pasos.
     """
+    if request.method == "POST" and request.headers.get("X-Janotec-Envio"):
+        return _sincronizar_acta(request, radicado)
     ticket = obtener_ticket(request.user, radicado)
     if not _puede_diligenciar_acta(request.user, ticket):
         if _puede_diligenciar_acta(request.user, ticket, ignorar_pasos=True):
@@ -1028,6 +1034,41 @@ def acta_nueva(request, radicado):
             messages.error(request, "El acta la diligencia el encargado del ticket mientras está en atención.")
         return redirect(ticket)
     return _diligenciar_acta(request, ticket.empresa, ticket.sede, ticket)
+
+
+@transaction.atomic
+def _sincronizar_acta(request, radicado):
+    try:
+        envio = UUID(request.headers["X-Janotec-Envio"])
+    except ValueError:
+        return JsonResponse({"error": "El identificador del envío no es válido."}, status=400)
+    if request.session.get("actuar_como_original"):
+        return JsonResponse({"error": "Abra su cuenta para sincronizar esta acta."}, status=403)
+    if request.headers.get("X-Janotec-Usuario") != str(request.user.pk):
+        return JsonResponse({"error": "Abra la cuenta que preparó el acta."}, status=403)
+    # Serializa los reintentos de la misma cuenta, incluso si llegan para distintos tickets.
+    get_user_model().objects.select_for_update().get(pk=request.user.pk)
+    acta = ActaSoporte.objects.filter(envio_campo=envio).select_related("ticket").first()
+    if acta:
+        if acta.tecnico_id == request.user.pk and acta.ticket and acta.ticket.radicado == radicado:
+            return JsonResponse({"numero": acta.numero, "url": acta.get_absolute_url()})
+        return JsonResponse({"error": "El identificador pertenece a otro envío."}, status=409)
+    ticket = Ticket.objects.select_for_update().filter(radicado=radicado).first()
+    if not ticket or not _puede_diligenciar_acta(request.user, ticket):
+        return JsonResponse({"error": "La visita cambió. Revise la asignación y el estado del ticket."}, status=409)
+    if request.headers.get("X-Janotec-Visita") != _version_visita(ticket):
+        return JsonResponse({"error": "Los datos de la visita cambiaron. Abra el acta con conexión y revísela antes de enviarla."}, status=409)
+    try:
+        return _diligenciar_acta(request, ticket.empresa, ticket.sede, ticket, envio_campo=envio)
+    except ValidationError as error:
+        return JsonResponse({"error": " ".join(error.messages)}, status=422)
+
+
+def _version_visita(ticket):
+    actividades = list(ticket.actividades.order_by("pk").values_list("pk", "actualizado"))
+    datos = (ticket.pk, ticket.empresa_id, ticket.sede_id, ticket.estado, ticket.asignado_a_id,
+             ticket.actualizado, actividades)
+    return sha256(repr(datos).encode()).hexdigest()
 
 
 @login_required
@@ -1049,7 +1090,7 @@ def acta_sin_programar(request):
     })
 
 
-def _diligenciar_acta(request, empresa, sede, ticket=None):
+def _diligenciar_acta(request, empresa, sede, ticket=None, envio_campo=None):
     """Formulario del acta de soporte, con o sin ticket (trabajo no programado).
 
     Al guardar registra el acta con sus equipos (intervenidos, utilizados, retirados y requeridos), descuenta el material del
@@ -1106,6 +1147,14 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
     if request.method == "POST":
         elegidos = set(request.POST.getlist("usar_activo"))
         usar_activos = [a for a in mat_activos if str(a.pk) in elegidos]
+        if envio_campo:
+            ids_insumos = {f"usar_insumo_{insumo.pk}" for insumo, _ in mat_insumos}
+            faltan_insumos = any(
+                nombre.startswith("usar_insumo_") and nombre not in ids_insumos and valor.strip()
+                for nombre, valor in request.POST.items()
+            )
+            if len(usar_activos) != len(elegidos) or faltan_insumos:
+                material_errores.append("Cambió el material disponible. Revise los equipos e insumos utilizados.")
         for insumo, tiene in mat_insumos:
             texto = request.POST.get(f"usar_insumo_{insumo.pk}", "").replace(",", ".").strip()
             if not texto:
@@ -1115,7 +1164,7 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
                 cantidad = Decimal(texto)
             except InvalidOperation:
                 cantidad = Decimal(-1)
-            if cantidad < 0 or cantidad > tiene:
+            if not cantidad.is_finite() or cantidad < 0 or cantidad > tiene:
                 material_errores.append(f"{insumo.codigo}: tiene {tiene.normalize():f} y escribió {texto}.")
             elif cantidad > 0:
                 usar_insumos.append((insumo, cantidad))
@@ -1140,6 +1189,7 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
             acta = ActaSoporte.objects.create(
                 numero=ActaSoporte.siguiente_numero(), fecha=timezone.now(), origen=ActaSoporte.Origen.PLATAFORMA,
                 ticket=ticket, empresa=empresa, sede=sede, sede_texto=str(sede) if sede else "", ciudad=d["ciudad"],
+                envio_campo=envio_campo,
                 tecnico=request.user, tecnico_texto=request.user.get_full_name() or request.user.username,
                 actividad=" , ".join(d["actividad"]), sistema=d["sistema"], modalidad=d["modalidad"],
                 diagnostico=d["diagnostico"], resultado=d["resultado"], observaciones=d["observaciones"],
@@ -1221,6 +1271,12 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
                 seg = Seguimiento.objects.create(ticket=ticket, autor=request.user, tipo=Seguimiento.Tipo.COMENTARIO,
                                                  mensaje=mensaje)
                 ticket.save(update_fields=["actualizado"])
+        if envio_campo:
+            transaction.on_commit(lambda: notificaciones.actualizacion_para_cliente(ticket, seg), robust=True)
+            transaction.on_commit(lambda: notificaciones.acta_registrada(acta), robust=True)
+            if oportunidad:
+                transaction.on_commit(lambda: notificaciones.oportunidad_detectada(oportunidad), robust=True)
+            return JsonResponse({"numero": acta.numero, "url": acta.get_absolute_url()})
         notificaciones.actualizacion_para_cliente(ticket, seg)
         notificaciones.acta_registrada(acta)
         if oportunidad:
@@ -1237,6 +1293,14 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
             messages.info(request, "Ahora diligencie el informe del requerimiento para enviarlo al área Administrativa.")
             return redirect(reverse("ticket_detalle", args=[ticket.radicado]) + "#informe-requerimiento")
         return redirect(acta)
+
+    if envio_campo:
+        errores = [texto for textos in form.errors.values() for texto in textos] + material_errores
+        for grupo in (equipos, utilizados, retirados, requeridos, existentes):
+            if grupo.is_bound:
+                errores.extend(str(error) for error in grupo.non_form_errors())
+                errores.extend(texto for fila in grupo.errors for textos in fila.values() for texto in textos)
+        return JsonResponse({"error": " ".join(errores)}, status=422)
 
     # Las tres listas del acta van plegadas; se abre sola la que ya tiene algo (o un error) para no esconderlo
     def _abierta(fs, extra=False):
@@ -1270,6 +1334,8 @@ def _diligenciar_acta(request, empresa, sede, ticket=None):
     return render(request, "tickets/acta_form.html", {
         "equipos_sede": equipos_sede, "sistema_plan": sistema_plan,
         "ticket": ticket, "empresa": empresa, "sede": sede, "grupos_equipos": grupos_equipos,
+        "version_visita": _version_visita(ticket) if ticket else "",
+        "identificador_envio": uuid4() if ticket else "",
         "form": form, "equipos": equipos, "utilizados": utilizados, "retirados": retirados, "requeridos": requeridos,
         "existentes": existentes,
         "mat_activos": mat_activos,

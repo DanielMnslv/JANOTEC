@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visitas guardadas · JANOTEC</title>
+  <style>
+    body { margin: auto; max-width: 42rem; padding: 1.25rem; font: 1rem/1.45 system-ui, sans-serif; color: #25262d; background: #f6f7f7; }
+    h1 { font-size: 1.55rem; }
+    h2 { font-size: 1.15rem; margin: 0; overflow-wrap: anywhere; }
+    article { background: white; padding: 1rem; border: 1px solid #d9dedb; border-radius: .65rem; margin: 1rem 0; }
+    p { margin: .5rem 0; overflow-wrap: anywhere; }
+    a, button { display: inline-flex; align-items: center; min-height: 44px; font: inherit; }
+    a { color: #284d34; }
+    article button { margin-inline-start: 1rem; padding-inline: .7rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Visitas guardadas</h1>
+    <p>Consulte las visitas preparadas y abra su acta aunque esté sin señal.</p>
+    <div data-campo-envios role="status" hidden></div>
+    <div data-campo-fichas></div>
+    <a data-campo-inicio>Volver a JANOTEC</a>
+  </main>
+  <script>
+    const script = document.createElement('script');
+    script.src = location.pathname.endsWith('/campo/index.html') ? 'visitas.js' : 'static/campo/visitas.js';
+    document.body.append(script);
+  </script>
+</body>
+</html>
