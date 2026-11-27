@@ -138,7 +138,8 @@ def _grupos(request, datos):
     asignados = Enlace("Asignados a mí", reverse("asignados"), "bi-person-check", u == "asignados")
     financiera = Enlace("Pagos y facturas", reverse("inventario:financiera"), "bi-cash-stack", u == "financiera", por_pagar,
                         "danger", "Órdenes de compra por pagar")
-    viaticos = Enlace("Viáticos", reverse("cronograma:viaticos"), "bi-wallet2", u == "viaticos")
+    es_pagina_viaticos = ns == "cronograma" and u.startswith("viaticos")
+    viaticos = Enlace("Viáticos", reverse("cronograma:viaticos"), "bi-wallet2", es_pagina_viaticos)
     horas = Enlace("Horas extras", reverse("cronograma:horas_extras"), "bi-clock-history",
                    ns == "cronograma" and u in ("horas_extras", "horas_extras_corregir"))
     from .reportes import disponibles
@@ -196,7 +197,8 @@ def _grupos(request, datos):
         else:
             material = None
         cronograma = Enlace("Cronograma", reverse("cronograma:semana"), "bi-calendar-week",
-                            ns == "cronograma" and u not in ("horas_extras", "horas_extras_corregir", "viaticos") and "mantenimiento" not in u)
+                            ns == "cronograma" and not es_pagina_viaticos
+                            and u not in ("horas_extras", "horas_extras_corregir") and "mantenimiento" not in u)
         actas = Enlace("Actas", reverse("actas_lista"), "bi-clipboard-check", u in ("actas_lista", "acta_detalle"))
         # Clientes y sedes: sedes, mantenimiento por sistema, equipos instalados y su hoja de vida (tickets/clientes.py)
         clientes = Enlace("Clientes y sedes", reverse("clientes"), "bi-building", not ns and u in URLS_CLIENTES)
@@ -220,7 +222,7 @@ def _grupos(request, datos):
                 Enlace("Confirmar y cerrar", panel + "?estado=informe", "bi-check2-square", en_panel("informe"),
                        n(E.INFORME), "secondary", "Esperando la confirmación del cliente")),
                 Enlace("Todos los pendientes", panel + "?estado=abiertos", "bi-kanban", en_panel("abiertos")),
-                clientes, viaticos, material]
+                clientes, material]
         else:
             # El técnico: sus visitas → cronograma → acta → informe; luego sus horas y su material
             tecnica = [*pasos(
@@ -228,7 +230,7 @@ def _grupos(request, datos):
                 cronograma, actas,
                 Enlace("Informes pendientes", panel + "?estado=visita_ejecutada", "bi-file-earmark-text",
                        en_panel("visita_ejecutada"))),
-                clientes, not usuario.gestiona_horas_extras and horas, usuario.ve_financiera and viaticos, material,
+                clientes, not usuario.gestiona_horas_extras and horas, material,
                 Enlace("Todos mis tickets", panel + "?estado=", "bi-kanban", en_panel(""))]
         grupo("tecnica", "Área técnica", "tecnica", *tecnica)
         if usuario.ve_comercial:
@@ -240,7 +242,7 @@ def _grupos(request, datos):
                   Enlace("Todo el inventario", reverse("inventario:productos"), "bi-boxes", ns == "inventario" and u == "productos"),
                   not usuario.es_supervisor and descargables)
         if usuario.ve_comercial and usuario.ve_financiera:
-            grupo("financiera", "Área financiera", "financiera", *pasos(financiera, viaticos))
+            grupo("financiera", "Área financiera", "financiera", *pasos(financiera))
         if usuario.es_supervisor:
             grupo("gestion", "Gestión", "gestion",
                   Enlace("Indicadores", reverse("indicadores_centro"), "bi-graph-up", u in ("indicadores_centro", "indicadores_metas")),
@@ -260,7 +262,7 @@ def _grupos(request, datos):
         if usuario.es_administrativo:
             grupo("administrativa", "Área administrativa", "administrativa", *administrativa_pasos())
         if usuario.es_financiera:
-            grupo("financiera", "Área financiera", "financiera", *pasos(financiera, viaticos))
+            grupo("financiera", "Área financiera", "financiera", *pasos(financiera))
         if usuario.es_comercial:
             grupo("comercial", "Comercial", "comercial", *comercial_pasos())
     elif usuario.es_comercial:
@@ -270,7 +272,7 @@ def _grupos(request, datos):
     elif usuario.es_administrativo:
         grupo("administrativa", "Área administrativa", "administrativa", *administrativa_pasos(), asignados)
     elif usuario.es_financiera:
-        grupo("financiera", "Área financiera", "financiera", *pasos(financiera, viaticos), descargables)
+        grupo("financiera", "Área financiera", "financiera", *pasos(financiera), descargables)
     elif usuario.es_central:
         grupo("central", "Central de atención", "central",
               *pasos(Enlace("Registrar solicitud", reverse("nuevo_ticket"), "bi-plus-circle", u == "nuevo_ticket"),
@@ -288,6 +290,16 @@ def _grupos(request, datos):
             administrativa.enlaces.append(horas)
         else:
             grupo("administrativa", "Área administrativa", "administrativa", horas)
+    for clave, titulo, acceso in (
+        ("administrativa", "Área administrativa", usuario.es_administrativo or usuario.es_supervisor),
+        ("financiera", "Área financiera", usuario.ve_financiera),
+    ):
+        if acceso:
+            existente = next((g for g in grupos if g.clave == clave), None)
+            if existente:
+                existente.enlaces.append(viaticos)
+            else:
+                grupo(clave, titulo, clave, viaticos)
     return grupos
 
 
