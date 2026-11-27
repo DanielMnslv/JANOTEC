@@ -185,7 +185,9 @@
 
     if (config.url) {
       const mejorar = el('button', 'btn btn-sm btn-primary redaccion-accion');
-      mejorar.title = 'Claude reescribe el texto con buena redacción y ortografía; usted decide si lo usa';
+      mejorar.title = campo.form?.id === 'form-acta'
+        ? 'Usa los datos técnicos diligenciados en el acta para proponer una redacción. Usted decide si la usa.'
+        : 'Propone una redacción para que usted la revise.';
       mejorar.type = 'button';
       mejorar.innerHTML = '<i class="bi bi-stars"></i> Mejorar redacción';
       mejorar.addEventListener('click', function () {
@@ -198,6 +200,9 @@
         datos.append('tipo', clave);
         datos.append('campo', nombreDelCampo(campo));
         datos.append('pagina', (document.querySelector('h1') || {}).textContent || document.title);
+        if (campo.form?.id === 'form-acta') {
+          datos.append('contexto_acta', JSON.stringify(contextoActa(campo, clave)));
+        }
         fetch(config.url, { method: 'POST', body: datos, headers: { 'X-CSRFToken': token(campo) }, credentials: 'same-origin' })
           .then(function (r) { return r.json().catch(function () { return { error: 'No se pudo mejorar. Intente de nuevo.' }; }); })
           .then(function (r) { mostrar(r); })
@@ -287,6 +292,38 @@
     if (tipo.frases.length) caja.append(frases);
     caja.append(aviso, propuesta);
     campo.after(caja);
+  }
+
+  function contextoActa(campo, tipo) {
+    const form = campo.form;
+    function leer(nombre) {
+      const control = form.querySelector('[name="' + nombre + '"]:checked')
+        || form.querySelector('[name="' + nombre + '"]:not([type=radio]):not([type=checkbox])');
+      return control && control !== campo ? control.value.trim().slice(0, 1800) : '';
+    }
+    const contexto = {
+      actividades: Array.from(form.querySelectorAll('[name="actividad"]:checked'), control => control.value),
+      sistema: leer('sistema'), modalidad: leer('modalidad'),
+      resultado: leer('resultado'), diagnostico: leer('diagnostico'), observaciones: leer('observaciones'),
+    };
+    const filaActual = campo.closest('.equipo-acta');
+    const filas = filaActual ? [filaActual] : Array.from(form.querySelectorAll('.equipo-acta'));
+    contexto.equipos = [];
+    if (tipo !== 'oportunidad') for (const fila of filas) {
+      const nombre = fila.querySelector('input[name$="-equipo"]');
+      const borrar = fila.querySelector('[name$="-DELETE"]');
+      if (!nombre?.value.trim() || borrar?.checked) continue;
+      const equipo = {grupo: fila.closest('.grupo-equipos')?.dataset.prefijo || ''};
+      for (const atributo of ['equipo', 'marca', 'referencia', 'cantidad', 'accion', 'estado_equipo', 'observaciones']) {
+        const control = fila.querySelector('[name$="-' + atributo + '"]');
+        if (control && control !== campo && control.value) {
+          equipo[atributo] = (control.selectedOptions?.[0]?.textContent || control.value).trim().slice(0, 240);
+        }
+      }
+      contexto.equipos.push(equipo);
+      if (contexto.equipos.length === 12) break;
+    }
+    return contexto;
   }
 
   // El nombre del campo (su etiqueta o lo que pide), para que la mejora sepa qué tono usar
