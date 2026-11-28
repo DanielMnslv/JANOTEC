@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block titulo %}Importar clientes y sedes{% endblock %}
+{% block contenido %}
+{# Relación de clientes y sedes en Excel: revisión antes de guardar (tickets/importar_clientes.py). #}
+<h1 class="h3 page-title mb-1">Importar clientes y sedes</h1>
+<p class="small text-muted-jn mb-1">Una fila por sede: cliente, NIT, sede, ciudad, dirección, abonado, equipos, comercial y contacto.</p>
+<a href="{% url 'clientes' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Clientes y sedes</a>
+
+{% if not plan %}
+<div class="row g-4 mt-1">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-file-earmark-spreadsheet"></i> 1. Suba la relación</div>
+      <div class="card-body">
+        <form method="post" enctype="multipart/form-data">{% csrf_token %}
+          <input class="form-control mb-2" type="file" name="archivo" accept=".xlsx" required aria-label="Relación de clientes y sedes">
+          <div class="form-text mb-3">Excel .xlsx con las columnas <strong>CLIENTE</strong> y <strong>SEDE</strong> (y si las tiene: NIT, CIUDAD, DIRECCIÓN, ABONADO, SISTEMA DE ALARMA, VIDEOVIGILANCIA, COMERCIAL, PERSONA CONTACTO, NÚMERO CONTACTO y los datos de la línea). Primero se muestra qué se va a hacer; nada se guarda hasta que usted confirme.</div>
+          <button class="btn btn-primary"><i class="bi bi-search"></i> Revisar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card small">
+      <div class="card-header"><i class="bi bi-info-circle"></i> Qué hace</div>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item">Crea los clientes y las sedes que aún no están. El cliente se busca por NIT y por nombre; la sede, por nombre o por abonado.</li>
+        <li class="list-group-item">A lo que ya está solo le completa lo vacío (dirección, municipio, abonado, contacto…). <strong>No cambia nada de lo que ya se escribió en la plataforma.</strong></li>
+        <li class="list-group-item">El comercial queda como encargado del cliente, si aún no tiene uno.</li>
+        <li class="list-group-item">{% if con_equipos %}El panel de alarma y la videovigilancia quedan en los equipos instalados de cada sede, con la línea de comunicación; la ubicación queda «por confirmar».{% else %}Los equipos (panel de alarma, videovigilancia) no se cargan: eso lo hace coordinación técnica o dirección.{% endif %}</li>
+        <li class="list-group-item">Puede subirlo otra vez cuando lo actualicen: lo que ya está no se repite.</li>
+        <li class="list-group-item text-muted-jn">Hoy hay {{ total_clientes }} clientes y {{ total_sedes }} sedes.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card mt-3">
+  <div class="card-header"><i class="bi bi-clipboard-check"></i> 2. Revise antes de importar · <span class="text-muted-jn">{{ nombre_archivo }}</span></div>
+  <div class="card-body">
+    <div class="row g-3 text-center mb-3">
+      <div class="col-6 col-md"><div class="border rounded p-2"><div class="h4 mb-0">{{ plan.total }}</div><div class="small text-muted-jn">sedes en el archivo</div></div></div>
+      <div class="col-6 col-md"><div class="border rounded p-2"><div class="h4 mb-0">{{ plan.nuevos_clientes|length }}</div><div class="small text-muted-jn">clientes nuevos</div></div></div>
+      <div class="col-6 col-md"><div class="border rounded p-2"><div class="h4 mb-0">{{ plan.nuevas_sedes|length }}</div><div class="small text-muted-jn">sedes nuevas</div></div></div>
+      <div class="col-6 col-md"><div class="border rounded p-2"><div class="h4 mb-0">{{ plan.sedes_completar|length }}</div><div class="small text-muted-jn">sedes se completan</div></div></div>
+      <div class="col-12 col-md"><div class="border rounded p-2"><div class="h4 mb-0">{{ plan.equipos }}</div><div class="small text-muted-jn">equipos a cargar</div></div></div>
+    </div>
+
+    {% if plan.nuevos_clientes %}
+    <h2 class="h6 mt-3">Clientes que se van a crear</h2>
+    <ul class="small">{% for c in plan.nuevos_clientes %}<li>{{ c.razon_social }}{% if c.nit %} · <span class="radicado">{{ c.nit }}</span>{% endif %} · {{ c.sedes }} sede{{ c.sedes|pluralize }}{% if c.comercial %} · comercial {{ c.comercial }}{% endif %}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if plan.clientes_completar %}
+    <h2 class="h6 mt-3">Clientes que ya estaban y se completan</h2>
+    <ul class="small">{% for c in plan.clientes_completar %}<li>{{ c.empresa.razon_social }}: {{ c.cambios|join:", " }}{% if c.comercial %} ({{ c.comercial }}){% endif %}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if plan.nuevas_sedes %}
+    <h2 class="h6 mt-3">Sedes que se van a crear</h2>
+    <p class="small text-muted-jn mb-1">Revise que no estén ya con otro nombre: si es así, corrija el nombre en el Excel o en la plataforma antes de importar.</p>
+    <div class="table-responsive" style="max-height:360px"><table class="table table-sm small mb-0">
+      <thead><tr><th>Cliente</th><th>Sede</th><th>Municipio</th><th>Abonado</th><th>Equipos</th></tr></thead>
+      <tbody>{% for s in plan.nuevas_sedes %}<tr><td>{{ s.fila.cliente }}</td><td>{{ s.nombre }}</td><td>{{ s.datos.ciudad|default:"—" }}</td><td class="radicado">{{ s.datos.abonado|default:"—" }}</td><td>{% if plan.con_equipos %}{% for x in s.equipos %}{{ x.tipo }} {{ x.marca }}{% if not forloop.last %}; {% endif %}{% empty %}—{% endfor %}{% else %}—{% endif %}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% endif %}
+    {% if plan.sedes_completar %}
+    <h2 class="h6 mt-3">Sedes que ya estaban y se completan</h2>
+    <div style="max-height:260px;overflow:auto"><ul class="small">{% for s in plan.sedes_completar %}<li>{{ s.sede.empresa.razon_social }} · {{ s.sede.nombre }}{% if s.sede.nombre|upper != s.nombre|upper %} <span class="text-muted-jn">(en el Excel: {{ s.nombre }})</span>{% endif %}: {{ s.que|join:", " }}</li>{% endfor %}</ul></div>
+    {% endif %}
+
+    <form method="post" class="d-flex flex-wrap gap-2 mt-3">{% csrf_token %}
+      <input type="hidden" name="token" value="{{ token }}">
+      <button class="btn btn-accent" name="accion" value="importar"><i class="bi bi-check2-circle"></i> Importar</button>
+      <a class="btn btn-light border" href="{% url 'importar_clientes' %}">Cancelar</a>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

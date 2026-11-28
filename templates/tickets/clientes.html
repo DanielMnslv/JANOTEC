@@ -7,7 +7,7 @@
     <h1 class="h3 page-title mb-1">Clientes y sedes</h1>
     <p class="small text-muted-jn mb-0">Cada cliente con sus sedes, los equipos instalados y el mantenimiento. Es también el listado que se sugiere al radicar y programar tickets.</p>
   </div>
-  {% if puede_editar %}<a class="btn btn-accent" href="{% url 'cliente_nuevo_admin' %}"><i class="bi bi-plus-lg"></i> Nuevo cliente</a>{% endif %}
+  {% if puede_editar %}<div class="d-flex flex-wrap gap-2"><a class="btn btn-outline-primary" href="{% url 'importar_clientes' %}"><i class="bi bi-file-earmark-spreadsheet"></i> Importar desde Excel</a><a class="btn btn-accent" href="{% url 'cliente_nuevo_admin' %}"><i class="bi bi-plus-lg"></i> Nuevo cliente</a></div>{% endif %}
 </div>
 
 {% if por_programar %}

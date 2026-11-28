@@ -75,6 +75,7 @@ urlpatterns = [
     # Clientes y sedes: el módulo principal (sedes, mantenimiento por sistema, equipos instalados y su hoja de vida)
     path("soporte/clientes/", clientes.clientes, name="clientes"),
     path("soporte/clientes/nuevo/", clientes.cliente_form, name="cliente_nuevo_admin"),
+    path("soporte/clientes/importar/", clientes.importar_clientes, name="importar_clientes"),
     path("soporte/clientes/<int:pk>/", clientes.cliente_detalle, name="cliente_detalle"),
     path("soporte/clientes/<int:pk>/editar/", clientes.cliente_form, name="cliente_editar_admin"),
     path("soporte/clientes/<int:pk>/eliminar/", clientes.cliente_eliminar, name="cliente_eliminar"),

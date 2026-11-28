@@ -504,3 +504,51 @@ def equipo_detalle(request, pk):
         "e": equipo, "registros": registros, "puede_editar": puede_editar_equipos(request.user),
         "hoy": timezone.localdate(),
     })
+
+
+@login_required
+@datos_requerido
+def importar_clientes(request):
+    """Sube la relación de clientes y sedes en Excel: primero muestra qué haría y solo guarda cuando se confirma.
+
+    Crea lo que falta y completa lo vacío sin pisar lo escrito (ver ``importar_clientes``). Los equipos (panel de
+    alarma, videovigilancia) solo se cargan si quien importa puede editar equipos: coordinación técnica o dirección.
+    """
+    from inventario import temporales
+
+    from . import importar_clientes as imp
+
+    con_equipos = puede_editar_equipos(request.user)
+    contexto = {"con_equipos": con_equipos, "total_clientes": Empresa.objects.filter(es_prospecto=False).count(),
+                "total_sedes": Sede.objects.count()}
+    if request.method == "POST" and request.POST.get("accion") == "importar":
+        ruta = temporales.ruta(request.POST.get("token", ""), "clientes", "xlsx")
+        if not ruta or not ruta.exists():
+            messages.error(request, "El archivo revisado ya no está. Súbalo otra vez.")
+            return redirect("importar_clientes")
+        try:
+            r = imp.aplicar(imp.leer(ruta), request.user, con_equipos)
+        finally:
+            ruta.unlink(missing_ok=True)
+        messages.success(request, f"Listo: {len(r['nuevos_clientes'])} clientes y {len(r['nuevas_sedes'])} sedes nuevas, "
+                                  f"{len(r['sedes_completar'])} sedes completadas y {r['equipos']} equipos cargados.")
+        return redirect("clientes")
+    if request.method == "POST":
+        archivo = request.FILES.get("archivo")
+        if not archivo or not archivo.name.lower().endswith(".xlsx"):
+            messages.error(request, "Suba la relación en formato .xlsx (en Google Sheets: Archivo → Descargar → Microsoft Excel).")
+        elif archivo.size > 5 * 1024 * 1024:
+            messages.error(request, "El archivo pesa más de 5 MB.")
+        else:
+            token, ruta = temporales.guardar(archivo, "clientes", "xlsx")
+            try:
+                filas = imp.leer(ruta)
+            except Exception:  # archivo dañado o que no es un libro de Excel
+                filas = None
+            if not filas:
+                ruta.unlink(missing_ok=True)
+                messages.error(request, "No se encontró ninguna hoja con las columnas CLIENTE y SEDE."
+                               if filas is not None else "No se pudo leer el archivo. Revise que sea un Excel .xlsx.")
+            else:
+                contexto.update(plan=imp.plan(filas, con_equipos), token=token, nombre_archivo=archivo.name)
+    return render(request, "tickets/importar_clientes.html", contexto)
