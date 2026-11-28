@@ -1,0 +1,65 @@
+{% extends "base.html" %}{% load inventario_extras %}
+{% block titulo %}Importar listado de proveedores{% endblock %}
+{% block contenido %}
+{% include "inventario/_acciones.html" with titulo="Importar listado de proveedores" subtitulo="NIT, razón social, dirección, ciudad y contacto desde un Excel." %}
+<a href="{% url 'inventario:contactos' %}?tipo=proveedores" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Proveedores</a>
+
+{% if not plan %}
+<div class="row g-4 mt-1">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-file-earmark-spreadsheet"></i> 1. Suba el listado</div>
+      <div class="card-body">
+        <form method="post" enctype="multipart/form-data">{% csrf_token %}
+          <input class="form-control mb-2" type="file" name="archivo" accept=".xlsx" required aria-label="Listado de proveedores">
+          <div class="form-text mb-3">Excel .xlsx con las columnas <strong>NIT / Cédula</strong> y <strong>Nombre / Razón social</strong>; si trae <strong>Dirección</strong>, <strong>Ciudad</strong> y <strong>Nombre contacto</strong>, también se cargan. Primero se muestra qué se va a hacer; nada se guarda hasta que usted confirme.</div>
+          <button class="btn btn-primary"><i class="bi bi-search"></i> Revisar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card small">
+      <div class="card-header"><i class="bi bi-info-circle"></i> Qué hace</div>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item">Crea los proveedores que aún no están (se buscan por NIT y por nombre).</li>
+        <li class="list-group-item">A los que ya están solo les completa lo que les falta: NIT o dirección. <strong>No cambia nada de lo que ya se escribió en la plataforma.</strong></li>
+        <li class="list-group-item">Si el contacto es una persona, queda como asesor del proveedor.</li>
+        <li class="list-group-item">Puede subirlo otra vez cuando lo actualicen: lo que ya está no se repite.</li>
+        <li class="list-group-item text-muted-jn">Hoy hay {{ total_anterior }} proveedores en la plataforma.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card mt-3">
+  <div class="card-header"><i class="bi bi-clipboard-check"></i> 2. Revise antes de importar · <span class="text-muted-jn">{{ nombre_archivo }}</span></div>
+  <div class="card-body">
+    <div class="row g-3 text-center mb-3">
+      <div class="col-6 col-md-3"><div class="border rounded p-2"><div class="h4 mb-0">{{ plan.total }}</div><div class="small text-muted-jn">en el listado</div></div></div>
+      <div class="col-6 col-md-3"><div class="border rounded p-2"><div class="h4 mb-0">{{ plan.nuevos|length }}</div><div class="small text-muted-jn">proveedores nuevos</div></div></div>
+      <div class="col-6 col-md-3"><div class="border rounded p-2"><div class="h4 mb-0">{{ plan.completar|length }}</div><div class="small text-muted-jn">se completan</div></div></div>
+      <div class="col-6 col-md-3"><div class="border rounded p-2"><div class="h4 mb-0">{{ plan.iguales|length }}</div><div class="small text-muted-jn">ya estaban completos</div></div></div>
+    </div>
+
+    {% if plan.nuevos %}
+    <h2 class="h6 mt-3">Proveedores que se van a crear</h2>
+    <div class="table-responsive" style="max-height:360px"><table class="table table-sm small mb-0">
+      <thead><tr><th>Proveedor</th><th>NIT</th><th>Dirección</th><th>Asesor</th></tr></thead>
+      <tbody>{% for x in plan.nuevos %}<tr><td>{{ x.fila.razon_social }}</td><td class="radicado">{{ x.fila.nit|default:"—" }}</td><td>{{ x.direccion|default:"—" }}</td><td>{{ x.asesor|title|default:"—" }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% endif %}
+    {% if plan.completar %}
+    <h2 class="h6 mt-3">Proveedores que ya estaban y se completan</h2>
+    <ul class="small">{% for x in plan.completar %}<li>{{ x.proveedor.razon_social }}: {{ x.cambios|join:", " }}{% if x.asesor %} ({{ x.asesor|title }}){% endif %}</li>{% endfor %}</ul>
+    {% endif %}
+
+    <form method="post" class="d-flex flex-wrap gap-2 mt-3">{% csrf_token %}
+      <input type="hidden" name="token" value="{{ token }}">
+      <button class="btn btn-accent" name="accion" value="importar"{% if not plan.nuevos and not plan.completar %} disabled{% endif %}><i class="bi bi-check2-circle"></i> Importar</button>
+      <a class="btn btn-light border" href="{% url 'inventario:importar_proveedores' %}">Cancelar</a>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

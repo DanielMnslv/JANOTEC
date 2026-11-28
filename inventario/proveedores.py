@@ -207,3 +207,50 @@ def importar_compras(request):
                 else:
                     contexto.update(plan=imp.plan(datos), token=token, nombre_archivo=archivo.name)
     return render(request, "inventario/importar_compras.html", contexto)
+
+
+@login_required
+def importar_proveedores(request):
+    """Sube el listado de proveedores en Excel (NIT, razón social, dirección, ciudad, contacto): revisión y luego confirma.
+
+    Crea los que faltan y completa los que ya están sin pisar lo escrito en la plataforma (ver ``importar_proveedores``).
+    """
+    from django.core.exceptions import PermissionDenied
+
+    from . import importar_proveedores as imp
+    from . import temporales
+
+    if not ve_compras_del_excel(request.user):
+        raise PermissionDenied
+    contexto = {"total_anterior": Proveedor.objects.count()}
+    if request.method == "POST" and request.POST.get("accion") == "importar":
+        ruta = temporales.ruta(request.POST.get("token", ""), "proveedores", "xlsx")
+        if not ruta or not ruta.exists():
+            messages.error(request, "El archivo revisado ya no está. Súbalo otra vez.")
+            return redirect("inventario:importar_proveedores")
+        try:
+            resumen = imp.aplicar(imp.leer(ruta))
+        finally:
+            ruta.unlink(missing_ok=True)
+        messages.success(request, f"Listo: {len(resumen['nuevos'])} proveedores nuevos, {len(resumen['completar'])} "
+                                  f"completados y {resumen['asesores']} asesores agregados.")
+        return redirect(f"{reverse('inventario:contactos')}?tipo=proveedores")
+    if request.method == "POST":
+        archivo = request.FILES.get("archivo")
+        if not archivo or not archivo.name.lower().endswith(".xlsx"):
+            messages.error(request, "Suba el listado en formato .xlsx (en Google Sheets: Archivo → Descargar → Microsoft Excel).")
+        elif archivo.size > 5 * 1024 * 1024:
+            messages.error(request, "El archivo pesa más de 5 MB.")
+        else:
+            token, ruta = temporales.guardar(archivo, "proveedores", "xlsx")
+            try:
+                filas = imp.leer(ruta)
+            except Exception:  # archivo dañado o que no es un libro de Excel
+                filas = None
+            if not filas:
+                ruta.unlink(missing_ok=True)
+                messages.error(request, "No se encontró ninguna hoja con las columnas NIT y razón social."
+                               if filas is not None else "No se pudo leer el archivo. Revise que sea un Excel .xlsx.")
+            else:
+                contexto.update(plan=imp.plan(filas), token=token, nombre_archivo=archivo.name)
+    return render(request, "inventario/importar_proveedores.html", contexto)
