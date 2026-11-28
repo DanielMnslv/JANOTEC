@@ -7,9 +7,10 @@ from django.urls import path
 
 from comercial import trimestre
 
-from . import calificacion, centro, clientes, consulta, ensenar_redaccion, reportes, views
+from . import calificacion, centro, clientes, consulta, ensenar_redaccion, movil, reportes, views
 
 urlpatterns = [
+    path("api/tecnicos/v1/visitas/", movil.visitas, name="movil_visitas"),
     path("", views.inicio, name="inicio"),
     path("mi-dia/", views.mi_dia, name="mi_dia"),
     path("consulta/", consulta.consulta, name="consulta"),
